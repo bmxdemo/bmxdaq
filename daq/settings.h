@@ -31,6 +31,9 @@ struct SETTINGS {
   // output options
   char output_pattern[MAXCHAR];
   int save_every;
+  
+  // "derived" quantities for passing
+  int pssize;
 };
 
 // Fixed defines

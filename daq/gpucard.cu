@@ -72,8 +72,10 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   numax=imax*dnu;
   set->nu_min=numin;
   set->nu_max=numax;
+  set->pssize=gc->pssize1;
   printf ("Actual freq range: %f - %f MHz (edges!)\n",numin/1e6, numax/1e6);
   printf ("# PS offset, #PS bins: %i %i\n",gc->ndxofs,gc->pssize1);
+
   if (nchan==2)
     gc->pssize=gc->pssize1*4; // for other and two crosses
   else

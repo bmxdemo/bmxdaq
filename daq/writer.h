@@ -6,11 +6,11 @@
 
 struct BMXHEADER {
   int nChannels;
-  int nPSbins; // 
   uint32_t fft_size; 
   uint32_t fft_avg; 
   float sample_rate;
   float nu_min, nu_max;
+  int pssize;
 };
 
 struct WRITER {
