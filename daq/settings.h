@@ -3,6 +3,7 @@
 #include "stdint.h"
 
 #define MAXCHAR 512
+#define MAXCUTS 10
 // modifiable settings
 struct SETTINGS {
   // basic settings
@@ -20,8 +21,9 @@ struct SETTINGS {
   
   //
   uint32_t fft_size; // must be power of 2
-  float nu_min, nu_max; // min and max frequency to output
-  uint32_t fft_avg; // how many bins to average over
+  int n_cuts;
+  float nu_min[MAXCUTS], nu_max[MAXCUTS]; // min and max frequency to output
+  uint32_t fft_avg[MAXCUTS]; // how many bins to average over
   int buf_mult; // buffer multiplier, we allocate
                 //buf_mult*fft_size for transfer
   //

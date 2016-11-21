@@ -17,9 +17,10 @@ int my_linecount(FILE *f)
 void init_settings(SETTINGS *s, char* fname) {
     s->sample_rate=1.25e9;
     s->fft_size = (1<<26);
-    s->nu_min=0;
-    s->nu_max=(float)(s->sample_rate/2);
-    s->fft_avg=16384;
+    s->n_cuts=1;
+    s->nu_min[0]=0;
+    s->nu_max[0]=(float)(s->sample_rate/2);
+    s->fft_avg[0]=16384;
     s->channel_mask=3; // which channels, both to start with
     s->ADC_range=1000;
     s->ext_clock_mode=0;
@@ -29,7 +30,7 @@ void init_settings(SETTINGS *s, char* fname) {
     s->simulate_digitizer=0;
     s->dont_process=0;
     s->save_every=60;
-    sprintf(s->output_pattern,"%02d%02d%02d_%02d%02d.data");
+    sprintf(s->output_pattern,"%%02d%%02d%%02d_%%02d%%02d.data");
     if (fname) {
          FILE *fi;
 	 int n_lin,ii;
@@ -52,18 +53,15 @@ void init_settings(SETTINGS *s, char* fname) {
 	     printf("Error reading line %d, file %s\n",ii+1,fname);
 	     exit(1);
 	   }
+
+	   bool found=true;
 	   if(!strcmp(s1,"sample_rate="))
 	     s->sample_rate=atof(s2)*1e6;
 	   else if(!strcmp(s1,"FFT_power="))
 	     s->fft_size = ( 1 << atoi(s2));
 	   else if(!strcmp(s1,"buf_mult="))
 	     s->buf_mult = ( 1 << atoi(s2));
-	   else if(!strcmp(s1,"nu_min="))
-	     s->nu_min=atof(s2)*1e6;
-	   else if(!strcmp(s1,"nu_max=")) {
-	     if (atof(s2)>0) 
-	       s->nu_max=atof(s2)*1e6;
-	   }  else if(!strcmp(s1,"channel_mask="))
+	   else if(!strcmp(s1,"channel_mask="))
 	     s->channel_mask=atoi(s2);
 	   else if(!strcmp(s1,"ADC_range="))
 	     s->ADC_range=atoi(s2);
@@ -77,13 +75,39 @@ void init_settings(SETTINGS *s, char* fname) {
 	     s->simulate_digitizer=atoi(s2);
 	   else if(!strcmp(s1,"dont_process="))
 	     s->dont_process=atoi(s2);
-	   else if(!strcmp(s1,"fft_avg="))
-	     s->fft_avg=atoi(s2);
+	   else if(!strcmp(s1,"n_cuts="))
+	     s->n_cuts=atoi(s2);
 	   else if(!strcmp(s1,"save_every="))
 	     s->save_every=atoi(s2);
 	   else if(!strcmp(s1,"output_pattern="))
 	     strcpy(s->output_pattern,s2);
-	   else {
+	   else found=false;
+
+	   if (!found) {
+	     for (int i=0;i<s->n_cuts;i++) {
+	       char tmpstr[MAXCHAR];
+	       sprintf(tmpstr, "nu_min%i=",i);
+	       if(!strcmp(s1,tmpstr)) {
+		 found=true;
+		 s->nu_min[i]=atof(s2)*1e6;
+		 break;
+	       }
+	       sprintf(tmpstr, "nu_max%i=",i);
+	       if(!strcmp(s1,tmpstr)) {
+		 if (atof(s2)>0) 
+		   s->nu_max[i]=atof(s2)*1e6;
+		 found=true;
+		 break;
+	       }
+	       sprintf(tmpstr, "fft_avg%i=",i);
+	       if(!strcmp(s1,tmpstr)) {
+		 found=true;
+		 s->fft_avg[i]=atoi(s2);
+		 break;
+	       }
+	     }
+	   }
+	   if (!found) {
 	     printf("Unknown parameter %s\n",s1);
 	     exit(1);
 	   }
@@ -100,10 +124,13 @@ void print_settings(SETTINGS *s) {
   printf ("Notify size: %iMB\n", s->fft_size*(1+(s->channel_mask==3))/(1024*1024));
   printf ("FFT buffer size in ms: %5.3g \n", s->fft_size/s->sample_rate*1000.);
   printf ("Simulate digitizer: %i \n", s->simulate_digitizer);
-  printf ("Nu min: %5.3g MHz\n", s->nu_min/1e6);
-  printf ("Nu max: %5.3g MHz\n", s->nu_max/1e6);
-  printf ("FFT avg block: %i\n", s->fft_avg);
-  printf ("Full number of PS bins: %i\n",s->fft_size/2/s->fft_avg);
+  printf ("# PS cuts: %i \n", s->n_cuts);
+  for (int i=0;i<s->n_cuts;i++) {
+    printf ("  Nu min [%i]: %5.3g MHz\n", i, s->nu_min[i]/1e6);
+    printf ("  Nu max [%i]: %5.3g MHz\n", i, s->nu_max[i]/1e6);
+    printf ("  FFT avg block: [%i] %i\n", i, s->fft_avg[i]);
+    printf ("  Full number of PS bins [%i]: %i\n",i, s->fft_size/2/s->fft_avg[i]);
+  }
   printf ("Channel mask: %lu\n", s->channel_mask);
   printf ("ADC range: %imV\n", s->ADC_range);
   printf ("External clock mode: %i\n", s->ext_clock_mode);
