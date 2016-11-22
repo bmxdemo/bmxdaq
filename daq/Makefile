@@ -24,10 +24,10 @@ OBJS=$(SOURCES:.cpp=.o) $(CUDASOURCES:.cu=.o)
 all: daq.out
 
 %.o: %.cpp $(HEADER_FILES)
-	$(GPP) -Ofast -Wno-format-security $(SPCM_INCLUDE) -c -o $@ $<
+	$(GPP) -Ofast -Wno-format-security -std=c++11 $(SPCM_INCLUDE) -c -o $@ $<
 
 %.o: %.cu $(HEADER_FILES)
-	$(NVCC)  -O3 -c $(SPCM_INCLUDE) -o $@ $<
+	$(NVCC)  -O3 -std=c++11 -c $(SPCM_INCLUDE) -o $@ $<
 
 daq.out: $(OBJS)
 	$(NVCC) -o $@ $(OBJS) -L. -lm -lcufft $(SPCM_OBJ) $(SPCM_LINK)

@@ -45,41 +45,46 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   gc->fftsize=set->fft_size;
   uint32_t bufsize=gc->bufsize=set->fft_size*nchan;
   uint32_t transform_size=(set->fft_size/2+1)*nchan;
-  gc->fftavg=set->fft_avg;
-  // first sort  reflections etc.
-  //
   float nunyq=set->sample_rate/2;
-  float numin, numax;
-  numin=set->nu_min;
-  numax=set->nu_max;
-  printf ("%f %f\n",numax,nunyq);
-  while (fabs(numin)>nunyq) numin-=set->sample_rate;
-  while (fabs(numax)>nunyq) numax-=set->sample_rate;
-  numin=abs(numin);
-  numax=abs(numax);
-  if (numax<numin) { float t=numin; numin=numax; numax=t; }
-  printf ("Frequencies %f - %f Mhz appear as %f - %f \n",set->nu_min/1e6, set->nu_max/1e6,
-	  numin/1e6, numax/1e6);
   float dnu=nunyq/(set->fft_size/2+1);
-  int imin=int(numin/dnu);
-  if (imin==0) imin=1;
-  int imax=int(numax/dnu)+1;
-  gc->pssize1=(imax-imin)/set->fft_avg;
-  gc->ndxofs=imin;
-  if ((imax-imin)%set->fft_avg>0) gc->pssize1+=1;
-  imax=imin+gc->pssize1*set->fft_avg;
-  numin=imin*dnu;
-  numax=imax*dnu;
-  set->nu_min=numin;
-  set->nu_max=numax;
-  set->pssize=gc->pssize1;
-  printf ("Actual freq range: %f - %f MHz (edges!)\n",numin/1e6, numax/1e6);
-  printf ("# PS offset, #PS bins: %i %i\n",gc->ndxofs,gc->pssize1);
-
-  if (nchan==2)
-    gc->pssize=gc->pssize1*4; // for other and two crosses
-  else
-    gc->pssize=gc->pssize1; // just one power spectrum
+  gc->tot_pssize=0;
+  gc->ncuts=set->n_cuts;
+  for (int i=0; i<gc->ncuts; i++) {
+    printf ("Cutout %i:\n",i);
+    gc->fftavg[i]=set->fft_avg[i];
+    // first sort  reflections etc.
+    //
+    float numin, numax;
+    numin=set->nu_min[i];
+    numax=set->nu_max[i];
+    while (fabs(numin)>nunyq) numin-=set->sample_rate;
+    while (fabs(numax)>nunyq) numax-=set->sample_rate;
+    numin=abs(numin);
+    numax=abs(numax);
+    if (numax<numin) { float t=numin; numin=numax; numax=t; }
+    printf ("   Frequencies %f - %f Mhz appear as %f - %f \n",set->nu_min[i]/1e6, set->nu_max[i]/1e6,
+	    numin/1e6, numax/1e6);
+    int imin=int(numin/dnu);
+    if (imin==0) imin=1;
+    int imax=int(numax/dnu)+1;
+    gc->pssize1[i]=(imax-imin)/set->fft_avg[i];
+    gc->ndxofs[i]=imin;
+    if ((imax-imin)%set->fft_avg[i]>0) gc->pssize1[i]+=1;
+    imax=imin+gc->pssize1[i]*set->fft_avg[i];
+    numin=imin*dnu;
+    numax=imax*dnu;
+    set->nu_min[i]=numin;
+    set->nu_max[i]=numax;
+    set->pssize[i]=gc->pssize1[i];
+    if (nchan==2)
+      gc->pssize[i]=gc->pssize1[i]*4; // for other and two crosses
+    else
+      gc->pssize[i]=gc->pssize1[i]; // just one power spectrum
+    gc->tot_pssize+=gc->pssize[i];
+    printf ("   Actual freq range: %f - %f MHz (edges!)\n",numin/1e6, numax/1e6);
+    printf ("   # PS offset, #PS bins: %i %i\n",gc->ndxofs[i],gc->pssize1[i]);
+  }
+  
   for (int i=0;i<Nb;i++) {
     uint8_t** cbuf=(uint8_t**)&(gc->cbuf[i]);
     CHK(cudaMalloc(cbuf,bufsize));
@@ -88,9 +93,9 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     cufftComplex** ffts=(cufftComplex**)&(gc->cfft[i]);
     CHK(cudaMalloc(ffts,transform_size*sizeof(cufftComplex)));
     float** coutps=(float**)&(gc->coutps[i]);
-    CHK(cudaMalloc(coutps,gc->pssize*sizeof(float)));
+    CHK(cudaMalloc(coutps,gc->tot_pssize*sizeof(float)));
   }
-  CHK(cudaHostAlloc(&gc->outps, gc->pssize*sizeof(float), cudaHostAllocDefault));
+  CHK(cudaHostAlloc(&gc->outps, gc->tot_pssize*sizeof(float), cudaHostAllocDefault));
 
   printf ("Setting up CUFFT\n");
   int status=cufftPlanMany(&gc->plan, 1, (int*)&(set->fft_size), NULL, 0, 0, 
@@ -294,22 +299,32 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr) {
       exit(1);
     }    
 
-    if (gc->nchan==1)
-      ps_reduce<<<gc->pssize, 1024>>> (&cfft[0][0], coutps[0], gc->ndxofs, gc->fftavg);
-    else {
+    if (gc->nchan==1) {
+      int psofs=0;
+      for (int i=0; i<gc->ncuts; i++) {
+	ps_reduce<<<gc->pssize[i], 1024>>> (&cfft[0][0], &(coutps[0][psofs]), gc->ndxofs[i], gc->fftavg[i]);
+	psofs+=gc->pssize[i];
+      }
+    } else {
       // note we need to take into account the tricky N/2+1 FFT size while we do N/2 binning
       // pssize+2 = transformsize+1
       // note that pssize is the full *nchan pssize
-      ps_reduce<<<gc->pssize1, 1024>>> (&cfft[0][0], coutps[0], gc->ndxofs, gc->fftavg);
-      ps_reduce<<<gc->pssize1, 1024>>> (&cfft[0][(gc->fftsize/2+1)], 
-                                         &(coutps[0][gc->pssize1]), gc->ndxofs, gc->fftavg);
-      ps_X_reduce<<<gc->pssize1, 1024>>> (&cfft[0][0], &cfft[0][(gc->fftsize/2+1)], 
-					  &(coutps[0][2*gc->pssize1]), &(coutps[0][3*gc->pssize1]),
-					  gc->ndxofs, gc->fftavg);
+      int psofs=0;
+      for (int i=0; i<gc->ncuts; i++) {
+	ps_reduce<<<gc->pssize1[i], 1024>>> (&cfft[0][0], &(coutps[0][psofs]), gc->ndxofs[i], gc->fftavg[i]);
+	psofs+=gc->pssize1[i];
+	ps_reduce<<<gc->pssize1[i], 1024>>> (&cfft[0][(gc->fftsize/2+1)], 
+                                         &(coutps[0][psofs]), gc->ndxofs[i], gc->fftavg[i]);
+	psofs+=gc->pssize1[i];
+	ps_X_reduce<<<gc->pssize1[i], 1024>>> (&cfft[0][0], &cfft[0][(gc->fftsize/2+1)], 
+					  &(coutps[0][psofs]), &(coutps[0][psofs+gc->pssize1[i]]),
+					  gc->ndxofs[i], gc->fftavg[i]);
+	psofs+=2*gc->pssize1[i];
+      }
     }
     CHK(cudaGetLastError());
     cudaEventRecord(eDonePost[0], 0);
-    CHK(cudaMemcpy(gc->outps,coutps[0], gc->pssize*sizeof(float), cudaMemcpyDeviceToHost));
+    CHK(cudaMemcpy(gc->outps,coutps[0], gc->tot_pssize*sizeof(float), cudaMemcpyDeviceToHost));
     cudaEventRecord(eDoneCopyBack[0], 0);
     cudaThreadSynchronize();
     printTiming(gc,0);

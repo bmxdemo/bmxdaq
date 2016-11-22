@@ -35,7 +35,7 @@ struct SETTINGS {
   int save_every;
   
   // "derived" quantities for passing
-  int pssize;
+  int pssize[MAXCUTS];
 };
 
 // Fixed defines
