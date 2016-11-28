@@ -129,7 +129,8 @@ void print_settings(SETTINGS *s) {
     printf ("  Nu min [%i]: %5.3g MHz\n", i, s->nu_min[i]/1e6);
     printf ("  Nu max [%i]: %5.3g MHz\n", i, s->nu_max[i]/1e6);
     printf ("  FFT avg block: [%i] %i\n", i, s->fft_avg[i]);
-    printf ("  Full number of PS bins [%i]: %i\n",i, s->fft_size/2/s->fft_avg[i]);
+    // not yet initialized here
+    //printf ("  Full number of PS bins [%i]: %i\n",i, s->fft_size/2/s->fft_avg[i]);
   }
   printf ("Channel mask: %lu\n", s->channel_mask);
   printf ("ADC range: %imV\n", s->ADC_range);

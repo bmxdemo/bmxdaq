@@ -25,7 +25,6 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   printf ("==========================\n");
   strcpy(writer->fname,s->output_pattern);
   writer->save_every=s->save_every;
-  printf ("Record size: %i\n", writer->pslen);
   writer->header.nChannels=1+s->channel_mask;
   writer->header.sample_rate=s->sample_rate;
   writer->header.fft_size=s->fft_size;
@@ -39,6 +38,9 @@ void writerInit(WRITER *writer, SETTINGS *s) {
     writer->pslen+=s->pssize[i]*(1+3*(s->channel_mask==3));
 
   }
+  printf ("Record size: %i\n", writer->pslen);
+  printf ("Version: %i\n", writer->header.version);
+
   maybeReOpenFile(writer,true);
 }
 

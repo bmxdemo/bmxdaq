@@ -10,7 +10,7 @@
 
 
 struct BMXHEADER {
-  const char magic[6]="*BMX*"; // magic header char to recogize files *BMX*
+  const char magic[8]=">>BMX<<"; // magic header char to recogize files *BMX*
   int version=HEADERVERSION;
   int nChannels;
   float sample_rate;
