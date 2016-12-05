@@ -59,11 +59,15 @@ class BMXFile(object):
         else:
             return ['chan1_'+str(chan),'chan2_'+str(chan),'chanXR_'+str(chan),'chanXI_'+str(chan)]
         
-    def plotAvgSpec(self, chan=0):
-        for i, n in enumerate(self.getNames(chan)):
+    def plotAvgSpec(self, cut=0):
+        for i, n in enumerate(self.getNames(cut)):
             plt.subplot(2,2,i+1)
             y=self.data[n].mean(axis=0)
-            plt.plot(self.freq[chan],y)
+            plt.plot(self.freq[cut],y)
             plt.xlabel('freq [MHz] ' + n)
 
-
+    def nullBin(self, bin):
+        for cut in [0]:
+            for i, n in enumerate(self.getNames(cut)):
+                self.data[n][:,bin]=0.0
+                
