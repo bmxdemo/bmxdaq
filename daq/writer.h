@@ -2,15 +2,24 @@
 #include "settings.h"
 #include "stdio.h"
 #include "time.h"
+// character lengths
 #define MAXFNLEN 512
+// version of BMXHEADER structure to implement
+// in python readers, etc.
+#define HEADERVERSION 1 
+
 
 struct BMXHEADER {
+  const char magic[8]=">>BMX<<"; // magic header char to recogize files *BMX*
+  int version=HEADERVERSION;
   int nChannels;
-  uint32_t fft_size; 
-  uint32_t fft_avg; 
   float sample_rate;
-  float nu_min, nu_max;
-  int pssize;
+  uint32_t fft_size; 
+
+  int ncuts;
+  float nu_min[MAXCUTS], nu_max[MAXCUTS];
+  uint32_t fft_avg[MAXCUTS];
+  int pssize[MAXCUTS];
 };
 
 struct WRITER {

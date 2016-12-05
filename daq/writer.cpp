@@ -25,17 +25,25 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   printf ("==========================\n");
   strcpy(writer->fname,s->output_pattern);
   writer->save_every=s->save_every;
-  writer->pslen=s->pssize*(1+3*(s->channel_mask==3));
-  printf ("Record size: %i\n", writer->pslen);
   writer->header.nChannels=1+s->channel_mask;
-  writer->header.fft_size=s->fft_size;
-  writer->header.fft_avg=s->fft_avg;
   writer->header.sample_rate=s->sample_rate;
-  writer->header.nu_min=s->nu_min;
-  writer->header.nu_max=s->nu_max;
-  writer->header.pssize=s->pssize;
+  writer->header.fft_size=s->fft_size;
+  writer->header.ncuts=s->n_cuts;
+  writer->pslen=0.0;
+  for (int i=0; i<s->n_cuts; i++) {
+    writer->header.nu_min[i]=s->nu_min[i];
+    writer->header.nu_max[i]=s->nu_max[i];
+    writer->header.fft_avg[i]=s->fft_avg[i];
+    writer->header.pssize[i]=s->pssize[i];
+    writer->pslen+=s->pssize[i]*(1+3*(s->channel_mask==3));
+
+  }
+  printf ("Record size: %i\n", writer->pslen);
+  printf ("Version: %i\n", writer->header.version);
+
   maybeReOpenFile(writer,true);
 }
+
 void writerWritePS (WRITER *writer, float* ps) {
   maybeReOpenFile(writer);
   fwrite (ps, sizeof(float), writer->pslen, writer->f);

@@ -20,13 +20,15 @@ struct GPUCARD {
   int nchan; // nchannels
   uint32_t fftsize; // fft size
   uint32_t bufsize; // buffer size in bytes
-  int fftavg;
+  int ncuts; // number of ps cuts
+  int fftavg[MAXCUTS];
+  int pssize1[MAXCUTS]; // size of one power spectrum (in indices)
+  int pssize[MAXCUTS]; // size of how many we produce (in indices)
+  int tot_pssize; // total size (in indices)
+  int ndxofs[MAXCUTS]; // which offset we start averaging
   int threads; // threads to use
   int plan;
   int nstreams;
-  int pssize1; // size of one power spectrum (in indices)
-  int pssize; // size of how many we produce
-  int ndxofs; // which offset we start averaging
   void *streams; // streams
   int fstream, bstream; // front stream (oldest running), back stream (newest runnig);
   int active_streams; // really needed just at the beginning (when 0)
