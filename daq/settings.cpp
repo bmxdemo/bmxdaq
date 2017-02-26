@@ -16,6 +16,8 @@ int my_linecount(FILE *f)
 
 void init_settings(SETTINGS *s, char* fname) {
     s->sample_rate=1.25e9;
+    s->spc_sample_rate=1250*1000000;
+    s->spc_ref_clock=1250*1000000;
     s->fft_size = (1<<26);
     s->n_cuts=1;
     s->nu_min[0]=0;
@@ -59,6 +61,10 @@ void init_settings(SETTINGS *s, char* fname) {
 	   bool found=true;
 	   if(!strcmp(s1,"sample_rate="))
 	     s->sample_rate=atof(s2)*1e6;
+	   else if(!strcmp(s1,"spc_sample_rate="))
+	     s->spc_sample_rate=atoi(s2)*1000000;
+	   else if(!strcmp(s1,"spc_ref_clock="))
+	     s->spc_ref_clock=atoi(s2)*1000000;
 	   else if(!strcmp(s1,"FFT_power="))
 	     s->fft_size = ( 1 << atoi(s2));
 	   else if(!strcmp(s1,"buf_mult="))

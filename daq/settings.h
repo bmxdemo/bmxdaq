@@ -10,6 +10,8 @@ struct SETTINGS {
 
   // digi card settings
   float sample_rate; // in samples/s
+  long long int spc_sample_rate;
+  long long int spc_ref_clock;
   uint64_t channel_mask;  // channel bit mask 
   int32_t ADC_range; // in mV
   int ext_clock_mode; // 0 for internal, 1 for external

@@ -115,7 +115,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   gc->nstreams=set->cuda_streams;
   gc->threads=set->cuda_threads;
   if (gc->nstreams<1) {
-    printf ("Cannot relly work with less than one stream.\n");
+    printf ("Cannot really work with less than one stream.\n");
     exit(1);
   }
   gc->streams=malloc(gc->nstreams*sizeof(cudaStream_t));

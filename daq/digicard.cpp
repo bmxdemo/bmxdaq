@@ -97,8 +97,8 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
   else
     spcm_dwSetParam_i32 (card->hCard, SPC_CLOCKMODE,      SPC_CM_INTPLL);         // clock mode internal PLL
 
-  spcm_dwSetParam_i64 (card->hCard, SPC_REFERENCECLOCK, (long long int)(set->sample_rate));
-  spcm_dwSetParam_i64 (card->hCard, SPC_SAMPLERATE, (long long int)(set->sample_rate));
+  spcm_dwSetParam_i64 (card->hCard, SPC_REFERENCECLOCK, set->spc_sample_rate);
+  spcm_dwSetParam_i64 (card->hCard, SPC_SAMPLERATE, set->spc_ref_clock);
 
   spcm_dwSetParam_i32 (card->hCard, SPC_CLOCKOUT,       0);                     // no clock output
 
