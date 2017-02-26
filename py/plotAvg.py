@@ -32,7 +32,7 @@ if o.log:
         plt.semilogy()
 
 if o.pdf:
-    pylab.savefig(o.pdf)
+    plt.savefig(o.pdf)
 
 if o.show:
     pylab.show()

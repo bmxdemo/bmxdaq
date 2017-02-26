@@ -1,6 +1,7 @@
 #include "settings.h"
 #include "digicard.h"
 #include "gpucard.h"
+#include "terminal.h"
 
 // ----- include standard driver header from library -----
 #include "spcm_examples/c_cpp/common/ostools/spcm_oswrap.h"
@@ -12,6 +13,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
+
 
 /*
 **************************************************************************
@@ -192,7 +194,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, WRITER *w) {
   while (1) {
     clock_gettime(CLOCK_REALTIME, &t1);
     float dt=deltaT(tSim,t1);
-    printf ("Cycle taking %fs, hope for < %fs\n",dt, towait);
+    tprintfn ("Cycle taking %fs, hope for < %fs",dt, towait);
     if (set->simulate_digitizer) {
       lPCPos = dc->lNotifySize*sim_ofs;
       sim_ofs = (sim_ofs+1)%set->buf_mult;
@@ -219,21 +221,22 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, WRITER *w) {
       {
 	clock_gettime(CLOCK_REALTIME, &timeNow);
 	double accum = deltaT(timeStart, timeNow);
-	printf("Time: %fs; Status:%i; Pos:%08x; digitizer buffer fill %i/1000   \n", 
+	tprintfn("Time: %fs; Status:%i; Pos:%08x; digitizer buffer fill %i/1000   ", 
 	       accum, lStatus, lPCPos,fill);
 
 
 	int8_t* bufstart=((int8_t*)dc->pnData+lPCPos);
 	if (set->dont_process) 
-	  printf (" ** no GPU processing\n\n");
+	  tprintfn (" ** no GPU processing");
 	else
 	  gpuProcessBuffer(gc,bufstart,w);
 
 	// tell driver we're done
 	if (!set->simulate_digitizer)
 	  spcm_dwSetParam_i32 (dc->hCard, SPC_DATA_AVAIL_CARD_LEN, dc->lNotifySize);
-	printf("\033[4A");
       }
+    // returnt terminal cursor
+    treturn();
   }
     
   printf("Sending stop command\n");

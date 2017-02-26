@@ -5,14 +5,14 @@ CUDA PART
 **********************************/
 
 #include "gpucard.h"
+#include "terminal.h"
 
 #include <memory.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <cufft.h>
-
 #include <stdio.h>
-#include "math.h"
+#include <math.h>
 
 #define FLOATIZE_X 2
 
@@ -341,9 +341,9 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr) {
     }
     m1/=fac; v1=sqrt(v1/fac-m1*m1);
     m2/=fac; v2=sqrt(v2/fac-m1*m1);
-    printf ("CH1 min/rms: %f %f   CH2 min/rms: %f %f   \n",m1,v1,m2,v2);
+    tprintfn ("CH1 min/rms: %f %f   CH2 min/rms: %f %f   ",m1,v1,m2,v2);
     writerWritePS(wr,gc->outps);
- } else {
+  } else {
     // streamed version
     printf ("Streamed version not ready.\n");
     exit(1);
