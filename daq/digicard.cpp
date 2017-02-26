@@ -216,7 +216,10 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, WRITER *w) {
       spcm_dwGetParam_i32 (dc->hCard, SPC_DATA_AVAIL_USER_POS,  &lPCPos);
       spcm_dwGetParam_i32 (dc->hCard, SPC_FILLSIZEPROMILLE,  &fill);
     }
+    t1=tSim;
     clock_gettime(CLOCK_REALTIME, &tSim);
+    dt=deltaT(t1,tSim);
+    tprintfn ("Measured dt: %f ms, rate=%f MHz",dt*1e3, set->fft_size/dt/1e6);
     if (lAvailUser >= dc->lNotifySize)
       {
 	clock_gettime(CLOCK_REALTIME, &timeNow);
