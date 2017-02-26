@@ -229,7 +229,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, WRITER *w) {
 	if (set->dont_process) 
 	  tprintfn (" ** no GPU processing");
 	else
-	  gpuProcessBuffer(gc,bufstart,w);
+	  gpuProcessBuffer(gc,bufstart,w,set);
 
 	// tell driver we're done
 	if (!set->simulate_digitizer)

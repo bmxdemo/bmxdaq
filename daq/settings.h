@@ -34,6 +34,10 @@ struct SETTINGS {
   char output_pattern[MAXCHAR];
   int save_every;
   
+  // printout options
+  int print_meanvar;
+  int print_maxp;
+  
   // "derived" quantities for passing
   int pssize[MAXCUTS];
 };

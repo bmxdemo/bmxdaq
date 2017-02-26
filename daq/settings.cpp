@@ -30,6 +30,8 @@ void init_settings(SETTINGS *s, char* fname) {
     s->simulate_digitizer=0;
     s->dont_process=0;
     s->save_every=60;
+    s->print_meanvar=1;
+    s->print_maxp=0;
     sprintf(s->output_pattern,"%%02d%%02d%%02d_%%02d%%02d.data");
     if (fname) {
          FILE *fi;
@@ -81,6 +83,11 @@ void init_settings(SETTINGS *s, char* fname) {
 	     s->save_every=atoi(s2);
 	   else if(!strcmp(s1,"output_pattern="))
 	     strcpy(s->output_pattern,s2);
+	   else if(!strcmp(s1,"print_meanvar="))
+	     s->print_meanvar=atoi(s2);
+	   else if(!strcmp(s1,"print_maxp="))
+	     s->print_maxp=atoi(s2);
+
 	   else found=false;
 
 	   if (!found) {

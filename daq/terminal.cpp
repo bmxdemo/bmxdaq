@@ -24,7 +24,7 @@ void tprintfn(const char* fmt, ...)
 }
 
 void treturn() {
-  printf("\033[%iA",terminal_nlines+1);
+  printf("\033[%iA",terminal_nlines);
   terminal_nlines=0;
 }
 
