@@ -6,7 +6,9 @@
 #define MAXFNLEN 512
 // version of BMXHEADER structure to implement
 // in python readers, etc.
-#define HEADERVERSION 1 
+// CHANGES:
+//     v2 -- save float with cur tone freq every time you save
+#define HEADERVERSION 2
 
 
 struct BMXHEADER {
@@ -29,6 +31,7 @@ struct WRITER {
   FILE* f;
   bool reopen;
   BMXHEADER header;
+  float tone_freq;
 };
 
 

@@ -35,6 +35,11 @@ void init_settings(SETTINGS *s, char* fname) {
     s->print_meanvar=1;
     s->print_maxp=0;
     sprintf(s->output_pattern,"%%02d%%02d%%02d_%%02d%%02d.data");
+    s->fg_nfreq=0;
+    s->fg_baudrate=9600;
+    s->fg_switchevery=10;
+    sprintf(s->fg_port,"ttyS0");
+    
     if (fname) {
          FILE *fi;
 	 int n_lin,ii;
@@ -93,11 +98,19 @@ void init_settings(SETTINGS *s, char* fname) {
 	     s->print_meanvar=atoi(s2);
 	   else if(!strcmp(s1,"print_maxp="))
 	     s->print_maxp=atoi(s2);
+	   else if(!strcmp(s1,"fg_nfreq="))
+	     s->fg_nfreq=atoi(s2);
+	   else if(!strcmp(s1,"fg_baudrate="))
+	     s->fg_baudrate=atoi(s2);
+	   else if(!strcmp(s1,"fg_switchevery="))
+	     s->fg_switchevery=atoi(s2);
+	   else if(!strcmp(s1,"fg_port="))
+	     strcpy(s->fg_port,s2);
 
 	   else found=false;
 
 	   if (!found) {
-	     for (int i=0;i<s->n_cuts;i++) {
+	     for (int i=0;i<MAXCUTS;i++) {
 	       char tmpstr[MAXCHAR];
 	       sprintf(tmpstr, "nu_min%i=",i);
 	       if(!strcmp(s1,tmpstr)) {
@@ -116,6 +129,22 @@ void init_settings(SETTINGS *s, char* fname) {
 	       if(!strcmp(s1,tmpstr)) {
 		 found=true;
 		 s->fft_avg[i]=atoi(s2);
+		 break;
+	       }
+	     }
+	     for (int i=0;i<MAXFREQ;i++) {
+	       char tmpstr[MAXCHAR];
+	       sprintf(tmpstr, "fg_freq%i=",i);
+	       if(!strcmp(s1,tmpstr)) {
+		 found=true;
+		 s->fg_freq[i]=atof(s2);
+		 break;
+	       }
+	       sprintf(tmpstr, "fg_ampl%i=",i);
+	       if(!strcmp(s1,tmpstr)) {
+		 if (atof(s2)>0) 
+		   s->fg_ampl[i]=atof(s2);
+		 found=true;
 		 break;
 	       }
 	     }

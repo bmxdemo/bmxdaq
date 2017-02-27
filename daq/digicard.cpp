@@ -2,6 +2,7 @@
 #include "digicard.h"
 #include "gpucard.h"
 #include "terminal.h"
+#include "freqgen.h"
 
 // ----- include standard driver header from library -----
 #include "spcm_examples/c_cpp/common/ostools/spcm_oswrap.h"
@@ -166,7 +167,7 @@ float deltaT (timespec t1,timespec t2) {
 	  + ( t2.tv_nsec - t1.tv_nsec )/ 1e9;
 }
 
-void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, WRITER *w) {
+void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRITER *w) {
 
   printf ("\n\nStarting main loop\n");
   printf ("==========================\n");
@@ -239,6 +240,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, WRITER *w) {
 	  spcm_dwSetParam_i32 (dc->hCard, SPC_DATA_AVAIL_CARD_LEN, dc->lNotifySize);
       }
     // returnt terminal cursor
+    if (set->fg_nfreq) freqGenLoop(fgen, w);
     treturn();
   }
     

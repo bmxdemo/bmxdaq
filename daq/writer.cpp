@@ -47,6 +47,7 @@ void writerInit(WRITER *writer, SETTINGS *s) {
 void writerWritePS (WRITER *writer, float* ps) {
   maybeReOpenFile(writer);
   fwrite (ps, sizeof(float), writer->pslen, writer->f);
+  fwrite (&writer->tone_freq, sizeof(float), 1, writer->f);
   fflush(writer->f);
 }
 

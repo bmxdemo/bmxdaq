@@ -4,6 +4,8 @@
 
 #define MAXCHAR 512
 #define MAXCUTS 10
+#define MAXFREQ 10
+
 // modifiable settings
 struct SETTINGS {
   // basic settings
@@ -42,6 +44,14 @@ struct SETTINGS {
   
   // "derived" quantities for passing
   int pssize[MAXCUTS];
+
+  // frequency generator
+  int fg_nfreq;
+  int fg_baudrate;
+  int fg_switchevery;
+  char fg_port[MAXCHAR];
+  float fg_freq[MAXFREQ];
+  float fg_ampl[MAXFREQ];
 };
 
 // Fixed defines

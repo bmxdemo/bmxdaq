@@ -12,6 +12,7 @@ Anze Slosar, anze@bnl.gob
 #include "settings.h"
 #include "digicard.h"
 #include "gpucard.h"
+#include "freqgen.h"
 
 // ----- standard c include files -----
 #include <stdio.h>
@@ -32,7 +33,8 @@ int main(int argc,char **argv)
   WRITER writer;                          // writer module
   DIGICARD dcard;                         // digitizer CARD
   GPUCARD gcard;                          // GPU card
-  
+  FREQGEN fgen;
+
   if(argc>=2) {
     char fname_ini[256];
     sprintf(fname_ini,"%s",argv[1]);
@@ -44,13 +46,15 @@ int main(int argc,char **argv)
   print_settings(&settings);
   digiCardInit(&dcard,&settings);
   if (!settings.dont_process) gpuCardInit(&gcard,&settings);
+  if (settings.fg_nfreq) freqGenInit(&fgen, &writer, &settings);
   writerInit(&writer,&settings);
 
   //work
-  digiWorkLoop(&dcard, &gcard, &settings, &writer);
+  digiWorkLoop(&dcard, &gcard, &settings, &fgen, &writer);
   //shutdown
   digiCardCleanUp(&dcard, &settings);
   writerCleanUp(&writer);
+  freqGenCleanUp(&fgen);
   return 0;
 }
 
