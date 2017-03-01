@@ -16,7 +16,8 @@ class BMXFile(object):
         if H['magic'][:7]!=b'>>BMX<<':
             print("Bad magic.",H['magic'])
             sys.exit(1)
-        if H['version']==1:
+        self.version=H['version']
+        if self.version<=2:
             maxcuts=10
             head_desc=[('nChan','i4'),('sample_rate','f4'),('fft_size','u4'),
                    ('ncuts','i4'),
@@ -46,6 +47,8 @@ class BMXFile(object):
                            ('chan2_'+str(i),'f4',self.nP[i]), 
                            ('chanXR_'+str(i),'f4',self.nP[i]),
                            ('chanXI_'+str(i),'f4',self.nP[i])]
+        if self.version==2:
+            rec_desc+=[('nu_tone','f4',1)]
         rec_dt=np.dtype(rec_desc,align=False)
         self.rec_dt=rec_dt
         self.names=rec_dt.names
@@ -70,3 +73,19 @@ class BMXFile(object):
             for i, n in enumerate(self.getNames(cut)):
                 self.data[n][:,bin]=0.0
                 
+    def getToneAmplFreq(self,chan, pm=20,freq="index"):
+        mxf=[]
+        mx=[]
+        for line in self.data[chan]:
+            i=abs(line).argmax()
+            mxf.append(i)
+            mx.append(line[max(0,i-pm):i+pm].sum())
+        mx=np.array(mx)
+        if freq=="index":
+            mxf=np.array(mxf)
+        elif freq=="freq" or "dfreq":
+            mxf=np.array([self.freq[chan][i] for i in mxf])
+            if freq=="dfreq":
+                mxf-=self.freq[chan].mean()
+        return mxf,mx
+            
