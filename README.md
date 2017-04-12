@@ -34,7 +34,7 @@ buf_mult= 2
 ## They can be overlapping, etc.
 n_cuts= 2
 ## min and max frequency in Mhz, -1 sets max to Nyquist
-## Since 16384=2^14, we get 2^{27-14-1}=channels.
+## Since 16384=2^14, we get 2^{27-14-1}=4096 channels.
 ## (minus 1 because number of freq is # samples/2)
 nu_min0= 0.
 nu_max0= -1 
