@@ -120,8 +120,12 @@ void init_settings(SETTINGS *s, char* fname) {
 	       }
 	       sprintf(tmpstr, "nu_max%i=",i);
 	       if(!strcmp(s1,tmpstr)) {
-		 if (atof(s2)>0) 
-		   s->nu_max[i]=atof(s2)*1e6;
+		 double tmp;
+		 if (atof(s2)>0)
+		   tmp=atof(s2)*1e6;
+		 else
+		   tmp=(float)(s->sample_rate/2);
+		 s->nu_max[i]=tmp;
 		 found=true;
 		 break;
 	       }

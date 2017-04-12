@@ -29,9 +29,10 @@ class BMXFile(object):
         H=np.fromfile(f,head_desc,count=1)
         self.ncuts=H['ncuts'][0]
         self.nChan=H['nChan'][0]
+        self.sample_rate=H['sample_rate']/1e6
         self.nP=H['pssize'][0]
-        self.numin=H['numin'][0]/1e6
-        self.numax=H['numax'][0]/1e6
+        self.numin=(H['numin'][0]/1e6)[:self.ncuts]
+        self.numax=(H['numax'][0]/1e6)[:self.ncuts]
         print("We have ",self.ncuts,"cuts:")
         self.freq=[]
         for i in range(self.ncuts):
