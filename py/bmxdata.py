@@ -65,7 +65,7 @@ class BMXFile(object):
         if replace:
             self.data=ndata
         else:
-            self.data=np.vstack((self.data,self.ndata))
+            self.data=np.hstack((self.data,ndata))
         return nd
 
     def getNames(self, chan):
