@@ -239,20 +239,26 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 	if (!set->simulate_digitizer)
 	  spcm_dwSetParam_i32 (dc->hCard, SPC_DATA_AVAIL_CARD_LEN, dc->lNotifySize);
       
-
+	// drive frequency generator if needed
 	if (set->fg_nfreq) freqGenLoop(fgen, w);
+	// write waveform if requested
+	if (set->wave_nbytes>0) {
+	  tprintfn ("filename=%s",set->wave_fname);
+	  FILE *fw=fopen(set->wave_fname,"wb");
+	  if (fw!=NULL) {
+	    fwrite(bufstart,sizeof(int8_t),set->wave_nbytes,fw);
+	    fclose(fw);
+	  }
+	}
+	// break if sufficient number of samples
+	if ((++sample_count) == set->nsamples) break;
+
 	// return terminal cursor
 	treturn();
-	if (set->wave_nbytes>0) {
-	  FILE *fw=fopen(set->wave_fname,"w");
-	  fwrite(bufstart,sizeof(int8_t),set->wave_nbytes,fw);
-	  fclose(fw);
-	}
-	if ((++sample_count) == set->nsamples) break;
       }
   }
     
-  printf("Sending stop command\n");
+  printf("\n\n\n\n\n\n\n\n\nSending stop command\n");
   // send the stop command
   dwError = set->simulate_digitizer ? ERR_OK :
     spcm_dwSetParam_i32 (dc->hCard, SPC_M2CMD, M2CMD_CARD_STOP | 

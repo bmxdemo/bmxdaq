@@ -1,6 +1,7 @@
 #include "writer.h"
 #include "string.h"
 #include "time.h"
+#include "stdlib.h"
 
 void maybeReOpenFile(WRITER *writer, bool first=false) {
   time_t rawtime;   
@@ -14,6 +15,10 @@ void maybeReOpenFile(WRITER *writer, bool first=false) {
 	    ti->tm_mday, ti->tm_hour, ti->tm_min);
     printf ("New File: %s\n", afname);
     writer->f=fopen(afname,"wb");
+    if (writer->f==NULL) {
+      printf ("CANNOT OPEN FILE:%s",afname);
+      exit(1);
+    }
     fwrite(&writer->header, sizeof(BMXHEADER),1,writer->f);
     writer->reopen=false;
   }

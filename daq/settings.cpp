@@ -114,7 +114,7 @@ void init_settings(SETTINGS *s, char* fname) {
 	     strcpy(s->wave_fname,s2);
 	   else if(!strcmp(s1,"wave_nbytes="))
 	     s->wave_nbytes=atoi(s2);
-	   else if(!strcmp(s1,"nsames="))
+	   else if(!strcmp(s1,"nsamples="))
 	     s->nsamples=atoi(s2);
 	   else found=false;
 

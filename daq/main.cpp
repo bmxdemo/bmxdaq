@@ -54,7 +54,7 @@ int main(int argc,char **argv)
   //shutdown
   digiCardCleanUp(&dcard, &settings);
   writerCleanUp(&writer);
-  freqGenCleanUp(&fgen);
+  if (settings.fg_nfreq) freqGenCleanUp(&fgen);
   return 0;
 }
 

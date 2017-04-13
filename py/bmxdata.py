@@ -56,7 +56,17 @@ class BMXFile(object):
         self.rec_dt=rec_dt
         self.names=rec_dt.names
         self.data=np.fromfile(f,rec_dt)
+        self.fhandle=f
         print ("Loading done.")
+
+    def update(self,replace=False):
+        ndata=np.fromfile(self.fhandle,self.rec_dt)
+        nd=len(ndata)
+        if replace:
+            self.data=ndata
+        else:
+            self.data=np.vstack((self.data,self.ndata))
+        return nd
 
     def getNames(self, chan):
         if self.nChan==1:
