@@ -191,7 +191,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
   tSim=timeStart;
   fill=69;
   float towait=set->fft_size/set->sample_rate;
-
+  long int sample_count=0;
   while (1) {
     clock_gettime(CLOCK_REALTIME, &t1);
     float dt=deltaT(tSim,t1);
@@ -238,10 +238,18 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 	// tell driver we're done
 	if (!set->simulate_digitizer)
 	  spcm_dwSetParam_i32 (dc->hCard, SPC_DATA_AVAIL_CARD_LEN, dc->lNotifySize);
+      
+
+	if (set->fg_nfreq) freqGenLoop(fgen, w);
+	// return terminal cursor
+	treturn();
+	if (set->wave_nbytes>0) {
+	  FILE *fw=fopen(set->wave_fname,"w");
+	  fwrite(bufstart,sizeof(int8_t),set->wave_nbytes,fw);
+	  fclose(fw);
+	}
+	if ((++sample_count) == set->nsamples) break;
       }
-    // returnt terminal cursor
-    if (set->fg_nfreq) freqGenLoop(fgen, w);
-    treturn();
   }
     
   printf("Sending stop command\n");

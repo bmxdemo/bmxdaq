@@ -39,6 +39,10 @@ void init_settings(SETTINGS *s, char* fname) {
     s->fg_baudrate=9600;
     s->fg_switchevery=10;
     sprintf(s->fg_port,"ttyS0");
+
+    s->nsamples=0;
+    s->wave_nbytes=0;
+    sprintf(s->wave_fname,"wave.bin");
     
     if (fname) {
          FILE *fi;
@@ -106,7 +110,12 @@ void init_settings(SETTINGS *s, char* fname) {
 	     s->fg_switchevery=atoi(s2);
 	   else if(!strcmp(s1,"fg_port="))
 	     strcpy(s->fg_port,s2);
-
+	   else if(!strcmp(s1,"wave_fname="))
+	     strcpy(s->wave_fname,s2);
+	   else if(!strcmp(s1,"wave_nbytes="))
+	     s->wave_nbytes=atoi(s2);
+	   else if(!strcmp(s1,"nsames="))
+	     s->nsamples=atoi(s2);
 	   else found=false;
 
 	   if (!found) {

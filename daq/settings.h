@@ -23,7 +23,15 @@ struct SETTINGS {
   // dont process, just transfer from digitizer
   int dont_process;
   
-  //
+  // number of samples that we want to take, zero for forver
+  long int nsamples;
+
+  // waveform file and length, if zero, don't save
+  long int wave_nbytes;
+  char wave_fname[MAXCHAR];
+  
+
+  // size of FFT transform
   uint32_t fft_size; // must be power of 2
   int n_cuts;
   float nu_min[MAXCUTS], nu_max[MAXCUTS]; // min and max frequency to output
