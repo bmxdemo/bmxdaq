@@ -11,6 +11,7 @@ THIS IS A COMPLETE PLACEHOLDER!
 #include "settings.h"
 #include "writer.h"
 
+
 struct GPUCARD {
   void **cbuf; // pointer to pointers of GPU sample buffer
   void **cfbuf; // floats
@@ -33,8 +34,7 @@ struct GPUCARD {
   int fstream, bstream; // front stream (oldest running), back stream (newest runnig);
   int active_streams; // really needed just at the beginning (when 0)
   void *eStart, *eDoneCopy, *eDoneFloatize, *eDoneFFT, *eDonePost, *eDoneCopyBack; //events
-
-  
+  bool *isDone; //indicates if stream is done proccessing the data and is ready to print it
 };
 
 

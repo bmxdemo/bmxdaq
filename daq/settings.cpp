@@ -27,9 +27,9 @@ void init_settings(SETTINGS *s, char* fname) {
     s->ADC_range=1000;
     s->ext_clock_mode=0;
     s->buf_mult=8;
-    s->cuda_streams=1;
+    s->cuda_streams=2;
     s->cuda_threads=1024;
-    s->simulate_digitizer=0;
+    s->simulate_digitizer=1;
     s->dont_process=0;
     s->save_every=60;
     s->print_meanvar=1;

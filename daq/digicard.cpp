@@ -22,6 +22,7 @@ szTypeToName: doing name translation
 **************************************************************************
 */
 
+
 char* szTypeToName (int32 lCardType)
     {
     static char szName[50];
@@ -232,8 +233,9 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 	int8_t* bufstart=((int8_t*)dc->pnData+lPCPos);
 	if (set->dont_process) 
 	  tprintfn (" ** no GPU processing");
-	else
+	else{
 	  gpuProcessBuffer(gc,bufstart,w,set);
+	}
 
 	// tell driver we're done
 	if (!set->simulate_digitizer)
