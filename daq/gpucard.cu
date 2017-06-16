@@ -16,7 +16,7 @@ CUDA PART
 #include <math.h>
 
 #include <iostream>
-
+#include <time.h>
 #define FLOATIZE_X 4
 
 static void HandleError( cudaError_t err,
@@ -31,10 +31,29 @@ static void HandleError( cudaError_t err,
 #define CHK( err ) (HandleError( err, __FILE__, __LINE__ ))
 
 void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
-  /*cudaDeviceProp  d;
-  CHK(cudaGetDeviceProperties(&d, 0));
-  printf("totalGlobalMem: %d \nshared memory per block: %d\nwarp size: %d\nmaxThreadsPerBlock: %d\nconcurrent Kernels: %d\n", d.totalGlobalMem, d.sharedMemPerBlock, d.warpSize, d.maxThreadsPerBlock, d.concurrentKernels); */
-
+  
+  //print out gpu properties
+  cudaDeviceProp  devProp;
+  CHK(cudaGetDeviceProperties(&devProp, 0));
+  printf("\nGPU properties \n====================\n");
+  printf("Version number:                %d.%d\n",  devProp.major, devProp.minor);
+  printf("Name:                          %s\n",  devProp.name);
+  printf("Total global memory:           %u\n",  devProp.totalGlobalMem);
+  printf("Total shared memory per block: %u\n",  devProp.sharedMemPerBlock);
+  printf("Total registers per block:     %d\n",  devProp.regsPerBlock);
+  printf("Warp size:                     %d\n",  devProp.warpSize);
+  printf("Maximum memory pitch:          %u\n",  devProp.memPitch);
+  printf("Maximum threads per block:     %d\n",  devProp.maxThreadsPerBlock);
+  for (int i = 0; i < 3; ++i)
+  printf("Maximum dimension %d of block:  %d\n", i, devProp.maxThreadsDim[i]);
+  for (int i = 0; i < 3; ++i)
+  printf("Maximum dimension %d of grid:   %d\n", i, devProp.maxGridSize[i]);
+  printf("Clock rate:                    %d\n",  devProp.clockRate);
+  printf("Total constant memory:         %u\n",  devProp.totalConstMem);
+  printf("Texture alignment:             %u\n",  devProp.textureAlignment);
+  printf("Concurrent copy and execution: %s\n",  (devProp.deviceOverlap ? "Yes" : "No"));
+  printf("Number of multiprocessors:     %d\n",  devProp.multiProcessorCount);
+  printf("Kernel execution timeout:      %s\n\n",  (devProp.kernelExecTimeoutEnabled ? "Yes" : "No"));
 
 
 
@@ -163,9 +182,6 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
 
 }
 
-
-
-
 /**
  * CUDA Kernel byte->float, 1 channel version
  *
@@ -182,6 +198,8 @@ __global__ void floatize_2chan(int8_t* sample, cufftReal* fsample1, cufftReal* f
       fsample2[i/2+j]=float(sample[i+2*j+1]);
     }
 }
+
+
 //offset is fft size, so stack output from each channel in one array
 __global__ void floatize_nchan(int8_t* sample, cufftReal* fsamples, int nchan, int offset) {
      int i = FLOATIZE_X*(blockDim.x * blockIdx.x + threadIdx.x);
@@ -189,6 +207,72 @@ __global__ void floatize_nchan(int8_t* sample, cufftReal* fsamples, int nchan, i
       for(int k=0; k<nchan; k++)
        fsamples[k*offset+i/nchan+j] = float(sample[i+nchan*j+k]);
 }
+
+
+
+//Parallel reduction algorithm to calculate the mean of an array of numbers. The number of elements must be a power of 2. 
+//Inputs: an array of floats that will be averaged. The means are conducted individually per block, with a max of 
+//1024 threads/elements per block. 
+//Outputs: an array of floats the size of the number of blocks. The mean for each block is placed here.
+__global__ void mean_reduction (float * in, float * out){
+        extern __shared__ float sdata[];
+        int tid = threadIdx.x;
+        int i = blockIdx.x * blockDim.x + threadIdx.x;
+        sdata[tid] = in[i];
+        __syncthreads();
+
+        for(int s=blockDim.x/2; s>0; s>>=1){
+                if(tid<s) sdata[tid] +=sdata[tid+s];
+                __syncthreads();
+        }   
+	
+	if(tid == 0) out[blockIdx.x] = sdata[0]/blockDim.x;
+}
+__global__ void mean_reduction2 (float * in, float * out){
+        extern __shared__ float sdata[];
+        int tid = threadIdx.x;
+        int i = blockIdx.x * blockDim.x*2 + threadIdx.x;
+        sdata[tid] = in[i] + in[i+blockDim.x];
+        __syncthreads();
+
+        for(int s=blockDim.x/2; s>0; s>>=1){
+                if(tid<s) sdata[tid] +=sdata[tid+s];
+                __syncthreads();
+        }   
+	
+	if(tid == 0) out[blockIdx.x] = sdata[0]/blockDim.x;
+}
+
+//Parallel reduction algorithm to average the squares of numbers.
+__global__ void rms_reduction (float * in, float * out){
+        extern __shared__ float sdata[];
+        int tid = threadIdx.x;
+        int i = blockIdx.x * blockDim.x + threadIdx.x;
+        sdata[tid] = in[i]*in[i];
+        __syncthreads();
+        for(int s =blockDim.x/2; s>0; s>>=1){
+                if(tid<s) sdata[tid] +=sdata[tid+s];
+                __syncthreads();
+        }   
+
+        if(tid == 0) out[blockIdx.x] = sdata[0]/blockDim.x;
+}
+
+//Parallel reduction algorithm, to calculate the absolute max of an array of numbers
+__global__ void abs_max_reduction (float * in, float * out){
+        extern __shared__ float sdata[];
+        int tid = threadIdx.x;
+        int i = blockIdx.x * blockDim.x + threadIdx.x;
+        sdata[tid] = in[i];
+        __syncthreads();
+
+        for(int s=blockDim.x/2; s>0; s>>=1){
+                if(tid<s) sdata[tid] = (abs(sdata[tid])> abs(sdata[tid+s]))? sdata[tid]:sdata[tid+s];
+                __syncthreads();
+        }
+        if(tid == 0) abs(out[blockIdx.x]);
+}
+	
 
 
 /**
@@ -223,55 +307,6 @@ __global__ void ps_reduce(cufftComplex *ffts, float* output_ps, size_t istart, s
   }
   if (tid==0) output_ps[bl]=work[0];
 }
-
-__global__ void ps_reduce_optimize(cufftComplex *ffts, float* output_ps, size_t istart, size_t avgsize) {
-  int tid=threadIdx.x; // thread
-  int bl=blockIdx.x; // block, ps bin #
-  int nth=blockDim.x; //nthreads
-  __shared__ float work[1024];
-  //global pos
-  size_t pos=istart+bl*avgsize;
-  size_t pose=pos+avgsize;
-  pos+=tid;
-  work[tid]=0;
-  while (pos<pose) {
-    work[tid]+=ffts[pos].x*ffts[pos].x+ffts[pos].y*ffts[pos].y;
-    pos+=nth;
-  }
-  // now do the tree reduce.
-  __syncthreads();
-  if (blockDim.x >= 1024) { if (tid < 512) { work[tid] += work[tid + 512]; } __syncthreads(); } 
-  if (blockDim.x >= 512) { if (tid < 256) { work[tid] += work[tid + 256]; } __syncthreads(); } 
-  if (blockDim.x >= 256) { if (tid < 128) { work[tid] += work[tid + 128]; } __syncthreads(); } 
-  if (blockDim.x >= 128) { if (tid < 64) { work[tid] += work[tid + 64]; } __syncthreads(); }
-  if (tid < 32) {
- 	if(blockDim.x >=64)work[tid] +=work[tid+32];		
-	if(blockDim.x >=32)work[tid] +=work[tid+16];
-       	if(blockDim.x >=16)work[tid] +=work[tid+8];
-       	if(blockDim.x >=8)work[tid] +=work[tid+4];
-       	if(blockDim.x >=4)work[tid] +=work[tid+2];
-        if(blockDim.x >=2)work[tid] +=work[tid+1];
-  }
-         
-  if (tid==0) output_ps[bl]=work[0];
-}
-
-__global__ void max_reduction (int * in, int * out){
-        extern __shared__ int  sdata[];
-	int tid = threadIdx.x;
-	int i = blockIdx.x*blockDim.x+threadIdx.x;
-	sdata[tid] = in[i];
-	__syncthreads();
-
-	for(int s=blockDim.x/2; s>0; s>>=1){
-		if(tid<s) sdata[tid] = sdata[tid]>sdata[tid+s]? sdata[tid]: sdata[tid+s];
-		__syncthreads();
-	}
-
-	//if(tid == 0) out[blockIdx.x] = sdata[0];
-}
-  
-
 
 /** 
  * CROSS power spectrum reducer
@@ -311,9 +346,6 @@ __global__ void ps_X_reduce(cufftComplex *fftsA, cufftComplex *fftsB,
 } 
 
 
-
-
-
 void printDt (cudaEvent_t cstart, cudaEvent_t cstop) {
   float gpu_time;
   CHK(cudaEventElapsedTime(&gpu_time, cstart, cstop));
@@ -336,7 +368,15 @@ void printTiming(GPUCARD *gc, int i) {
   tprintfn ("  ");
 }
 
- bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
+
+float deltaT (timespec ,timespec ); //declared in digicard.cpp
+
+
+bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
+  struct timespec tstart, tnow;
+  clock_gettime(CLOCK_REALTIME, &tstart);
+
+
   // pointers and vars
   int8_t** cbuf=(int8_t**)(gc->cbuf);
   cufftReal** cfbuf=(cufftReal**)(gc->cfbuf);
@@ -439,19 +479,6 @@ void printTiming(GPUCARD *gc, int i) {
     writerWritePS(wr,gc->outps);
   } 
  else {
-    int * ints =(int *) malloc(512*sizeof(int));
-    for(int i=0; i < 512; i++){
-      ints[i] = i;
-      printf("%d\n", ints[i]);
-    }
-    int * intsdevice;
-    CHK(cudaMalloc(&intsdevice, 512*sizeof(int)));
-    CHK(cudaMemcpy(intsdevice, ints, 512*sizeof(int), cudaMemcpyHostToDevice)); 
-    int max;
-    max_reduction<<<1, 512, 512, 0>>>(intsdevice, &max);
-    printf("max is %d\n", max);
-
-   
    //streamed version
    //Check if other streams are finished and proccess the finished ones in order (i.e. print output to file)
    while(gc->active_streams > 0){
@@ -516,11 +543,19 @@ void printTiming(GPUCARD *gc, int i) {
     }
 
     gc->active_streams++;
-          
+
+    //clock_gettime(CLOCK_REALTIME, &tnow);
+    //printf("time after proccessing: %f\n\n\n", deltaT(tstart, tnow));
+
+
     cudaStream_t cs= streams[gc->bstream];
     cudaEventRecord(eStart[csi], cs);
     CHK(cudaMemcpyAsync(cbuf[csi], buf, gc->bufsize , cudaMemcpyHostToDevice,cs));
     CHK(cudaMemcpyAsync(cbuf[csi], buf, gc->bufsize , cudaMemcpyHostToDevice,cs));
+    
+    //clock_gettime(CLOCK_REALTIME, &tnow);
+    //printf("time after copying: %f\n\n\n", deltaT(tstart, tnow));
+    
     cudaEventRecord(eDoneCopy[csi], cs);
     int threadsPerBlock = gc->threads;
     int blocksPerGrid = gc->bufsize / threadsPerBlock/FLOATIZE_X;
@@ -529,20 +564,49 @@ void printTiming(GPUCARD *gc, int i) {
     else 
       floatize_2chan<<<blocksPerGrid, threadsPerBlock, 0, cs>>>(cbuf[csi],cfbuf[csi],&(cfbuf[csi][gc->fftsize]));
     cudaEventRecord(eDoneFloatize[csi], cs);
+    
+    //clock_gettime(CLOCK_REALTIME, &tnow);
+    //printf("time after floatizing: %f\n\n\n", deltaT(tstart, tnow));
+
+
+//    //RFI rejection
+//    int n = 5;
+//    int N = pow(2,n);
+//    if(N > threadsPerBlock){
+//	printf("RFI segment larger than number of threads.\n"); //can implement it so that will still work
+//	exit(1);
+//    }
+//    
+//    int rfiChunks = gc->bufsize/N;
+//
+//    float * mean, *rms, *hostMean, *hostrms;
+//    CHK(cudaMalloc(&mean, rfiChunks*sizeof(float)));
+//    CHK(cudaMalloc(&rms, rfiChunks*sizeof(float)));
+//
+//    hostMean = (float*)malloc(rfiChunks*sizeof(float));
+//    hostrms = (float*)malloc(rfiChunks*sizeof(float));
+//
+//    mean_reduction2<<<rfiChunks, N, N*sizeof(float), cs>>>(cfbuf[csi], mean );
+//    rms_reduction<<<rfiChunks, N, N*sizeof(float), cs>>>(cfbuf[csi], rms);
+//    CHK(cudaMemcpyAsync(hostMean, mean, rfiChunks*sizeof(float), cudaMemcpyDeviceToHost, cs));
+//    CHK(cudaMemcpyAsync(hostrms, rms, rfiChunks*sizeof(float), cudaMemcpyDeviceToHost, cs));
+    
+    
+    //perform fft
     int status = cufftSetStream(gc->plan, cs);
     if(status !=CUFFT_SUCCESS) {
     	printf("CUFFTSETSTREAM failed\n");
  	exit(1);
     }
-
     status=cufftExecR2C(gc->plan, cfbuf[csi], cfft[csi]);
-  
     cudaEventRecord(eDoneFFT[csi], cs);
-    
     if (status!=CUFFT_SUCCESS) {
       printf("CUFFT FAILED\n");
       exit(1);
-    }    
+    } 
+
+    //clock_gettime(CLOCK_REALTIME, &tnow);
+    //printf("time after fft: %f\n\n\n", deltaT(tstart, tnow));
 
     if (gc->nchan==1) {
       int psofs=0;
@@ -550,29 +614,31 @@ void printTiming(GPUCARD *gc, int i) {
 	ps_reduce<<<gc->pssize[i], 1024, 0, cs>>> (cfft[csi], &(coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i]);
 	psofs+=gc->pssize[i];
       }
-    } else {
-      // note we need to take into account the tricky N/2+1 FFT size while we do N/2 binning
-      // pssize+2 = transformsize+1
-      // note that pssize is the full *nchan pssize
-      int psofs=0;
-      for (int i=0; i<gc->ncuts; i++) {
-	for(int j=0; j<gc->nchan; j++){
-	 ps_reduce_optimize<<<gc->pssize1[i], 1024, 0, cs>>> (&cfft[csi][j*(gc->fftsize/2+1)], &(coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i]);
-	 psofs+=gc->pssize1[i];
+    } else if(gc->nchan==2){
+	  // note we need to take into account the tricky N/2+1 FFT size while we do N/2 binning
+	  // pssize+2 = transformsize+1
+	  // note that pssize is the full *nchan pssize
+	  
+	  int psofs=0;
+	  for (int i=0; i<gc->ncuts; i++) {
+	    ps_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&cfft[csi][0], &(coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i]);
+	    psofs+=gc->pssize1[i];
+	    ps_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&cfft[csi][(gc->fftsize/2+1)], 
+					     &(coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i]);
+	    psofs+=gc->pssize1[i];
+	    ps_X_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&cfft[csi][0], &cfft[csi][(gc->fftsize/2+1)], 
+					      &(coutps[csi][psofs]), &(coutps[csi][psofs+gc->pssize1[i]]),
+					      gc->ndxofs[i], gc->fftavg[i]);
+	    psofs+=2*gc->pssize1[i];
 	}
-	for(int j=0; j<gc->nchan/2; j++){
-	 ps_X_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&(cfft[csi][j*(gc->fftsize/2+1)]), &(cfft[csi][(j+1)*(gc->fftsize/2+1)]), 
-					  &(coutps[csi][psofs]), &(coutps[csi][psofs+gc->pssize1[i]]),
-					  gc->ndxofs[i], gc->fftavg[i]);
-        
-	 psofs+=2*gc->pssize1[i];
-	}
-      }
-    }
-
+  }
+  else{
+      printf("Can only handle 1 or 2 channels\n");
+      exit(1);
+  }
+ 
     CHK(cudaGetLastError());
     cudaEventRecord(eDonePost[csi], cs);
-  }
-  
+ }
   return true;
 }
