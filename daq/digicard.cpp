@@ -15,7 +15,6 @@
 #include <stdlib.h>
 #include <math.h>
 
-
 /*
 **************************************************************************
 szTypeToName: doing name translation
@@ -127,7 +126,7 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
   card->lBufferSize = card->lNotifySize*set->buf_mult;
     
   /// alocate buffer
-  card->pnData = (int16*) pvAllocMemPageAligned ((uint64) card->lBufferSize);
+  digiCardAlloc(card->pnData, card->lBufferSize);
   if (!card->pnData)
     {
       printf ("memory allocation failed\n");
@@ -234,7 +233,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 	if (set->dont_process) 
 	  tprintfn (" ** no GPU processing");
 	else{
-	  gpuProcessBuffer(gc,bufstart,w,set);
+	    gpuProcessBuffer(gc,bufstart,w,set);
 	}
 
 	// tell driver we're done

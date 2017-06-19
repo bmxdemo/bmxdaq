@@ -369,8 +369,6 @@ void printTiming(GPUCARD *gc, int i) {
 }
 
 
-float deltaT (timespec ,timespec ); //declared in digicard.cpp
-
 
 bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
   struct timespec tstart, tnow;
@@ -544,17 +542,11 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 
     gc->active_streams++;
 
-    //clock_gettime(CLOCK_REALTIME, &tnow);
-    //printf("time after proccessing: %f\n\n\n", deltaT(tstart, tnow));
-
 
     cudaStream_t cs= streams[gc->bstream];
     cudaEventRecord(eStart[csi], cs);
     CHK(cudaMemcpyAsync(cbuf[csi], buf, gc->bufsize , cudaMemcpyHostToDevice,cs));
     CHK(cudaMemcpyAsync(cbuf[csi], buf, gc->bufsize , cudaMemcpyHostToDevice,cs));
-    
-    //clock_gettime(CLOCK_REALTIME, &tnow);
-    //printf("time after copying: %f\n\n\n", deltaT(tstart, tnow));
     
     cudaEventRecord(eDoneCopy[csi], cs);
     int threadsPerBlock = gc->threads;
@@ -565,8 +557,6 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
       floatize_2chan<<<blocksPerGrid, threadsPerBlock, 0, cs>>>(cbuf[csi],cfbuf[csi],&(cfbuf[csi][gc->fftsize]));
     cudaEventRecord(eDoneFloatize[csi], cs);
     
-    //clock_gettime(CLOCK_REALTIME, &tnow);
-    //printf("time after floatizing: %f\n\n\n", deltaT(tstart, tnow));
 
 
 //    //RFI rejection
@@ -604,9 +594,6 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
       printf("CUFFT FAILED\n");
       exit(1);
     } 
-
-    //clock_gettime(CLOCK_REALTIME, &tnow);
-    //printf("time after fft: %f\n\n\n", deltaT(tstart, tnow));
 
     if (gc->nchan==1) {
       int psofs=0;

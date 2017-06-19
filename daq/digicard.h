@@ -34,6 +34,9 @@ struct DIGICARD {
 //initialize
 void digiCardInit (DIGICARD *card, SETTINGS *set);
 
+//allocate memory
+void digiCardAlloc (int16* & data, int32 size);
+
 //main worker loop
 void  digiWorkLoop(DIGICARD *card, GPUCARD *gcard, SETTINGS *set, FREQGEN *fgen, WRITER *w);
 
