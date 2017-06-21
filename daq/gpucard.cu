@@ -85,7 +85,6 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     printf ("Cutout %i:\n",i);
     gc->fftavg[i]=set->fft_avg[i];
     // first sort  reflections etc.
-    //
     float numin, numax;
     numin=set->nu_min[i];
     numax=set->nu_max[i];
@@ -220,7 +219,7 @@ __global__ void floatize_nchan(int8_t* sample, cufftReal* fsamples, int nchan, i
 //1024 threads/elements per block. 
 //Outputs: an array of floats the size of the number of blocks. The mean for each block is placed here.
 __global__ void mean_reduction (cufftReal * in, cufftReal * out){
-        extern __shared__ float sdata[];
+        extern __shared__ cufftReal sdata[];
         int tid = threadIdx.x;
         int i = blockIdx.x * blockDim.x + threadIdx.x;
         sdata[tid] = in[i];
@@ -282,18 +281,17 @@ __global__ void abs_max_reduction (cufftReal * in, cufftReal * out){
 	
 
 void getMeans(cufftReal *input, cufftReal * mean, cufftReal * cmean, int size, int chunkSize, cudaStream_t & cs){
-    
     int numBlocks = size/1024 /MEAN_REDUCTION;
-    mean_reduction2<<<numBlocks, 1024, 1024*sizeof(cufftReal), cs>>>(input, mean);
+    mean_reduction2<<<numBlocks, 1024, 1024*sizeof(cufftReal), cs>>>(input, cmean);
     CHK(cudaGetLastError());
 
     int numThreads, remaining = chunkSize/1024/MEAN_REDUCTION; //number of threads, and number of summations that remain to be done
-    while(remaining > 1){
+    /*while(remaining > 1){
 	numThreads = min(1024, remaining/MEAN_REDUCTION);
 	numBlocks = max(numBlocks/numThreads/MEAN_REDUCTION, 1);
 	mean_reduction2<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(cmean, cmean); //reusing input array for output!
 	remaining/=(1024*MEAN_REDUCTION);
-    }
+    }*/
     
     CHK(cudaMemcpyAsync(mean, cmean, numBlocks*sizeof(cufftReal), cudaMemcpyDeviceToHost, cs));
 }
@@ -477,7 +475,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 
 
     //RFI rejection
-   // getMeans(gc->cfbuf[csi], gc->mean[csi], gc->cmean[csi], gc->bufsize, gc->RFIchunkSize, cs); 
+    getMeans(gc->cfbuf[csi], gc->mean[csi], gc->cmean[csi], gc->bufsize, gc->RFIchunkSize, cs); 
     
     
     //perform fft
