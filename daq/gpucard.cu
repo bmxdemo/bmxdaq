@@ -4,7 +4,6 @@ CUDA PART
 ***********************************
 **********************************/
 
-#define CUDA_COMPILER //to enable correct cuda types in gpucard.h
 #include "gpucard.h"
 #include "terminal.h"
 
@@ -65,7 +64,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   printf ("====================\n");
   printf ("Allocating GPU buffers\n");
   int Nb=set->cuda_streams;
-  gc->cbuf=(uint8_t**)malloc(Nb*sizeof(uint8_t*));
+  gc->cbuf=(int8_t**)malloc(Nb*sizeof(int8_t*));
   gc->cfbuf=(cufftReal**)malloc(Nb*sizeof(cufftReal*));
   gc->cfft=(cufftComplex**)malloc(Nb*sizeof(cufftComplex*));
   gc->coutps=(float**)malloc(Nb*sizeof(float*));
@@ -176,10 +175,16 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
 
   gc->mean = (cufftReal **)malloc(Nb*sizeof(cufftReal));
   gc->cmean = (cufftReal **) malloc(Nb *sizeof(cufftReal));
+  gc->sqMean = (cufftReal **)malloc(Nb*sizeof(cufftReal));
+  gc->csqMean = (cufftReal **) malloc(Nb *sizeof(cufftReal));
+  gc->variance = (cufftReal **)malloc(Nb*sizeof(cufftReal));
 
   for(int i=0; i<Nb; i++){
       CHK(cudaMalloc(&gc->cmean[i], numBlocks*sizeof(cufftReal)));
       CHK(cudaMallocHost(&gc->mean[i], gc->bufsize/gc->RFIchunkSize*sizeof(cufftReal)));
+      CHK(cudaMalloc(&gc->csqMean[i], numBlocks*sizeof(cufftReal)));
+      CHK(cudaMallocHost(&gc->sqMean[i], gc->bufsize/gc->RFIchunkSize*sizeof(cufftReal)));
+      CHK(cudaMallocHost(&gc->variance[i], gc->bufsize/gc->RFIchunkSize*sizeof(cufftReal)));
   }
 
   printf ("GPU ready.\n");
@@ -190,12 +195,12 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
  * CUDA Kernel byte->float, 1 channel version
  *
  */
-__global__ void floatize_1chan(uint8_t* sample, cufftReal* fsample)  {
+__global__ void floatize_1chan(int8_t* sample, cufftReal* fsample)  {
     int i = FLOATIZE_X*(blockDim.x * blockIdx.x + threadIdx.x);
     for (int j=0; j<FLOATIZE_X; j++) fsample[i+j]=float(sample[i+j]);
 }
 
-__global__ void floatize_2chan(uint8_t* sample, cufftReal* fsample1, cufftReal* fsample2)  {
+__global__ void floatize_2chan(int8_t* sample, cufftReal* fsample1, cufftReal* fsample2)  {
       int i = FLOATIZE_X*(blockDim.x * blockIdx.x + threadIdx.x);
       for (int j=0; j<FLOATIZE_X/2; j++) {
       fsample1[i/2+j]=float(sample[i+2*j]);
@@ -215,24 +220,12 @@ __global__ void floatize_nchan(int8_t* sample, cufftReal* fsamples, int nchan, i
 
 
 //Parallel reduction algorithm to calculate the mean of an array of numbers. The number of elements must be a power of 2. 
-//Inputs: an array of floats that will be averaged. The means are conducted individually per block, with a max of 
-//1024 threads/elements per block. 
+//Inputs: an array of floats that will be averaged. The means are conducted individually per block. 
 //Outputs: an array of floats the size of the number of blocks. The mean for each block is placed here.
-__global__ void mean_reduction (cufftReal * in, cufftReal * out){
-        extern __shared__ cufftReal sdata[];
-        int tid = threadIdx.x;
-        int i = blockIdx.x * blockDim.x + threadIdx.x;
-        sdata[tid] = in[i];
-        __syncthreads();
 
-        for(int s=blockDim.x/2; s>0; s>>=1){
-                if(tid<s) sdata[tid] +=sdata[tid+s];
-                __syncthreads();
-        }   
-	
-	if(tid == 0) out[blockIdx.x] = sdata[0];
-}
-__global__ void mean_reduction2 (cufftReal * in, cufftReal * out){
+
+//Perform multiple adds during load to shared memory which reduces the number of blocks needed
+__global__ void mean_reduction (cufftReal * in, cufftReal * out){
         extern __shared__ cufftReal sdata[];
         int tid = threadIdx.x;
         int i = blockIdx.x * blockDim.x*MEAN_REDUCTION + threadIdx.x;
@@ -246,22 +239,24 @@ __global__ void mean_reduction2 (cufftReal * in, cufftReal * out){
                 __syncthreads();
         }   
 	
-	if(tid == 0) out[blockIdx.x] = sdata[0]/blockDim.x;
+	if(tid == 0) out[blockIdx.x] = sdata[0]/(blockDim.x*MEAN_REDUCTION);
 }
 
 //Parallel reduction algorithm to average the squares of numbers.
-__global__ void rms_reduction (cufftReal * in, cufftReal * out){
+__global__ void squares_reduction (cufftReal * in, cufftReal * out){
         extern __shared__ cufftReal sdata[];
         int tid = threadIdx.x;
-        int i = blockIdx.x * blockDim.x + threadIdx.x;
-        sdata[tid] = in[i]*in[i];
+        int i = blockIdx.x * blockDim.x*MEAN_REDUCTION + threadIdx.x;
+        sdata[tid] = 0;
+        for(int j=0; j<MEAN_REDUCTION; j++)
+	    sdata[tid]+=in[i+j*blockDim.x] * in[i+j*blockDim.x];
         __syncthreads();
         for(int s =blockDim.x/2; s>0; s>>=1){
                 if(tid<s) sdata[tid] +=sdata[tid+s];
                 __syncthreads();
         }   
 
-        if(tid == 0) out[blockIdx.x] = sdata[0]/blockDim.x;
+        if(tid == 0) out[blockIdx.x] = sdata[0]/(blockDim.x*MEAN_REDUCTION);
 }
 
 //Parallel reduction algorithm, to calculate the absolute max of an array of numbers
@@ -280,21 +275,43 @@ __global__ void abs_max_reduction (cufftReal * in, cufftReal * out){
 }
 	
 
-void getMeans(cufftReal *input, cufftReal * mean, cufftReal * cmean, int size, int chunkSize, cudaStream_t & cs){
+void getMeans(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int size, int chunkSize, cudaStream_t & cs){
     int numBlocks = size/1024 /MEAN_REDUCTION;
-    mean_reduction2<<<numBlocks, 1024, 1024*sizeof(cufftReal), cs>>>(input, cmean);
+    mean_reduction<<<numBlocks, 1024, 1024*sizeof(cufftReal), cs>>>(input, deviceOutput);
     CHK(cudaGetLastError());
 
     int numThreads, remaining = chunkSize/1024/MEAN_REDUCTION; //number of threads, and number of summations that remain to be done
-    /*while(remaining > 1){
+    while(remaining > 1){
 	numThreads = min(1024, remaining/MEAN_REDUCTION);
 	numBlocks = max(numBlocks/numThreads/MEAN_REDUCTION, 1);
-	mean_reduction2<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(cmean, cmean); //reusing input array for output!
+	mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(deviceOutput, deviceOutput); //reusing input array for output!
 	remaining/=(1024*MEAN_REDUCTION);
-    }*/
-    
-    CHK(cudaMemcpyAsync(mean, cmean, numBlocks*sizeof(cufftReal), cudaMemcpyDeviceToHost, cs));
+    }
+    size_t memsize = numBlocks*sizeof(cufftReal); 
+    CHK(cudaMemcpyAsync(output, deviceOutput, memsize, cudaMemcpyDeviceToHost, cs));
 }
+
+
+void getMeansOfSquares(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int size, int chunkSize, cudaStream_t & cs){
+    int numBlocks = size/1024/MEAN_REDUCTION;
+    squares_reduction<<<numBlocks, 1024, 1024*sizeof(cufftReal), cs>>>(input, deviceOutput);
+    CHK(cudaGetLastError());
+
+    int numThreads, remaining = chunkSize/1024/MEAN_REDUCTION; //number of threads, and number of summations that remain to be done
+    while(remaining > 1){
+	numThreads = min(1024, remaining/MEAN_REDUCTION);
+	numBlocks = max(numBlocks/numThreads/MEAN_REDUCTION, 1);
+	mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(deviceOutput, deviceOutput); //reusing input array for output!
+	remaining/=(1024*MEAN_REDUCTION);
+    }
+    size_t memsize = numBlocks*sizeof(cufftReal); 
+    CHK(cudaMemcpyAsync(output, deviceOutput, memsize, cudaMemcpyDeviceToHost, cs));
+}
+
+cufftReal variance(cufftReal ssquare, cufftReal mean){
+    return ssquare - pow(mean, 2);
+}
+
 
 /**
  * CUDA reduction sum
@@ -472,11 +489,35 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
       floatize_2chan<<<blocksPerGrid, threadsPerBlock, 0, cs>>>(gc->cbuf[csi],gc->cfbuf[csi],&(gc->cfbuf[csi][gc->fftsize]));
     cudaEventRecord(gc->eDoneFloatize[csi], cs);
     
-
+       
 
     //RFI rejection
     getMeans(gc->cfbuf[csi], gc->mean[csi], gc->cmean[csi], gc->bufsize, gc->RFIchunkSize, cs); 
+    getMeansOfSquares(gc->cfbuf[csi], gc->sqMean[csi], gc->csqMean[csi], gc->bufsize, gc->RFIchunkSize, cs); 
+    cufftReal tssquare = 0, tmean =0, tvar, trms;
+    int n = gc->bufsize/gc->RFIchunkSize;
+    for(int i=0; i< n; i++){
+	gc->variance[csi][i] = variance(gc->sqMean[csi][i], gc->mean[csi][i]); 
+        tmean += gc->mean[csi][i];
+	tssquare +=pow(gc->mean[csi][i],2);
+    }
+
+    tmean/=n;
+    tssquare/=n;
+   
+    printf("mean: %f, sum of squares: %f\n\n\n\n", tmean, tssquare);
+
+    tvar = variance (tssquare, tmean);
+    trms = sqrt(tvar);
     
+    printf("variance: %f, rms: %f\n\n\n\n", tvar, trms);
+    int N = 1;
+    
+    int outliers = 0;
+    for(int i =0; i<n; i++){
+	if(abs(gc->mean[csi][i] - tmean) > N * trms)
+           outliers++;
+    }
     
     //perform fft
     int status = cufftSetStream(gc->plan, cs);
