@@ -1,5 +1,6 @@
 #include "settings.h"
 #include "digicard.h"
+#include "digicardalloc.h"
 #include "gpucard.h"
 #include "terminal.h"
 #include "freqgen.h"
@@ -268,6 +269,6 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 
 
 void digiCardCleanUp(DIGICARD *card, SETTINGS *set) {
-  vFreeMemPageAligned (card->pnData, (uint64) card->lBufferSize);
+  digiCardFree(card->pnData);
   if (!set->simulate_digitizer) spcm_vClose (card->hCard);
 }

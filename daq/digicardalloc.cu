@@ -1,5 +1,5 @@
 #include <cuda.h>
-#include "digicard.h"
+#include "digicardalloc.h"
 
 //#ifdef USE_DIGICARD_ALLOC 
 //#define ALLOC(data, size) \
@@ -20,3 +20,9 @@ void digiCardAlloc(int16* & data, int32 size){
     }
 }
      
+void digiCardFree(int16* & data){
+    if(cudaFreeHost(data)!= cudaSuccess){
+	printf("Freeing of digitizer memory failed\n");
+	exit(1);
+    }
+}
