@@ -116,9 +116,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     printf ("   Actual freq range: %f - %f MHz (edges!)\n",numin/1e6, numax/1e6);
     printf ("   # PS offset, #PS bins: %i %i\n",gc->ndxofs[i],gc->pssize1[i]);
   }
-  
   for (int i=0;i<Nb;i++) {
-    int ** x = new int * [800]; 
     CHK(cudaMalloc(&gc->cbuf[i],bufsize));
     CHK(cudaMalloc(&gc->cfbuf[i], bufsize*sizeof(cufftReal)));
     CHK(cudaMalloc(&gc->cfft[i],transform_size*sizeof(cufftComplex)));
@@ -147,6 +145,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     printf ("Cannot really work with less than one stream.\n");
     exit(1);
   }
+  printf("allocating stream and events\n");
   gc->streams=(cudaStream_t*)malloc(gc->nstreams*sizeof(cudaStream_t));
   gc->eStart=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
   gc->eDoneCopy=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
@@ -174,19 +173,20 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   int n = 20;
   gc->RFIchunkSize = pow(2,n);
   int numBlocks = gc->bufsize/1024 /MEAN_REDUCTION;
-
-  gc->mean = (cufftReal **)malloc(Nb*sizeof(cufftReal));
-  gc->cmean = (cufftReal **) malloc(Nb *sizeof(cufftReal));
-  gc->sqMean = (cufftReal **)malloc(Nb*sizeof(cufftReal));
-  gc->csqMean = (cufftReal **) malloc(Nb *sizeof(cufftReal));
-  gc->variance = (cufftReal **)malloc(Nb*sizeof(cufftReal));
-
+  gc->mean = (cufftReal **)malloc(Nb*sizeof(cufftReal*));
+  gc->cmean = (cufftReal **) malloc(Nb *sizeof(cufftReal*));
+  gc->sqMean = (cufftReal **)malloc(Nb*sizeof(cufftReal*));
+  gc->csqMean = (cufftReal **) malloc(Nb *sizeof(cufftReal*));
+  gc->variance = (cufftReal **)malloc(Nb*sizeof(cufftReal*));
+  gc->outliers = (bool **)malloc(Nb*sizeof(bool*));
   for(int i=0; i<Nb; i++){
       CHK(cudaMalloc(&gc->cmean[i], numBlocks*sizeof(cufftReal)));
       CHK(cudaMallocHost(&gc->mean[i], gc->bufsize/gc->RFIchunkSize*sizeof(cufftReal)));
       CHK(cudaMalloc(&gc->csqMean[i], numBlocks*sizeof(cufftReal)));
       CHK(cudaMallocHost(&gc->sqMean[i], gc->bufsize/gc->RFIchunkSize*sizeof(cufftReal)));
       CHK(cudaMallocHost(&gc->variance[i], gc->bufsize/gc->RFIchunkSize*sizeof(cufftReal)));
+      gc->outliers[i] = (bool *)malloc(gc->bufsize/gc->RFIchunkSize * sizeof(bool));
+      memset(gc->outliers[i], 0, gc->bufsize/gc->RFIchunkSize * sizeof(bool));
   }
 
   printf ("GPU ready.\n");
@@ -276,9 +276,15 @@ __global__ void abs_max_reduction (cufftReal * in, cufftReal * out){
         if(tid == 0) abs(out[blockIdx.x]);
 }
 	
-
-void getMeans(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int size, int chunkSize, cudaStream_t & cs){
-    int numBlocks = size/1024 /MEAN_REDUCTION;
+//Calculate means of chunks of data by repeated kernel calls
+//Inputs: input is an  array of numbers to be divided into chunks of a certain size and then each chunk will be averaged
+//	  deviceOutput is where the GPU writes the results to. The output array must contain  blockDim.x elements
+//        output is host memory where the final results are written to. The number of elements in  this array must be n/chunkSize
+//        n is the number of elements in the input aray
+//        chunkSize is the number of elements per chunk
+//        cs is the stream to use in the kernel calls
+void getMeans(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int n, int chunkSize, cudaStream_t & cs){
+    int numBlocks = n/1024 /MEAN_REDUCTION;
     mean_reduction<<<numBlocks, 1024, 1024*sizeof(cufftReal), cs>>>(input, deviceOutput);
     CHK(cudaGetLastError());
 
@@ -294,8 +300,8 @@ void getMeans(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, in
 }
 
 
-void getMeansOfSquares(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int size, int chunkSize, cudaStream_t & cs){
-    int numBlocks = size/1024/MEAN_REDUCTION;
+void getMeansOfSquares(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int n, int chunkSize, cudaStream_t & cs){
+    int numBlocks = n/1024/MEAN_REDUCTION;
     squares_reduction<<<numBlocks, 1024, 1024*sizeof(cufftReal), cs>>>(input, deviceOutput);
     CHK(cudaGetLastError());
 
@@ -468,8 +474,6 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
     int csi = gc->bstream = (++gc->bstream)%(gc->nstreams); //add new stream
 
     if(gc->active_streams == gc->nstreams){ //if no empty streams
-	//proccess current streams and then exit
- 	//IMPLEMENT
     	printf("No free streams.\n");
         exit(1);
     }
@@ -494,6 +498,8 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
        
 
     //RFI rejection
+  
+
     getMeans(gc->cfbuf[csi], gc->mean[csi], gc->cmean[csi], gc->bufsize, gc->RFIchunkSize, cs); 
     getMeansOfSquares(gc->cfbuf[csi], gc->sqMean[csi], gc->csqMean[csi], gc->bufsize, gc->RFIchunkSize, cs); 
     cufftReal tssquare = 0, tmean =0, tvar, trms;
@@ -506,21 +512,26 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 
     tmean/=n;
     tssquare/=n;
-   
-    printf("mean: %f, sum of squares: %f\n\n\n\n", tmean, tssquare);
-
+    printf("mean: %f, sum of squares: %f\n", tmean, tssquare);
     tvar = variance (tssquare, tmean);
     trms = sqrt(tvar);
+    printf("variance: %f, rms: %f\n", tvar, trms);
     
-    printf("variance: %f, rms: %f\n\n\n\n", tvar, trms);
-    int N = 1;
+    int N = 1; //make a setting
     
-    int outliers = 0;
-    for(int i =0; i<n; i++){
+    printf("n is %d\n\n\n", n);
+    for(int i =0; i<n; i++)
 	if(abs(gc->mean[csi][i] - tmean) > N * trms)
-           outliers++;
+          gc->outliers[csi][i] = 1;
+
+    //zero out outliers for fft
+   for(int i=0; i<n; i++){
+	if(gc->outliers[csi][i] == 1)
+	   cudaMemset(&(gc->cfbuf[csi][n*gc->RFIchunkSize]), 0, gc->RFIchunkSize); 
     }
     
+    //write outliers to file
+
     //perform fft
     int status = cufftSetStream(gc->plan, cs);
     if(status !=CUFFT_SUCCESS) {

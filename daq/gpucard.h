@@ -56,6 +56,7 @@ struct GPUCARD {
   CUDA_EVENT_T *eStart, *eDoneCopy, *eDoneFloatize, *eDoneFFT, *eDonePost, *eDoneCopyBack; //events
   CUFFT_REAL ** mean, **cmean, **sqMean, **csqMean, **variance; //statistics for rfi rejection (mean, mean sum of squares, variance) 
   int RFIchunkSize; //size of chunk
+  bool ** outliers;
 };
 
 
