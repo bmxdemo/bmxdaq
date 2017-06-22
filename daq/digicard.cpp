@@ -143,8 +143,8 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
     printf ("Filling Fake buffer...\n");
     int8_t ch1lu[64], ch2lu[64];
     for(int i=0; i<64; i++) {
-      ch1lu[i]=int(20*cos(2*2*M_PI*i/64)+10*sin(2*M_PI*i/64));
-      ch2lu[i]=-31+i;
+      ch1lu[i]=-1;//int(20*cos(2*2*M_PI*i/64)+10*sin(2*M_PI*i/64));
+      ch2lu[i]=-1;//31+i;
     }
     int i=0;
     int32_t s=card->lBufferSize;
@@ -171,8 +171,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 
   printf ("\n\nStarting main loop\n");
   printf ("==========================\n");
-
-
+  
   uint32      dwError;
   int32       lStatus, lAvailUser, lPCPos, fill;
 

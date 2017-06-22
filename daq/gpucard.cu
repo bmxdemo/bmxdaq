@@ -4,7 +4,9 @@ CUDA PART
 ***********************************
 **********************************/
 
+#define CUDA_COMPILE
 #include "gpucard.h"
+#undef CUDA_COMPILE
 #include "terminal.h"
 
 #include <memory.h>
