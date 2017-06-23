@@ -4,7 +4,7 @@ CUDA PART
 ***********************************
 **********************************/
 
-#define CUDA_COMPILE
+#define CUDA_COMPILE //to enable cuda types in gpucard.h
 #include "gpucard.h"
 #undef CUDA_COMPILE
 #include "terminal.h"
@@ -20,9 +20,8 @@ CUDA PART
 #include <iostream>
 #include <time.h>
 #define FLOATIZE_X 2
-#define MEAN_REDUCTION 8 //do MEAN_REDUCTION operations while loading into shared memory, to reduce the number of blocks needed
-
-#define CUDA_COMPILER //to enable correct cuda types in gpucard.h
+#define OPS_PER_THREAD 1 //for parallel reduction algorithms: do OPS_PER_THREAD operations while loading into shared memory, to reduce the number of blocks needed
+			 //must be power of 2!
 
 static void HandleError( cudaError_t err,
                          const char *file,
@@ -172,7 +171,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   
   int n = 20;
   gc->RFIchunkSize = pow(2,n);
-  int numBlocks = gc->bufsize/1024 /MEAN_REDUCTION;
+  int numBlocks = gc->bufsize/1024 /OPS_PER_THREAD;
   gc->mean = (cufftReal **)malloc(Nb*sizeof(cufftReal*));
   gc->cmean = (cufftReal **) malloc(Nb *sizeof(cufftReal*));
   gc->sqMean = (cufftReal **)malloc(Nb*sizeof(cufftReal*));
@@ -221,18 +220,17 @@ __global__ void floatize_nchan(int8_t* sample, cufftReal* fsamples, int nchan, i
 
 
 
-//Parallel reduction algorithm to calculate the mean of an array of numbers. The number of elements must be a power of 2. 
-//Inputs: an array of floats that will be averaged. The means are conducted individually per block. 
-//Outputs: an array of floats the size of the number of blocks. The mean for each block is placed here.
-
-
-//Perform multiple adds during load to shared memory which reduces the number of blocks needed
+//Parallel reduction algorithm to calculate the mean of an array of numbers. Multiple adds are performed while loading to shared memory. 
+//OPS_PER_THREAD specifies the number of elements to add while loading. This reduces the number of blocks needed by a factor of OPS_PER_THREAD.
+//Inputs: 
+//        in: an array of floats to average. A separate average is computed for each gpu block. The number of elements must be a power of 2.
+//        out: an array of floats to place the resulting averages. This must be the same size as the number of gpu blocks being used in the kernel call.
 __global__ void mean_reduction (cufftReal * in, cufftReal * out){
         extern __shared__ cufftReal sdata[];
         int tid = threadIdx.x;
-        int i = blockIdx.x * blockDim.x*MEAN_REDUCTION + threadIdx.x;
+        int i = blockIdx.x * blockDim.x*OPS_PER_THREAD + threadIdx.x;
         sdata[tid] = 0;
-        for(int j=0; j<MEAN_REDUCTION; j++)
+        for(int j=0; j<OPS_PER_THREAD; j++)
 	    sdata[tid]+=in[i+j*blockDim.x];
 	__syncthreads();
 
@@ -241,16 +239,21 @@ __global__ void mean_reduction (cufftReal * in, cufftReal * out){
                 __syncthreads();
         }   
 	
-	if(tid == 0) out[blockIdx.x] = sdata[0]/(blockDim.x*MEAN_REDUCTION);
+	if(tid == 0) out[blockIdx.x] = sdata[0]/(blockDim.x*OPS_PER_THREAD);
 }
 
-//Parallel reduction algorithm to average the squares of numbers.
+
+//Parallel reduction algorithm to calculate the mean of squares for an array of numbers. Multiple squarings and adds are performed while loading to shared memory. 
+//OPS_PER_THREAD specifies the number of squares to add while loading. This reduces the number of blocks needed by a factor of OPS_PER_THREAD.
+//Inputs: 
+//        in: an array of floats to average the squares of. A separate average is computed for each gpu block. The number of elements must be a power of 2.
+//        out: an array of floats to place the resulting averages. This must be the same size as the number of gpu blocks being used in the kernel call.
 __global__ void squares_reduction (cufftReal * in, cufftReal * out){
         extern __shared__ cufftReal sdata[];
         int tid = threadIdx.x;
-        int i = blockIdx.x * blockDim.x*MEAN_REDUCTION + threadIdx.x;
+        int i = blockIdx.x * blockDim.x*OPS_PER_THREAD + threadIdx.x;
         sdata[tid] = 0;
-        for(int j=0; j<MEAN_REDUCTION; j++)
+        for(int j=0; j<OPS_PER_THREAD; j++)
 	    sdata[tid]+=in[i+j*blockDim.x] * in[i+j*blockDim.x];
         __syncthreads();
         for(int s =blockDim.x/2; s>0; s>>=1){
@@ -258,10 +261,13 @@ __global__ void squares_reduction (cufftReal * in, cufftReal * out){
                 __syncthreads();
         }   
 
-        if(tid == 0) out[blockIdx.x] = sdata[0]/(blockDim.x*MEAN_REDUCTION);
+        if(tid == 0) out[blockIdx.x] = sdata[0]/(blockDim.x*OPS_PER_THREAD);
 }
 
 //Parallel reduction algorithm, to calculate the absolute max of an array of numbers
+//Inputs: 
+//        in: an array of floats. A separate max is computed for each gpu block. The number of elements must be a power of 2.
+//        out: an array of floats to place the resulting maxes. This must be the same size as the number of gpu blocks being used in the kernel call.
 __global__ void abs_max_reduction (cufftReal * in, cufftReal * out){
         extern __shared__ cufftReal sdata[];
         int tid = threadIdx.x;
@@ -277,40 +283,54 @@ __global__ void abs_max_reduction (cufftReal * in, cufftReal * out){
 }
 	
 //Calculate means of chunks of data by repeated kernel calls
-//Inputs: input is an  array of numbers to be divided into chunks of a certain size and then each chunk will be averaged
-//	  deviceOutput is where the GPU writes the results to. The output array must contain  blockDim.x elements
-//        output is host memory where the final results are written to. The number of elements in  this array must be n/chunkSize
-//        n is the number of elements in the input aray
-//        chunkSize is the number of elements per chunk
-//        cs is the stream to use in the kernel calls
+//Inputs: 
+//        input: an  array of numbers to be divided into chunks, which will then be individually averaged
+//	  deviceOutput: where the GPU writes the results to. The output array must contain  blockDim.x number of elements
+//        output: host memory where the final results are written to. The number of elements in  this array must be n/chunkSize
+//        n: the number of elements in the input aray
+//        chunkSize: the number of elements per chunk
+//        cs: the stream to use for the kernel calls
 void getMeans(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int n, int chunkSize, cudaStream_t & cs){
-    int numBlocks = n/1024 /MEAN_REDUCTION;
+    int numBlocks = n/(1024 * OPS_PER_THREAD);
     mean_reduction<<<numBlocks, 1024, 1024*sizeof(cufftReal), cs>>>(input, deviceOutput);
     CHK(cudaGetLastError());
 
-    int numThreads, remaining = chunkSize/1024/MEAN_REDUCTION; //number of threads, and number of summations that remain to be done
+    int numThreads, remaining = chunkSize/(1024*OPS_PER_THREAD); //number of threads, and number of summations that remain to be done per chunk
     while(remaining > 1){
-	numThreads = min(1024, remaining/MEAN_REDUCTION);
-	numBlocks = max(numBlocks/numThreads/MEAN_REDUCTION, 1);
+	numThreads = min(1024, remaining/OPS_PER_THREAD); 
+	numBlocks = numBlocks/(numThreads*OPS_PER_THREAD);
 	mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(deviceOutput, deviceOutput); //reusing input array for output!
-	remaining/=(1024*MEAN_REDUCTION);
+	remaining/=(1024*OPS_PER_THREAD);
     }
     size_t memsize = numBlocks*sizeof(cufftReal); 
     CHK(cudaMemcpyAsync(output, deviceOutput, memsize, cudaMemcpyDeviceToHost, cs));
 }
 
 
+//Calculate means of squares of chunks of data by repeated kernel calls
+//Inputs: 
+//        input: an  array of numbers to be divided into chunks. For each chunk, the mean of the squares of the elements will be calculated.
+//	  deviceOutput: where the GPU writes the results to. The output array must contain  blockDim.x number of elements
+//        output: host memory where the final results are written to. The number of elements in  this array must be n/chunkSize
+//        n: the number of elements in the input aray
+//        chunkSize: the number of elements per chunk
+//        cs: the stream to use for the kernel calls
 void getMeansOfSquares(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int n, int chunkSize, cudaStream_t & cs){
-    int numBlocks = n/1024/MEAN_REDUCTION;
+    printf("n is : %d\n", n);
+    int numBlocks = n/1024/OPS_PER_THREAD;
     squares_reduction<<<numBlocks, 1024, 1024*sizeof(cufftReal), cs>>>(input, deviceOutput);
     CHK(cudaGetLastError());
 
-    int numThreads, remaining = chunkSize/1024/MEAN_REDUCTION; //number of threads, and number of summations that remain to be done
+    int numThreads, remaining = chunkSize/1024/OPS_PER_THREAD; //number of threads, and number of summations that remain to be done
+    printf("remaining : %d\neumThreads: %d\n numBlocks: %d\n",remaining,  numThreads, numBlocks);
     while(remaining > 1){
-	numThreads = min(1024, remaining/MEAN_REDUCTION);
-	numBlocks = max(numBlocks/numThreads/MEAN_REDUCTION, 1);
-	mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(deviceOutput, deviceOutput); //reusing input array for output!
-	remaining/=(1024*MEAN_REDUCTION);
+	numThreads = min(1024, remaining/OPS_PER_THREAD);
+	numBlocks = numBlocks/numThreads/OPS_PER_THREAD;
+
+	printf("remaining : %d\neumThreads: %d\n numBlocks: %d\n",remaining,  numThreads, numBlocks);
+
+	mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(deviceOutput, deviceOutput); //reusing input array for output! NOTE: calling mean_reduction, not squares_reduction as not to square elements multiple times.
+	remaining/=(1024*OPS_PER_THREAD);
     }
     size_t memsize = numBlocks*sizeof(cufftReal); 
     CHK(cudaMemcpyAsync(output, deviceOutput, memsize, cudaMemcpyDeviceToHost, cs));
@@ -414,8 +434,6 @@ void printTiming(GPUCARD *gc, int i) {
   tprintfn ("  ");
 }
 
-
-
 bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
    //streamed version
    //Check if other streams are finished and proccess the finished ones in order (i.e. print output to file)
@@ -498,8 +516,6 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
        
 
     //RFI rejection
-  
-
     getMeans(gc->cfbuf[csi], gc->mean[csi], gc->cmean[csi], gc->bufsize, gc->RFIchunkSize, cs); 
     getMeansOfSquares(gc->cfbuf[csi], gc->sqMean[csi], gc->csqMean[csi], gc->bufsize, gc->RFIchunkSize, cs); 
     cufftReal tssquare = 0, tmean =0, tvar, trms;
@@ -576,6 +592,10 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
  
     CHK(cudaGetLastError());
     cudaEventRecord(gc->eDonePost[csi], cs);
-
+  
   return true;
 }
+
+
+
+
