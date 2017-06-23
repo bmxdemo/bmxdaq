@@ -74,6 +74,10 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     printf ("Need FLOATIZE_X even for two channels\n");
     exit(1);
   }
+  if(!OPS_PER_THREAD> 0 ||  !(OPS_PER_THREAD & (OPS_PER_THREAD-1) == 0)){
+      printf("Need OPS_PER_THREAD to be a power of 2.\n");
+      exit(1);
+  }
   gc->fftsize=set->fft_size;
   uint32_t bufsize=gc->bufsize=set->fft_size*nchan;
   uint32_t transform_size=(set->fft_size/2+1)*nchan;
@@ -291,6 +295,7 @@ __global__ void abs_max_reduction (cufftReal * in, cufftReal * out){
 //        chunkSize: the number of elements per chunk
 //        cs: the stream to use for the kernel calls
 void getMeans(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int n, int chunkSize, cudaStream_t & cs){
+    //FIX: handle chunksizes < 1024 * OPS_PER_THREAD
     int numBlocks = n/(1024 * OPS_PER_THREAD);
     mean_reduction<<<numBlocks, 1024, 1024*sizeof(cufftReal), cs>>>(input, deviceOutput);
     CHK(cudaGetLastError());
@@ -322,7 +327,7 @@ void getMeansOfSquares(cufftReal *input, cufftReal * output, cufftReal * deviceO
     CHK(cudaGetLastError());
 
     int numThreads, remaining = chunkSize/1024/OPS_PER_THREAD; //number of threads, and number of summations that remain to be done
-    printf("remaining : %d\neumThreads: %d\n numBlocks: %d\n",remaining,  numThreads, numBlocks);
+    printf("remaining : %d\neumThreads: %d\n numBlocks: %d\n",remaining,  0, numBlocks);
     while(remaining > 1){
 	numThreads = min(1024, remaining/OPS_PER_THREAD);
 	numBlocks = numBlocks/numThreads/OPS_PER_THREAD;
