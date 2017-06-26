@@ -36,7 +36,7 @@ static void HandleError( cudaError_t err,
 
 void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   
-  //print out gpu properties
+  //print out gpu device properties
   cudaDeviceProp  devProp;
   CHK(cudaGetDeviceProperties(&devProp, 0));
   printf("\nGPU properties \n====================\n");
@@ -58,8 +58,6 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   printf("Concurrent copy and execution: %s\n",  (devProp.deviceOverlap ? "Yes" : "No"));
   printf("Number of multiprocessors:     %d\n",  devProp.multiProcessorCount);
   printf("Kernel execution timeout:      %s\n\n",  (devProp.kernelExecTimeoutEnabled ? "Yes" : "No"));
-
-
 
   printf ("\n\nInitializing GPU\n");
   printf ("====================\n");
@@ -168,12 +166,12 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     CHK(cudaEventCreate(&gc->eDoneCopyBack[i]));
   }
  
-  gc->fstream = 0;
-  gc->bstream = -1;
-  gc->active_streams = 0;
+  gc->fstream = 0; //oldest running stream
+  gc->bstream = -1; //newest stream
+  gc->active_streams = 0; //number of streams currently running
   
-  
-  int n = 20;
+  //allocate memory for RFI statistics
+  int n = 20; 
   gc->RFIchunkSize = pow(2,n);
   int numBlocks = gc->bufsize/1024 /OPS_PER_THREAD;
   gc->mean = (cufftReal **)malloc(Nb*sizeof(cufftReal*));
@@ -295,20 +293,25 @@ __global__ void abs_max_reduction (cufftReal * in, cufftReal * out){
 //        chunkSize: the number of elements per chunk
 //        cs: the stream to use for the kernel calls
 void getMeans(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int n, int chunkSize, cudaStream_t & cs){
-    //FIX: handle chunksizes < 1024 * OPS_PER_THREAD
-    int numBlocks = n/(1024 * OPS_PER_THREAD);
-    mean_reduction<<<numBlocks, 1024, 1024*sizeof(cufftReal), cs>>>(input, deviceOutput);
+    if(chunkSize < OPS_PER_THREAD){
+	printf("chunk size should not be smaller than OPS_PER_THREAD\n");
+	exit(1);
+    }
+    int numThreads = min(1024, chunkSize/OPS_PER_THREAD);
+    int numBlocks = n/(numThreads * OPS_PER_THREAD);
+    
+    mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(input, deviceOutput);
     CHK(cudaGetLastError());
-
-    int numThreads, remaining = chunkSize/(1024*OPS_PER_THREAD); //number of threads, and number of summations that remain to be done per chunk
+    int remaining = chunkSize/(numThreads*OPS_PER_THREAD); //number of threads, and number of summations that remain to be done per chunk
     while(remaining > 1){
 	numThreads = min(1024, remaining/OPS_PER_THREAD); 
 	numBlocks = numBlocks/(numThreads*OPS_PER_THREAD);
 	mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(deviceOutput, deviceOutput); //reusing input array for output!
-	remaining/=(1024*OPS_PER_THREAD);
+	remaining/=(numThreads*OPS_PER_THREAD);
+	printf("remaining : %d\nnumThreads: %d\nnumBlocks: %d\n",remaining,  numThreads, numBlocks);
     }
     size_t memsize = numBlocks*sizeof(cufftReal); 
-    CHK(cudaMemcpyAsync(output, deviceOutput, memsize, cudaMemcpyDeviceToHost, cs));
+    CHK(cudaMemcpy(output, deviceOutput, memsize, cudaMemcpyDeviceToHost)); //need synchronous copying so that cpu blocks and doesn't use this memory  until finished copying
 }
 
 
@@ -321,24 +324,30 @@ void getMeans(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, in
 //        chunkSize: the number of elements per chunk
 //        cs: the stream to use for the kernel calls
 void getMeansOfSquares(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int n, int chunkSize, cudaStream_t & cs){
+    if(chunkSize < OPS_PER_THREAD){
+	printf("chunk size should not be smaller than OPS_PER_THREAD\n");
+	exit(1);
+    }
+    int numThreads = min(1024, chunkSize/OPS_PER_THREAD);
+    int numBlocks = n/(numThreads * OPS_PER_THREAD);
     printf("n is : %d\n", n);
-    int numBlocks = n/1024/OPS_PER_THREAD;
-    squares_reduction<<<numBlocks, 1024, 1024*sizeof(cufftReal), cs>>>(input, deviceOutput);
+    squares_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(input, deviceOutput);
     CHK(cudaGetLastError());
 
-    int numThreads, remaining = chunkSize/1024/OPS_PER_THREAD; //number of threads, and number of summations that remain to be done
-    printf("remaining : %d\neumThreads: %d\n numBlocks: %d\n",remaining,  0, numBlocks);
+    int remaining = chunkSize/(numThreads*OPS_PER_THREAD); //number of threads, and number of summations that remain to be done
+    printf("remaining : %d\nnumThreads: %d\nnumBlocks: %d\n",remaining,  0, numBlocks);
     while(remaining > 1){
 	numThreads = min(1024, remaining/OPS_PER_THREAD);
-	numBlocks = numBlocks/numThreads/OPS_PER_THREAD;
+	numBlocks = numBlocks/(numThreads*OPS_PER_THREAD);
 
-	printf("remaining : %d\neumThreads: %d\n numBlocks: %d\n",remaining,  numThreads, numBlocks);
+	printf("remaining : %d\nnumThreads: %d\nnumBlocks: %d\n",remaining,  numThreads, numBlocks);
 
 	mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(deviceOutput, deviceOutput); //reusing input array for output! NOTE: calling mean_reduction, not squares_reduction as not to square elements multiple times.
-	remaining/=(1024*OPS_PER_THREAD);
+	remaining/=(numThreads*OPS_PER_THREAD);
     }
     size_t memsize = numBlocks*sizeof(cufftReal); 
-    CHK(cudaMemcpyAsync(output, deviceOutput, memsize, cudaMemcpyDeviceToHost, cs));
+    CHK(cudaMemcpy(output, deviceOutput, memsize, cudaMemcpyDeviceToHost)); //need synchronous copying so that cpu blocks and doesn't use this memory  until     finished copying
+
 }
 
 cufftReal variance(cufftReal ssquare, cufftReal mean){
@@ -523,6 +532,9 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
     //RFI rejection
     getMeans(gc->cfbuf[csi], gc->mean[csi], gc->cmean[csi], gc->bufsize, gc->RFIchunkSize, cs); 
     getMeansOfSquares(gc->cfbuf[csi], gc->sqMean[csi], gc->csqMean[csi], gc->bufsize, gc->RFIchunkSize, cs); 
+    
+
+    
     cufftReal tssquare = 0, tmean =0, tvar, trms;
     int n = gc->bufsize/gc->RFIchunkSize;
     for(int i=0; i< n; i++){
