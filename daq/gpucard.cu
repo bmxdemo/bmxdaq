@@ -37,27 +37,27 @@ static void HandleError( cudaError_t err,
 void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   
   //print out gpu device properties
-  cudaDeviceProp  devProp;
-  CHK(cudaGetDeviceProperties(&devProp, 0));
+    gc->devProp = (cudaDeviceProp *)malloc(sizeof(cudaDeviceProp));
+    CHK(cudaGetDeviceProperties(gc->devProp, 0));
   printf("\nGPU properties \n====================\n");
-  printf("Version number:                %d.%d\n",  devProp.major, devProp.minor);
-  printf("Name:                          %s\n",  devProp.name);
-  printf("Total global memory:           %u\n",  devProp.totalGlobalMem);
-  printf("Total shared memory per block: %u\n",  devProp.sharedMemPerBlock);
-  printf("Total registers per block:     %d\n",  devProp.regsPerBlock);
-  printf("Warp size:                     %d\n",  devProp.warpSize);
-  printf("Maximum memory pitch:          %u\n",  devProp.memPitch);
-  printf("Maximum threads per block:     %d\n",  devProp.maxThreadsPerBlock);
+  printf("Version number:                %d.%d\n",  gc->devProp->major, gc->devProp->minor);
+  printf("Name:                          %s\n",  gc->devProp->name);
+  printf("Total global memory:           %u\n",  gc->devProp->totalGlobalMem);
+  printf("Total shared memory per block: %u\n",  gc->devProp->sharedMemPerBlock);
+  printf("Total registers per block:     %d\n",  gc->devProp->regsPerBlock);
+  printf("Warp size:                     %d\n",  gc->devProp->warpSize);
+  printf("Maximum memory pitch:          %u\n",  gc->devProp->memPitch);
+  printf("Maximum threads per block:     %d\n",  gc->devProp->maxThreadsPerBlock);
   for (int i = 0; i < 3; ++i)
-  printf("Maximum dimension %d of block:  %d\n", i, devProp.maxThreadsDim[i]);
+  printf("Maximum dimension %d of block:  %d\n", i, gc->devProp->maxThreadsDim[i]);
   for (int i = 0; i < 3; ++i)
-  printf("Maximum dimension %d of grid:   %d\n", i, devProp.maxGridSize[i]);
-  printf("Clock rate:                    %d\n",  devProp.clockRate);
-  printf("Total constant memory:         %u\n",  devProp.totalConstMem);
-  printf("Texture alignment:             %u\n",  devProp.textureAlignment);
-  printf("Concurrent copy and execution: %s\n",  (devProp.deviceOverlap ? "Yes" : "No"));
-  printf("Number of multiprocessors:     %d\n",  devProp.multiProcessorCount);
-  printf("Kernel execution timeout:      %s\n\n",  (devProp.kernelExecTimeoutEnabled ? "Yes" : "No"));
+  printf("Maximum dimension %d of grid:   %d\n", i, gc->devProp->maxGridSize[i]);
+  printf("Clock rate:                    %d\n",  gc->devProp->clockRate);
+  printf("Total constant memory:         %u\n",  gc->devProp->totalConstMem);
+  printf("Texture alignment:             %u\n",  gc->devProp->textureAlignment);
+  printf("Concurrent copy and execution: %s\n",  (gc->devProp->deviceOverlap ? "Yes" : "No"));
+  printf("Number of multiprocessors:     %d\n",  gc->devProp->multiProcessorCount);
+  printf("Kernel execution timeout:      %s\n\n",  (gc->devProp->kernelExecTimeoutEnabled ? "Yes" : "No"));
 
   printf ("\n\nInitializing GPU\n");
   printf ("====================\n");

@@ -21,6 +21,7 @@ THIS IS A COMPLETE PLACEHOLDER!
 #define CUFFT_COMPLEX cufftComplex
 #define CUDA_STREAM_T cudaStream_t
 #define CUDA_EVENT_T cudaEvent_t
+#define CUDA_DEVICE_PROP cudaDeviceProp
 
 #else
 
@@ -28,11 +29,13 @@ THIS IS A COMPLETE PLACEHOLDER!
 #define CUFFT_COMPLEX void
 #define CUDA_STREAM_T void
 #define CUDA_EVENT_T void
+#define CUDA_DEVICE_PROP void
 
 #endif
 
 
 struct GPUCARD {
+  CUDA_DEVICE_PROP * devProp; //gpu device properties  
   int8_t **cbuf; // pointer to pointers of GPU sample buffer
   CUFFT_REAL **cfbuf; // floats
   CUFFT_COMPLEX **cfft; // ffts
