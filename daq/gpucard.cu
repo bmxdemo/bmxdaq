@@ -173,7 +173,9 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   //allocate memory for RFI statistics
   int n = 20; 
   gc->RFIchunkSize = pow(2,n);
-  int numBlocks = gc->bufsize/1024 /OPS_PER_THREAD;
+  int numThreads = min(gc->devProp->maxThreadsPerBlock, gc->RFIchunkSize/OPS_PER_THREAD);
+  int numBlocks = gc->bufsize/(numThreads * OPS_PER_THREAD);  //number of blocks needed for first kernel call in parallel reduction algorithms
+  
   gc->mean = (cufftReal **)malloc(Nb*sizeof(cufftReal*));
   gc->cmean = (cufftReal **) malloc(Nb *sizeof(cufftReal*));
   gc->sqMean = (cufftReal **)malloc(Nb*sizeof(cufftReal*));
@@ -292,19 +294,20 @@ __global__ void abs_max_reduction (cufftReal * in, cufftReal * out){
 //        n: the number of elements in the input aray
 //        chunkSize: the number of elements per chunk
 //        cs: the stream to use for the kernel calls
-void getMeans(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int n, int chunkSize, cudaStream_t & cs){
+//        maxThreadsPerBlock: the maximum number of threads allowed per block (can be obtained by cudaGetDeviceProperties)
+void getMeans(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int n, int chunkSize, cudaStream_t & cs, int maxThreadsPerBlock){
     if(chunkSize < OPS_PER_THREAD){
 	printf("chunk size should not be smaller than OPS_PER_THREAD\n");
 	exit(1);
     }
-    int numThreads = min(1024, chunkSize/OPS_PER_THREAD);
+    int numThreads = min(maxThreadsPerBlock, chunkSize/OPS_PER_THREAD);
     int numBlocks = n/(numThreads * OPS_PER_THREAD);
     
     mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(input, deviceOutput);
     CHK(cudaGetLastError());
     int remaining = chunkSize/(numThreads*OPS_PER_THREAD); //number of threads, and number of summations that remain to be done per chunk
     while(remaining > 1){
-	numThreads = min(1024, remaining/OPS_PER_THREAD); 
+	numThreads = min(maxThreadsPerBlock, remaining/OPS_PER_THREAD); 
 	numBlocks = numBlocks/(numThreads*OPS_PER_THREAD);
 	mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(deviceOutput, deviceOutput); //reusing input array for output!
 	remaining/=(numThreads*OPS_PER_THREAD);
@@ -323,12 +326,13 @@ void getMeans(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, in
 //        n: the number of elements in the input aray
 //        chunkSize: the number of elements per chunk
 //        cs: the stream to use for the kernel calls
-void getMeansOfSquares(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int n, int chunkSize, cudaStream_t & cs){
+//        maxThreadsPerBlock: the maximum number of threads allowed per block (can be obtained by cudaGetDeviceProperties)
+void getMeansOfSquares(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int n, int chunkSize, cudaStream_t & cs, int maxThreadsPerBlock){
     if(chunkSize < OPS_PER_THREAD){
 	printf("chunk size should not be smaller than OPS_PER_THREAD\n");
 	exit(1);
     }
-    int numThreads = min(1024, chunkSize/OPS_PER_THREAD);
+    int numThreads = min(maxThreadsPerBlock, chunkSize/OPS_PER_THREAD);
     int numBlocks = n/(numThreads * OPS_PER_THREAD);
     printf("n is : %d\n", n);
     squares_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(input, deviceOutput);
@@ -337,7 +341,7 @@ void getMeansOfSquares(cufftReal *input, cufftReal * output, cufftReal * deviceO
     int remaining = chunkSize/(numThreads*OPS_PER_THREAD); //number of threads, and number of summations that remain to be done
     printf("remaining : %d\nnumThreads: %d\nnumBlocks: %d\n",remaining,  0, numBlocks);
     while(remaining > 1){
-	numThreads = min(1024, remaining/OPS_PER_THREAD);
+	numThreads = min(maxThreadsPerBlock, remaining/OPS_PER_THREAD);
 	numBlocks = numBlocks/(numThreads*OPS_PER_THREAD);
 
 	printf("remaining : %d\nnumThreads: %d\nnumBlocks: %d\n",remaining,  numThreads, numBlocks);
@@ -530,8 +534,8 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
        
 
     //RFI rejection
-    getMeans(gc->cfbuf[csi], gc->mean[csi], gc->cmean[csi], gc->bufsize, gc->RFIchunkSize, cs); 
-    getMeansOfSquares(gc->cfbuf[csi], gc->sqMean[csi], gc->csqMean[csi], gc->bufsize, gc->RFIchunkSize, cs); 
+    getMeans(gc->cfbuf[csi], gc->mean[csi], gc->cmean[csi], gc->bufsize, gc->RFIchunkSize, cs, gc->devProp->maxThreadsPerBlock); 
+    getMeansOfSquares(gc->cfbuf[csi], gc->sqMean[csi], gc->csqMean[csi], gc->bufsize, gc->RFIchunkSize, cs, gc->devProp->maxThreadsPerBlock); 
     
 
     
