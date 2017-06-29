@@ -60,6 +60,10 @@ struct SETTINGS {
   char fg_port[MAXCHAR];
   float fg_freq[MAXFREQ];
   float fg_ampl[MAXFREQ];
+
+
+  //RFI rejection
+  int log_chunk_size; //log base 2 of chunk size to be used to collect RFI statistics
 };
 
 // Fixed defines

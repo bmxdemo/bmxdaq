@@ -20,8 +20,10 @@ CUDA PART
 #include <iostream>
 #include <time.h>
 #define FLOATIZE_X 2
-#define OPS_PER_THREAD 1 //for parallel reduction algorithms: do OPS_PER_THREAD operations while loading into shared memory, to reduce the number of blocks needed
+#define OPS_PER_THREAD 8 //for parallel reduction algorithms: do OPS_PER_THREAD operations while loading into shared memory, to reduce the number of blocks needed
 			 //must be power of 2!
+
+
 
 static void HandleError( cudaError_t err,
                          const char *file,
@@ -72,7 +74,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     printf ("Need FLOATIZE_X even for two channels\n");
     exit(1);
   }
-  if(!OPS_PER_THREAD> 0 ||  !(OPS_PER_THREAD & (OPS_PER_THREAD-1) == 0)){
+  if(!(OPS_PER_THREAD>0) ||  !((OPS_PER_THREAD & (OPS_PER_THREAD-1)) == 0)){
       printf("Need OPS_PER_THREAD to be a power of 2.\n");
       exit(1);
   }
@@ -171,9 +173,8 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   gc->active_streams = 0; //number of streams currently running
   
   //allocate memory for RFI statistics
-  int n = 20; 
-  gc->RFIchunkSize = pow(2,n);
-  int numThreads = min(gc->devProp->maxThreadsPerBlock, gc->RFIchunkSize/OPS_PER_THREAD);
+  gc->chunkSize = pow(2,set->log_chunk_size);
+  int numThreads = min(gc->devProp->maxThreadsPerBlock, gc->chunkSize/OPS_PER_THREAD);
   int numBlocks = gc->bufsize/(numThreads * OPS_PER_THREAD);  //number of blocks needed for first kernel call in parallel reduction algorithms
   
   gc->mean = (cufftReal **)malloc(Nb*sizeof(cufftReal*));
@@ -184,13 +185,15 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   gc->outliers = (bool **)malloc(Nb*sizeof(bool*));
   for(int i=0; i<Nb; i++){
       CHK(cudaMalloc(&gc->cmean[i], numBlocks*sizeof(cufftReal)));
-      CHK(cudaMallocHost(&gc->mean[i], gc->bufsize/gc->RFIchunkSize*sizeof(cufftReal)));
+      CHK(cudaMallocHost(&gc->mean[i], gc->bufsize/gc->chunkSize*sizeof(cufftReal)));
       CHK(cudaMalloc(&gc->csqMean[i], numBlocks*sizeof(cufftReal)));
-      CHK(cudaMallocHost(&gc->sqMean[i], gc->bufsize/gc->RFIchunkSize*sizeof(cufftReal)));
-      CHK(cudaMallocHost(&gc->variance[i], gc->bufsize/gc->RFIchunkSize*sizeof(cufftReal)));
-      gc->outliers[i] = (bool *)malloc(gc->bufsize/gc->RFIchunkSize * sizeof(bool));
-      memset(gc->outliers[i], 0, gc->bufsize/gc->RFIchunkSize * sizeof(bool));
+      CHK(cudaMallocHost(&gc->sqMean[i], gc->bufsize/gc->chunkSize*sizeof(cufftReal)));
+      CHK(cudaMallocHost(&gc->variance[i], gc->bufsize/gc->chunkSize*sizeof(cufftReal)));
+      gc->outliers[i] = (bool *)malloc(gc->bufsize/gc->chunkSize * sizeof(bool));
+      memset(gc->outliers[i], 0, gc->bufsize/gc->chunkSize * sizeof(bool));
   }
+
+  gc->nsigma = 1;
 
   printf ("GPU ready.\n");
 
@@ -311,7 +314,6 @@ void getMeans(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, in
 	numBlocks = numBlocks/(numThreads*OPS_PER_THREAD);
 	mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(deviceOutput, deviceOutput); //reusing input array for output!
 	remaining/=(numThreads*OPS_PER_THREAD);
-	printf("remaining : %d\nnumThreads: %d\nnumBlocks: %d\n",remaining,  numThreads, numBlocks);
     }
     size_t memsize = numBlocks*sizeof(cufftReal); 
     CHK(cudaMemcpy(output, deviceOutput, memsize, cudaMemcpyDeviceToHost)); //need synchronous copying so that cpu blocks and doesn't use this memory  until finished copying
@@ -334,17 +336,16 @@ void getMeansOfSquares(cufftReal *input, cufftReal * output, cufftReal * deviceO
     }
     int numThreads = min(maxThreadsPerBlock, chunkSize/OPS_PER_THREAD);
     int numBlocks = n/(numThreads * OPS_PER_THREAD);
-    printf("n is : %d\n", n);
+    //printf("n is : %d\n", n);
     squares_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(input, deviceOutput);
     CHK(cudaGetLastError());
-
     int remaining = chunkSize/(numThreads*OPS_PER_THREAD); //number of threads, and number of summations that remain to be done
-    printf("remaining : %d\nnumThreads: %d\nnumBlocks: %d\n",remaining,  0, numBlocks);
+    //printf("remaining : %d\nnumThreads: %d\nnumBlocks: %d\n",remaining,  0, numBlocks);
     while(remaining > 1){
 	numThreads = min(maxThreadsPerBlock, remaining/OPS_PER_THREAD);
 	numBlocks = numBlocks/(numThreads*OPS_PER_THREAD);
 
-	printf("remaining : %d\nnumThreads: %d\nnumBlocks: %d\n",remaining,  numThreads, numBlocks);
+	//printf("remaining : %d\nnumThreads: %d\nnumBlocks: %d\n",remaining,  numThreads, numBlocks);
 
 	mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(deviceOutput, deviceOutput); //reusing input array for output! NOTE: calling mean_reduction, not squares_reduction as not to square elements multiple times.
 	remaining/=(numThreads*OPS_PER_THREAD);
@@ -470,10 +471,10 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
                   float fac=bs/step;
                   float m1=0.,m2=0.,v1=0.,v2=0.;
                   for (int i=0; i<bs; i+=step) {
-            	float n=buf[i];
-            	m1+=n; v1+=n*n;
-            	n=buf[i+1];
-            	m2+=n; v2+=n*n;
+                 	float n=buf[i];
+                	m1+=n; v1+=n*n;
+                	n=buf[i+1];
+                	m2+=n; v2+=n*n;
                   }
                   m1/=fac; v1=sqrt(v1/fac-m1*m1);
                   m2/=fac; v2=sqrt(v2/fac-m1*m1);
@@ -516,10 +517,8 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 
     gc->active_streams++;
 
-
     cudaStream_t cs= gc->streams[gc->bstream];
     cudaEventRecord(gc->eStart[csi], cs);
-    CHK(cudaMemcpyAsync(gc->cbuf[csi], buf, gc->bufsize , cudaMemcpyHostToDevice,cs));
     CHK(cudaMemcpyAsync(gc->cbuf[csi], buf, gc->bufsize , cudaMemcpyHostToDevice,cs));
     
     cudaEventRecord(gc->eDoneCopy[csi], cs);
@@ -534,40 +533,82 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
        
 
     //RFI rejection
-    getMeans(gc->cfbuf[csi], gc->mean[csi], gc->cmean[csi], gc->bufsize, gc->RFIchunkSize, cs, gc->devProp->maxThreadsPerBlock); 
-    getMeansOfSquares(gc->cfbuf[csi], gc->sqMean[csi], gc->csqMean[csi], gc->bufsize, gc->RFIchunkSize, cs, gc->devProp->maxThreadsPerBlock); 
+    getMeans(gc->cfbuf[csi], gc->mean[csi], gc->cmean[csi], gc->bufsize, gc->chunkSize, cs, gc->devProp->maxThreadsPerBlock); 
+    getMeansOfSquares(gc->cfbuf[csi], gc->sqMean[csi], gc->csqMean[csi], gc->bufsize, gc->chunkSize, cs, gc->devProp->maxThreadsPerBlock); 
     
-
-    
-    cufftReal tssquare = 0, tmean =0, tvar, trms;
-    int n = gc->bufsize/gc->RFIchunkSize;
-    for(int i=0; i< n; i++){
+    cufftReal tssquare1 = 0, tssquare2=0, tmean1 =0, tmean2=0, tvar1, tvar2, trms1, trms2; //calculate total statistics over all chunks
+    int n = gc->bufsize/gc->chunkSize;
+    for(int i=0; i< n/2; i++){
 	gc->variance[csi][i] = variance(gc->sqMean[csi][i], gc->mean[csi][i]); 
-        tmean += gc->mean[csi][i];
-	tssquare +=pow(gc->mean[csi][i],2);
+        tmean1 += gc->sqMean[csi][i];
+	tssquare1 +=pow(gc->sqMean[csi][i],2);
     }
-
-    tmean/=n;
-    tssquare/=n;
-    printf("mean: %f, sum of squares: %f\n", tmean, tssquare);
-    tvar = variance (tssquare, tmean);
-    trms = sqrt(tvar);
-    printf("variance: %f, rms: %f\n", tvar, trms);
+    for(int i=n/2; i<n; i++){
+	gc->variance[csi][i] = variance(gc->sqMean[csi][i], gc->mean[csi][i]); 
+        tmean2 += gc->sqMean[csi][i];
+	printf("%f ,", gc->sqMean[csi][i]);
+	tssquare2 +=pow(gc->sqMean[csi][i],2);
+    }
+    tmean1/=(n/2);
+    tssquare1/=(n/2);
+    tmean2/=(n/2);
+    tssquare2/=(n/2);
+    tvar1 = variance (tssquare1, tmean1);
+    trms1 = sqrt(tvar1);
+    tvar2 = variance (tssquare2, tmean2);
+    trms2 = sqrt(tvar2);
     
-    int N = 1; //make a setting
     
-    printf("n is %d\n\n\n", n);
-    for(int i =0; i<n; i++)
-	if(abs(gc->mean[csi][i] - tmean) > N * trms)
+    int o1=0, o2 = 0;
+    for(int i =0; i<n/2; i++)
+	if(abs(gc->sqMean[csi][i] - tmean1) > gc->nsigma * trms1){
+	  o1++;
           gc->outliers[csi][i] = 1;
+        }
+
+    for(int i =n/2; i<n; i++)
+	if(abs(gc->sqMean[csi][i] - tmean2) > gc->nsigma * trms2){
+	  o2++;
+          gc->outliers[csi][i] = 1;
+//	  printf("OUTLIER: %f\n", gc->sqMean[csi][i]);
+        }
+
+    tprintfn("There are %d  and %d outliers in channels 1 and 2", o1, o2);
+     
+    for (uint32_t i =0; i < 1000; i++){
+//	printf("%d ", buf[2*i+1]);
+    }
 
     //zero out outliers for fft
-   for(int i=0; i<n; i++){
+    for(int i=0; i<n; i++){
 	if(gc->outliers[csi][i] == 1)
-	   cudaMemset(&(gc->cfbuf[csi][n*gc->RFIchunkSize]), 0, gc->RFIchunkSize); 
+	   cudaMemset(&(gc->cfbuf[csi][n*gc->chunkSize]), 0, gc->chunkSize); 
     }
-    
+   
+    struct timespec tstart, tnow;
     //write outliers to file
+    int8_t * out = (int8_t *)malloc(gc->chunkSize);
+    for(int i=0; i<n; i++){
+	if(gc->outliers[csi][i] == 1){
+            clock_gettime(CLOCK_REALTIME , &tstart);
+	    //need to account for interleaved channels 
+	    int offset = i>128? 0: 1; //channel 1 or 2?
+	    for(uint32_t i =0; i < gc->chunkSize; i++)
+;//		out[i] = buf[2*i + offset];
+	  clock_gettime(CLOCK_REALTIME, &tnow);
+	  float time = tnow.tv_sec - tstart.tv_sec +(tnow.tv_nsec-tstart.tv_nsec)/1e9;
+	  //printf("time to interleave channels: %f\n", time);
+          clock_gettime(CLOCK_REALTIME, &tstart); 
+//	  writerWriteOutliers(wr, out, gc->chunkSize);
+	  clock_gettime(CLOCK_REALTIME, &tnow);
+	  time = tnow.tv_sec - tstart.tv_sec +(tnow.tv_nsec-tstart.tv_nsec)/1e9;
+	  //printf("time to write outlier: %f\n", time);
+	}
+	  
+    }
+    free(out);
+    
+
 
     //perform fft
     int status = cufftSetStream(gc->plan, cs);
@@ -616,7 +657,3 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
   
   return true;
 }
-
-
-
-

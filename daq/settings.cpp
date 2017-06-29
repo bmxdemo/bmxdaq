@@ -39,11 +39,12 @@ void init_settings(SETTINGS *s, char* fname) {
     s->fg_baudrate=9600;
     s->fg_switchevery=10;
     sprintf(s->fg_port,"ttyS0");
+    s->log_chunk_size = 20;
 
     s->nsamples=0;
     s->wave_nbytes=0;
     sprintf(s->wave_fname,"wave.bin");
-    
+     
     if (fname) {
          FILE *fi;
 	 int n_lin,ii;
