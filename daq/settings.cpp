@@ -34,7 +34,8 @@ void init_settings(SETTINGS *s, char* fname) {
     s->save_every=60;
     s->print_meanvar=1;
     s->print_maxp=0;
-    sprintf(s->output_pattern,"%%02d%%02d%%02d_%%02d%%02d.data");
+    sprintf(s->ps_output_pattern,"%%02d%%02d%%02d_%%02d%%02d.data");
+    sprintf(s->outlier_output_pattern,"%%02d%%02d%%02d_%%02d%%02d.outliers");
     s->fg_nfreq=0;
     s->fg_baudrate=9600;
     s->fg_switchevery=10;
@@ -97,8 +98,10 @@ void init_settings(SETTINGS *s, char* fname) {
 	     s->n_cuts=atoi(s2);
 	   else if(!strcmp(s1,"save_every="))
 	     s->save_every=atoi(s2);
-	   else if(!strcmp(s1,"output_pattern="))
-	     strcpy(s->output_pattern,s2);
+	   else if(!strcmp(s1,"ps_output_pattern="))
+	     strcpy(s->ps_output_pattern,s2);
+	   else if(!strcmp(s1,"outlier_output_pattern="))
+	     strcpy(s->outlier_output_pattern,s2);
 	   else if(!strcmp(s1,"print_meanvar="))
 	     s->print_meanvar=atoi(s2);
 	   else if(!strcmp(s1,"print_maxp="))

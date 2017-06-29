@@ -543,41 +543,44 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
     cudaEventRecord(gc->eDoneFloatize[csi], cs);
     
        
+    if(gc->nchan==2){//so far specific to 2 channels. Can generalize when know data format of 3 or 4 channels
 
-    //RFI rejection
-    getMeans(gc->cfbuf[csi], gc->mean[csi], gc->cmean[csi], gc->bufsize, gc->chunkSize, cs, gc->devProp->maxThreadsPerBlock); 
-    getMeansOfSquares(gc->cfbuf[csi], gc->sqMean[csi], gc->csqMean[csi], gc->bufsize, gc->chunkSize, cs, gc->devProp->maxThreadsPerBlock); 
-   
-    cufftReal tmean[2]={0}, tsqMean[2]={0}, tvar[2], trms[2]; //for 2 channels
-    int numChunks = gc->bufsize/gc->chunkSize;
-    int o[2] ={0}; //number of outliers per channel
-    cufftReal ** statistic = gc->variance; //desired statistic to use to determine outliers
-    
-    for(int ch=0; ch<2; ch++){ //for each channel
-	for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++){
-	    gc->variance[csi][i] = variance(gc->sqMean[csi][i], gc->mean[csi][i]);
-            tmean[ch] += statistic[csi][i];
-	    tsqMean[ch]+=pow(statistic[csi][i], 2);
+	//RFI rejection
+	getMeans(gc->cfbuf[csi], gc->mean[csi], gc->cmean[csi], gc->bufsize, gc->chunkSize, cs, gc->devProp->maxThreadsPerBlock); 
+	getMeansOfSquares(gc->cfbuf[csi], gc->sqMean[csi], gc->csqMean[csi], gc->bufsize, gc->chunkSize, cs, gc->devProp->maxThreadsPerBlock); 
+       
+	cufftReal tmean[2]={0}, tsqMean[2]={0}, tvar[2], trms[2]; //for 2 channels
+	int numChunks = gc->bufsize/gc->chunkSize;
+	int o[2] ={0}; //number of outliers per channel
+	cufftReal ** statistic = gc->variance; //desired statistic to use to determine outliers
+	
+	for(int ch=0; ch<2; ch++){ //for each channel
+	    for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++){
+		gc->variance[csi][i] = variance(gc->sqMean[csi][i], gc->mean[csi][i]);
+		tmean[ch] += statistic[csi][i];
+		tsqMean[ch]+=pow(statistic[csi][i], 2);
+	    }
+	    //calculate mean, variance, standard dev of the statistic over all chunks
+	    tmean[ch]/=(numChunks/2);
+	    tsqMean[ch]/=(numChunks/2);
+	    tvar[ch] = variance(tsqMean[ch], tmean[ch]);
+	    trms[ch] = sqrt(tvar[ch]);
+	    
+	    for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++)
+	       if(abs(statistic[csi][i] - tmean[ch]) > gc->nsigma * trms[ch]){
+		 o[ch]++;
+		 CHK(cudaMemset(&(gc->cfbuf[csi][i*gc->chunkSize]), 0, gc->chunkSize)); //zero out outliers for FFT
+		 for(uint32_t j =0; j<gc->chunkSize; j++)
+		    gc->outlierBuf[j] = buf[2*i + ch]; //deinterleave data in order to write out to file 
+		//Write outlier to file
+		writerWriteOutlier(wr, gc->outlierBuf, i%2 , ch);
+	       }     
 	}
-	//calculate mean, variance, standard dev of the statistic over all chunks
-	tmean[ch]/=(numChunks/2);
-	tsqMean[ch]/=(numChunks/2);
-	tvar[ch] = variance(tsqMean[ch], tmean[ch]);
-	trms[ch] = sqrt(tvar[ch]);
-        
-	for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++)
-	   if(abs(statistic[csi][i] - tmean[ch]) > gc->nsigma * trms[ch]){
-	     gc->outliers[csi][i] = 1;
-	     o[ch]++;
-             CHK(cudaMemset(&(gc->cfbuf[csi][numChunks*gc->chunkSize]), 0, gc->chunkSize)); //zero out outliers for FFT
-       	     for(uint32_t j =0; j<gc->chunkSize; j++)
-		gc->outlierBuf[j] = buf[2*i + ch]; //deinterleave data in order to write out to file 
-	    //WRITE OUT OUTLIER
-	   }     
+	tprintfn("CH1 mean/variance/rms: %f %f %f CH2 mean/variance/rms: %f %f %f", tmean[0], tvar[0], trms[0], tmean[1], tvar[1], trms[1]);
+	tprintfn("CH1 outliers: %d CH2 outliers: %d", o[0], o[1]); 
     }
-    tprintfn("CH1 mean/variance/rms: %f %f %f CH2 mean/variance/rms: %f %f %f", tmean[0], tvar[0], trms[0], tmean[1], tvar[1], trms[1]);
-    tprintfn("CH1 outliers: %d CH2 outliers: %d", o[0], o[1]);
-    
+
+
     //perform fft
     int status = cufftSetStream(gc->plan, cs);
     if(status !=CUFFT_SUCCESS) {

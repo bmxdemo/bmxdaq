@@ -43,7 +43,8 @@ struct SETTINGS {
   int cuda_threads; // number of cuda threads
 
   // output options
-  char output_pattern[MAXCHAR];
+  char ps_output_pattern[MAXCHAR];
+  char outlier_output_pattern[MAXCHAR];
   int save_every;
   
   // printout options
