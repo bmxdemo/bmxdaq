@@ -23,8 +23,9 @@ void tprintfn(const char* fmt, ...)
     va_end(args);
 }
 
-void treturn() {
-  printf("\033[%iA",terminal_nlines);
-  terminal_nlines=0;
+void treturn(int n) { 
+  n = (n==0)? terminal_nlines : n; //if n is 0 then return all lines since last call to treturn
+  printf("\033[%iA",n);
+  terminal_nlines -=n;
 }
 

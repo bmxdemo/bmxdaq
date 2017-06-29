@@ -183,6 +183,8 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   gc->csqMean = (cufftReal **) malloc(Nb *sizeof(cufftReal*));
   gc->variance = (cufftReal **)malloc(Nb*sizeof(cufftReal*));
   gc->outliers = (bool **)malloc(Nb*sizeof(bool*));
+  gc->outlierBuf = (int8_t * )malloc(gc->chunkSize);
+  
   for(int i=0; i<Nb; i++){
       CHK(cudaMalloc(&gc->cmean[i], numBlocks*sizeof(cufftReal)));
       CHK(cudaMallocHost(&gc->mean[i], gc->bufsize/gc->chunkSize*sizeof(cufftReal)));
@@ -193,7 +195,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
       memset(gc->outliers[i], 0, gc->bufsize/gc->chunkSize * sizeof(bool));
   }
 
-  gc->nsigma = 1;
+  gc->nsigma = 2;
 
   printf ("GPU ready.\n");
 
@@ -455,10 +457,16 @@ void printTiming(GPUCARD *gc, int i) {
 
 bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
    //streamed version
+    bool deleteLinesInConsole = false;
    //Check if other streams are finished and proccess the finished ones in order (i.e. print output to file)
    while(gc->active_streams > 0){
 	if(cudaEventQuery(gc->eDonePost[gc->fstream])==cudaSuccess){
-                //print time and write to file
+                if(deleteLinesInConsole) 
+		    for(int i=0; i<4; i++){
+			printf("\33[2K"); //delete line in console
+			treturn(1); //move cursor up a line;
+		    }
+	        //print time and write to file
                 CHK(cudaMemcpyAsync(gc->outps,gc->coutps[gc->fstream], gc->tot_pssize*sizeof(float), cudaMemcpyDeviceToHost, gc->streams[gc->fstream]));
                 cudaEventRecord(gc->eDoneCopyBack[gc->fstream], gc->streams[gc->fstream]);
                 //cudaThreadSynchronize();
@@ -502,11 +510,15 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
                 writerWritePS(wr,gc->outps);
         	gc->fstream = (++gc->fstream)%(gc->nstreams);
                 gc->active_streams--;
+		
+		deleteLinesInConsole =  true;
+
  	}
         else 
 		break;
         
     }
+    
    	
     int csi = gc->bstream = (++gc->bstream)%(gc->nstreams); //add new stream
 
@@ -535,81 +547,37 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
     //RFI rejection
     getMeans(gc->cfbuf[csi], gc->mean[csi], gc->cmean[csi], gc->bufsize, gc->chunkSize, cs, gc->devProp->maxThreadsPerBlock); 
     getMeansOfSquares(gc->cfbuf[csi], gc->sqMean[csi], gc->csqMean[csi], gc->bufsize, gc->chunkSize, cs, gc->devProp->maxThreadsPerBlock); 
-    
-    cufftReal tssquare1 = 0, tssquare2=0, tmean1 =0, tmean2=0, tvar1, tvar2, trms1, trms2; //calculate total statistics over all chunks
-    int n = gc->bufsize/gc->chunkSize;
-    for(int i=0; i< n/2; i++){
-	gc->variance[csi][i] = variance(gc->sqMean[csi][i], gc->mean[csi][i]); 
-        tmean1 += gc->sqMean[csi][i];
-	tssquare1 +=pow(gc->sqMean[csi][i],2);
-    }
-    for(int i=n/2; i<n; i++){
-	gc->variance[csi][i] = variance(gc->sqMean[csi][i], gc->mean[csi][i]); 
-        tmean2 += gc->sqMean[csi][i];
-	printf("%f ,", gc->sqMean[csi][i]);
-	tssquare2 +=pow(gc->sqMean[csi][i],2);
-    }
-    tmean1/=(n/2);
-    tssquare1/=(n/2);
-    tmean2/=(n/2);
-    tssquare2/=(n/2);
-    tvar1 = variance (tssquare1, tmean1);
-    trms1 = sqrt(tvar1);
-    tvar2 = variance (tssquare2, tmean2);
-    trms2 = sqrt(tvar2);
-    
-    
-    int o1=0, o2 = 0;
-    for(int i =0; i<n/2; i++)
-	if(abs(gc->sqMean[csi][i] - tmean1) > gc->nsigma * trms1){
-	  o1++;
-          gc->outliers[csi][i] = 1;
-        }
-
-    for(int i =n/2; i<n; i++)
-	if(abs(gc->sqMean[csi][i] - tmean2) > gc->nsigma * trms2){
-	  o2++;
-          gc->outliers[csi][i] = 1;
-//	  printf("OUTLIER: %f\n", gc->sqMean[csi][i]);
-        }
-
-    tprintfn("There are %d  and %d outliers in channels 1 and 2", o1, o2);
-     
-    for (uint32_t i =0; i < 1000; i++){
-//	printf("%d ", buf[2*i+1]);
-    }
-
-    //zero out outliers for fft
-    for(int i=0; i<n; i++){
-	if(gc->outliers[csi][i] == 1)
-	   cudaMemset(&(gc->cfbuf[csi][n*gc->chunkSize]), 0, gc->chunkSize); 
-    }
    
-    struct timespec tstart, tnow;
-    //write outliers to file
-    int8_t * out = (int8_t *)malloc(gc->chunkSize);
-    for(int i=0; i<n; i++){
-	if(gc->outliers[csi][i] == 1){
-            clock_gettime(CLOCK_REALTIME , &tstart);
-	    //need to account for interleaved channels 
-	    int offset = i>128? 0: 1; //channel 1 or 2?
-	    for(uint32_t i =0; i < gc->chunkSize; i++)
-;//		out[i] = buf[2*i + offset];
-	  clock_gettime(CLOCK_REALTIME, &tnow);
-	  float time = tnow.tv_sec - tstart.tv_sec +(tnow.tv_nsec-tstart.tv_nsec)/1e9;
-	  //printf("time to interleave channels: %f\n", time);
-          clock_gettime(CLOCK_REALTIME, &tstart); 
-//	  writerWriteOutliers(wr, out, gc->chunkSize);
-	  clock_gettime(CLOCK_REALTIME, &tnow);
-	  time = tnow.tv_sec - tstart.tv_sec +(tnow.tv_nsec-tstart.tv_nsec)/1e9;
-	  //printf("time to write outlier: %f\n", time);
-	}
-	  
-    }
-    free(out);
+    cufftReal tmean[2]={0}, tsqMean[2]={0}, tvar[2], trms[2]; //for 2 channels
+    int numChunks = gc->bufsize/gc->chunkSize;
+    int o[2] ={0}; //number of outliers per channel
+    cufftReal ** statistic = gc->variance; //desired statistic to use to determine outliers
     
-
-
+    for(int ch=0; ch<2; ch++){ //for each channel
+	for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++){
+	    gc->variance[csi][i] = variance(gc->sqMean[csi][i], gc->mean[csi][i]);
+            tmean[ch] += statistic[csi][i];
+	    tsqMean[ch]+=pow(statistic[csi][i], 2);
+	}
+	//calculate mean, variance, standard dev of the statistic over all chunks
+	tmean[ch]/=(numChunks/2);
+	tsqMean[ch]/=(numChunks/2);
+	tvar[ch] = variance(tsqMean[ch], tmean[ch]);
+	trms[ch] = sqrt(tvar[ch]);
+        
+	for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++)
+	   if(abs(statistic[csi][i] - tmean[ch]) > gc->nsigma * trms[ch]){
+	     gc->outliers[csi][i] = 1;
+	     o[ch]++;
+             CHK(cudaMemset(&(gc->cfbuf[csi][numChunks*gc->chunkSize]), 0, gc->chunkSize)); //zero out outliers for FFT
+       	     for(uint32_t j =0; j<gc->chunkSize; j++)
+		gc->outlierBuf[j] = buf[2*i + ch]; //deinterleave data in order to write out to file 
+	    //WRITE OUT OUTLIER
+	   }     
+    }
+    tprintfn("CH1 mean/variance/rms: %f %f %f CH2 mean/variance/rms: %f %f %f", tmean[0], tvar[0], trms[0], tmean[1], tvar[1], trms[1]);
+    tprintfn("CH1 outliers: %d CH2 outliers: %d", o[0], o[1]);
+    
     //perform fft
     int status = cufftSetStream(gc->plan, cs);
     if(status !=CUFFT_SUCCESS) {
