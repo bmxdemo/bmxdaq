@@ -195,7 +195,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
       memset(gc->outliers[i], 0, gc->bufsize/gc->chunkSize * sizeof(bool));
   }
 
-  gc->nsigma = 2;
+  gc->nsigma = set->n_sigma;
 
   printf ("GPU ready.\n");
 
