@@ -56,11 +56,12 @@ struct GPUCARD {
   CUDA_STREAM_T *streams; // streams
   int fstream, bstream; // front stream (oldest running), back stream (newest runnig);
   int active_streams; // really needed just at the beginning (when 0)
-  CUDA_EVENT_T *eStart, *eDoneCopy, *eDoneFloatize, *eDoneFFT, *eDonePost, *eDoneCopyBack; //events
+  CUDA_EVENT_T *eStart, *eDoneCopy, *eDoneFloatize, *eDoneRFI,  *eDoneFFT, *eDonePost, *eBeginCopyBack, *eDoneCopyBack; //events
   CUFFT_REAL ** mean, **cmean, **sqMean, **csqMean, **variance; //statistics for rfi rejection (mean, mean sum of squares, variance) 
   int chunkSize; //size of chunk
   bool ** outliers;
   int nsigma; //number of standard deviations used to mark outliers
+  int8_t * outlierBuf; //holds outlier data to print to file
 };
 
 

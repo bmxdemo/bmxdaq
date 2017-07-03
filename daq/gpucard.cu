@@ -156,6 +156,8 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   gc->eDoneFFT=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
   gc->eDonePost=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
   gc->eDoneCopyBack=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
+  gc->eDoneRFI=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
+  gc->eBeginCopyBack=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
   for (int i=0;i<gc->nstreams;i++) {
     //create stream
     CHK(cudaStreamCreate(&gc->streams[i]));
@@ -166,6 +168,8 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     CHK(cudaEventCreate(&gc->eDoneFFT[i]));
     CHK(cudaEventCreate(&gc->eDonePost[i]));
     CHK(cudaEventCreate(&gc->eDoneCopyBack[i]));
+    CHK(cudaEventCreate(&gc->eDoneRFI[i]));
+    CHK(cudaEventCreate(&gc->eBeginCopyBack[i]));
   }
  
   gc->fstream = 0; //oldest running stream
@@ -440,19 +444,14 @@ void printDt (cudaEvent_t cstart, cudaEvent_t cstop) {
 }
 
 void printTiming(GPUCARD *gc, int i) {
-  printf ("GPU timing (copy/floatize/fft/post/copyback): ");
-  cudaEvent_t* eStart=(cudaEvent_t*)(gc->eStart);
-  cudaEvent_t* eDoneCopy=(cudaEvent_t*)(gc->eDoneCopy);
-  cudaEvent_t* eDoneFloatize=(cudaEvent_t*)(gc->eDoneFloatize);
-  cudaEvent_t* eDoneFFT=(cudaEvent_t*)(gc->eDoneFFT);
-  cudaEvent_t* eDonePost=(cudaEvent_t*)(gc->eDonePost);
-  cudaEvent_t* eDoneCopyBack=(cudaEvent_t*)(gc->eDoneCopyBack);
-  printDt (eStart[i], eDoneCopy[i]);
-  printDt (eDoneCopy[i], eDoneFloatize[i]);
-  printDt (eDoneFloatize[i], eDoneFFT[i]);
-  printDt (eDoneFFT[i], eDonePost[i]);
-  printDt (eDonePost[i], eDoneCopyBack[i]);
-  tprintfn ("  ");
+  printf ("GPU timing (copy/floatize/RFI/fft/post/copyback): ");
+  printDt (gc->eStart[i], gc->eDoneCopy[i]);
+  printDt (gc->eDoneCopy[i], gc->eDoneFloatize[i]);
+  printDt (gc->eDoneFloatize[i], gc->eDoneRFI[i]);
+  printDt (gc->eDoneRFI[i], gc->eDoneFFT[i]);
+  printDt (gc->eDoneFFT[i], gc->eDonePost[i]);
+  printDt (gc->eBeginCopyBack[i], gc->eDoneCopyBack[i]);
+  tprintfn (" ");
 }
 
 bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
@@ -467,7 +466,8 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 			treturn(1); //move cursor up a line;
 		    }
 	        //print time and write to file
-                CHK(cudaMemcpyAsync(gc->outps,gc->coutps[gc->fstream], gc->tot_pssize*sizeof(float), cudaMemcpyDeviceToHost, gc->streams[gc->fstream]));
+                cudaEventRecord(gc->eBeginCopyBack[gc->fstream], gc->streams[gc->fstream]);
+		CHK(cudaMemcpyAsync(gc->outps,gc->coutps[gc->fstream], gc->tot_pssize*sizeof(float), cudaMemcpyDeviceToHost, gc->streams[gc->fstream]));
                 cudaEventRecord(gc->eDoneCopyBack[gc->fstream], gc->streams[gc->fstream]);
                 //cudaThreadSynchronize();
 		cudaEventSynchronize(gc->eDoneCopyBack[gc->fstream]);
@@ -542,7 +542,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
       floatize_2chan<<<blocksPerGrid, threadsPerBlock, 0, cs>>>(gc->cbuf[csi],gc->cfbuf[csi],&(gc->cfbuf[csi][gc->fftsize]));
     cudaEventRecord(gc->eDoneFloatize[csi], cs);
     
-       
+           
     if(gc->nchan==2){//so far specific to 2 channels. Can generalize when know data format of 3 or 4 channels
 
 	//RFI rejection
@@ -565,7 +565,9 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 	    tsqMean[ch]/=(numChunks/2);
 	    tvar[ch] = variance(tsqMean[ch], tmean[ch]);
 	    trms[ch] = sqrt(tvar[ch]);
-	    
+             
+//	    printf("MEAN STATISTIC: %f\n", tmean[ch]);
+
 	    for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++)
 	       if(abs(statistic[csi][i] - tmean[ch]) > gc->nsigma * trms[ch]){
 		 o[ch]++;
@@ -574,12 +576,14 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 		    gc->outlierBuf[j] = buf[2*i + ch]; //deinterleave data in order to write out to file 
 		//Write outlier to file
 		writerWriteOutlier(wr, gc->outlierBuf, i%2 , ch);
-	       }     
+//		printf("OUTLIER STATISTIC: %f\n", statistic[csi][i]);
+	       }
 	}
-	tprintfn("CH1 mean/variance/rms: %f %f %f CH2 mean/variance/rms: %f %f %f", tmean[0], tvar[0], trms[0], tmean[1], tvar[1], trms[1]);
+	tprintfn("CH1 mean/var/rms: %f %f %f CH2 mean/var/rms: %f %f %f", tmean[0], tvar[0], trms[0], tmean[1], tvar[1], trms[1]);
 	tprintfn("CH1 outliers: %d CH2 outliers: %d", o[0], o[1]); 
     }
 
+    cudaEventRecord(gc->eDoneRFI[csi],cs);
 
     //perform fft
     int status = cufftSetStream(gc->plan, cs);
@@ -625,6 +629,6 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
  
     CHK(cudaGetLastError());
     cudaEventRecord(gc->eDonePost[csi], cs);
-  
+    
   return true;
 }
