@@ -78,6 +78,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
       printf("Need OPS_PER_THREAD to be a power of 2.\n");
       exit(1);
   }
+
   gc->fftsize=set->fft_size;
   uint32_t bufsize=gc->bufsize=set->fft_size*nchan;
   uint32_t transform_size=(set->fft_size/2+1)*nchan;
@@ -112,7 +113,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     set->nu_max[i]=numax;
     set->pssize[i]=gc->pssize1[i];
     if (nchan==2)
-      gc->pssize[i]=gc->pssize1[i]*4; // for other and two crosses
+      gc->pssize[i]=gc->pssize1[i]*4; // for two channels and two crosses
     else
       gc->pssize[i]=gc->pssize1[i]; // just one power spectrum
     gc->tot_pssize+=gc->pssize[i];
@@ -148,7 +149,6 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     printf ("Cannot really work with less than one stream.\n");
     exit(1);
   }
-  printf("allocating stream and events\n");
   gc->streams=(cudaStream_t*)malloc(gc->nstreams*sizeof(cudaStream_t));
   gc->eStart=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
   gc->eDoneCopy=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
@@ -186,7 +186,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   gc->sqMean = (cufftReal **)malloc(Nb*sizeof(cufftReal*));
   gc->csqMean = (cufftReal **) malloc(Nb *sizeof(cufftReal*));
   gc->variance = (cufftReal **)malloc(Nb*sizeof(cufftReal*));
-  gc->outliers = (bool **)malloc(Nb*sizeof(bool*));
+  gc->isOutlier = (int **)malloc(Nb*sizeof(int*));
   gc->outlierBuf = (int8_t * )malloc(gc->chunkSize);
   
   for(int i=0; i<Nb; i++){
@@ -194,9 +194,9 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
       CHK(cudaMallocHost(&gc->mean[i], gc->bufsize/gc->chunkSize*sizeof(cufftReal)));
       CHK(cudaMalloc(&gc->csqMean[i], numBlocks*sizeof(cufftReal)));
       CHK(cudaMallocHost(&gc->sqMean[i], gc->bufsize/gc->chunkSize*sizeof(cufftReal)));
-      CHK(cudaMallocHost(&gc->variance[i], gc->bufsize/gc->chunkSize*sizeof(cufftReal)));
-      gc->outliers[i] = (bool *)malloc(gc->bufsize/gc->chunkSize * sizeof(bool));
-      memset(gc->outliers[i], 0, gc->bufsize/gc->chunkSize * sizeof(bool));
+      CHK(cudaMallocHost(&gc->variance[i], gc->bufsize/gc->chunkSize*sizeof(cufftReal))); //total number of chunks in all channels
+      
+      gc->isOutlier[i] = (int *)malloc(gc->bufsize/gc->chunkSize/gc->nchan * sizeof(int)); //number of chunks in 1 channel
   }
 
   gc->nsigma = set->n_sigma;
@@ -370,10 +370,11 @@ cufftReal variance(cufftReal ssquare, cufftReal mean){
  * CUDA reduction sum
  * we will take bsize complex numbers starting at ffts[istart+bsize*blocknumber]
  * and their copies in NCHUNS, and add the squares
+ * correction corrects for the chunks nulled out because RFI and is equal to numChunks/(numChunks - numChunksCh1ORCh2)
  **/
 
 
-__global__ void ps_reduce(cufftComplex *ffts, float* output_ps, size_t istart, size_t avgsize) {
+__global__ void ps_reduce(cufftComplex *ffts, float* output_ps, size_t istart, size_t avgsize, float correction) {
   int tid=threadIdx.x; // thread
   int bl=blockIdx.x; // block, ps bin #
   int nth=blockDim.x; //nthreads
@@ -396,14 +397,14 @@ __global__ void ps_reduce(cufftComplex *ffts, float* output_ps, size_t istart, s
     }
     csum/=2;
   }
-  if (tid==0) output_ps[bl]=work[0];
+  if (tid==0) output_ps[bl]=work[0]*correction; //correcting for RFI
 }
 
 /** 
  * CROSS power spectrum reducer
  **/
 __global__ void ps_X_reduce(cufftComplex *fftsA, cufftComplex *fftsB, 
-			    float* output_ps_real, float* output_ps_imag, size_t istart, size_t avgsize) {
+			    float* output_ps_real, float* output_ps_imag, size_t istart, size_t avgsize, float correction) {
   int tid=threadIdx.x; // thread
   int bl=blockIdx.x; // block, ps bin #
   int nth=blockDim.x; //nthreads
@@ -431,8 +432,8 @@ __global__ void ps_X_reduce(cufftComplex *fftsA, cufftComplex *fftsB,
     csum/=2;
   }
   if (tid==0) {
-    output_ps_real[bl]=workR[0];
-    output_ps_imag[bl]=workI[0];
+    output_ps_real[bl]=workR[0]*correction;
+    output_ps_imag[bl]=workI[0]*correction;
   }
 } 
 
@@ -519,7 +520,6 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
         
     }
     
-   	
     int csi = gc->bstream = (++gc->bstream)%(gc->nstreams); //add new stream
 
     if(gc->active_streams == gc->nstreams){ //if no empty streams
@@ -542,16 +542,21 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
       floatize_2chan<<<blocksPerGrid, threadsPerBlock, 0, cs>>>(gc->cbuf[csi],gc->cfbuf[csi],&(gc->cfbuf[csi][gc->fftsize]));
     cudaEventRecord(gc->eDoneFloatize[csi], cs);
     
-           
+    //RFI rejection       
+    int numChunks = gc->bufsize/gc->chunkSize; //total number of chunks in all channels
+    int o[2] ={0}; //number of outliers per channel
+    int outliersOR = 0; //number of outliers obtained by a logical OR on the arrays of outlier flags from the different channels
+    
     if(gc->nchan==2){//so far specific to 2 channels. Can generalize when know data format of 3 or 4 channels
-
-	//RFI rejection
 	getMeans(gc->cfbuf[csi], gc->mean[csi], gc->cmean[csi], gc->bufsize, gc->chunkSize, cs, gc->devProp->maxThreadsPerBlock); 
 	getMeansOfSquares(gc->cfbuf[csi], gc->sqMean[csi], gc->csqMean[csi], gc->bufsize, gc->chunkSize, cs, gc->devProp->maxThreadsPerBlock); 
        
 	cufftReal tmean[2]={0}, tsqMean[2]={0}, tvar[2], trms[2]; //for 2 channels
 	int numChunks = gc->bufsize/gc->chunkSize;
 	int o[2] ={0}; //number of outliers per channel
+	int outliersOR = 0; //number of outliers obtained by a logical OR on the arrays of outlier flags from the different channels
+	memset(gc->isOutlier[1], 0, numChunks/gc->nchan*sizeof(int)); //reset outlier flags to 0
+	
 	cufftReal ** statistic = gc->variance; //desired statistic to use to determine outliers
 	
 	for(int ch=0; ch<2; ch++){ //for each channel
@@ -566,19 +571,24 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 	    tvar[ch] = variance(tsqMean[ch], tmean[ch]);
 	    trms[ch] = sqrt(tvar[ch]);
              
-//	    printf("MEAN STATISTIC: %f\n", tmean[ch]);
 
 	    for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++)
 	       if(abs(statistic[csi][i] - tmean[ch]) > gc->nsigma * trms[ch]){
 		 o[ch]++;
+		 //mimic logical OR of flagged chunks in each channel
+		 if(gc->isOutlier[csi][i] == 0){//other channel didn't flag this chunk
+		 	gc->isOutlier[csi][i] = 1; //flag as outlier
+			outliersOR++;
+		 }
 		 CHK(cudaMemset(&(gc->cfbuf[csi][i*gc->chunkSize]), 0, gc->chunkSize)); //zero out outliers for FFT
 		 for(uint32_t j =0; j<gc->chunkSize; j++)
 		    gc->outlierBuf[j] = buf[2*i + ch]; //deinterleave data in order to write out to file 
 		//Write outlier to file
 		writerWriteOutlier(wr, gc->outlierBuf, i%2 , ch);
-//		printf("OUTLIER STATISTIC: %f\n", statistic[csi][i]);
 	       }
 	}
+	tprintfn(" ");
+	tprintfn("RFI analysis: ");
 	tprintfn("CH1 mean/var/rms: %f %f %f CH2 mean/var/rms: %f %f %f", tmean[0], tvar[0], trms[0], tmean[1], tvar[1], trms[1]);
 	tprintfn("CH1 outliers: %d CH2 outliers: %d", o[0], o[1]); 
     }
@@ -601,24 +611,28 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
     if (gc->nchan==1) {
       int psofs=0;
       for (int i=0; i<gc->ncuts; i++) {
-	ps_reduce<<<gc->pssize[i], 1024, 0, cs>>> (gc->cfft[csi], &(gc->coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i]);
+	ps_reduce<<<gc->pssize[i], 1024, 0, cs>>> (gc->cfft[csi], &(gc->coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i], 1);
 	psofs+=gc->pssize[i];
       }
     } else if(gc->nchan==2){
 	  // note we need to take into account the tricky N/2+1 FFT size while we do N/2 binning
 	  // pssize+2 = transformsize+1
 	  // note that pssize is the full *nchan pssize
-	  
+      	  
+	  //calculate power spectra corrections due to nulling out chunks flagged as RFI
+	  float ch1Correction = numChunks/(numChunks - o[0]);  //correction for channel 1 power spectrum
+	  float ch2Correction = numChunks/(numChunks - o[1]);  //correction for channel 2 power spectrum
+	  float crossCorrection = numChunks/(numChunks - outliersOR); //correction for cross spectrum
+
 	  int psofs=0;
 	  for (int i=0; i<gc->ncuts; i++) {
-	    ps_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][0], &(gc->coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i]);
+	    ps_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][0], &(gc->coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i], ch1Correction);
 	    psofs+=gc->pssize1[i];
-	    ps_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][(gc->fftsize/2+1)], 
-					     &(gc->coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i]);
+	    ps_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][(gc->fftsize/2+1)], &(gc->coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i], ch2Correction);
 	    psofs+=gc->pssize1[i];
 	    ps_X_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][0], &gc->cfft[csi][(gc->fftsize/2+1)], 
 					      &(gc->coutps[csi][psofs]), &(gc->coutps[csi][psofs+gc->pssize1[i]]),
-					      gc->ndxofs[i], gc->fftavg[i]);
+					      gc->ndxofs[i], gc->fftavg[i], crossCorrection);
 	    psofs+=2*gc->pssize1[i];
 	}
   }
