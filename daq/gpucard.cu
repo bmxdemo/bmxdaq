@@ -36,6 +36,11 @@ static void HandleError( cudaError_t err,
 }
 #define CHK( err ) (HandleError( err, __FILE__, __LINE__ ))
 
+
+//Initialize instance of GPUCARD
+//Input:
+//      gc: instance of GPUCARD to initialize
+//      set: settings
 void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   
   //print out gpu device properties
@@ -205,15 +210,21 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
 
 }
 
-/**
- * CUDA Kernel byte->float, 1 channel version
- *
- */
+//Convert bytes to floats, 1 channel version
+//Inputs:
+//	 sample: array of bytes
+//       fsample: array of floats to put output in
 __global__ void floatize_1chan(int8_t* sample, cufftReal* fsample)  {
     int i = FLOATIZE_X*(blockDim.x * blockIdx.x + threadIdx.x);
     for (int j=0; j<FLOATIZE_X; j++) fsample[i+j]=float(sample[i+j]);
 }
 
+
+//Convert bytes to floats, 2 channel version
+//Inputs:
+//	 sample: array of bytes with the 2 channels interleaved
+//       fsample1: array of floats to put converted bytes from channel 1 in
+//       fsample2: array of floats to put converted bytes from channel 2 in
 __global__ void floatize_2chan(int8_t* sample, cufftReal* fsample1, cufftReal* fsample2)  {
       int i = FLOATIZE_X*(blockDim.x * blockIdx.x + threadIdx.x);
       for (int j=0; j<FLOATIZE_X/2; j++) {
@@ -221,16 +232,6 @@ __global__ void floatize_2chan(int8_t* sample, cufftReal* fsample1, cufftReal* f
       fsample2[i/2+j]=float(sample[i+2*j+1]);
     }
 }
-
-
-//offset is fft size, so stack output from each channel in one array
-__global__ void floatize_nchan(int8_t* sample, cufftReal* fsamples, int nchan, int offset) {
-     int i = FLOATIZE_X*(blockDim.x * blockIdx.x + threadIdx.x);
-     for(int j=0; j < FLOATIZE_X/nchan; j++)
-      for(int k=0; k<nchan; k++)
-       fsamples[k*offset+i/nchan+j] = float(sample[i+nchan*j+k]);
-}
-
 
 
 //Parallel reduction algorithm to calculate the mean of an array of numbers. Multiple adds are performed while loading to shared memory. 
@@ -357,7 +358,7 @@ void getMeansOfSquares(cufftReal *input, cufftReal * output, cufftReal * deviceO
 	remaining/=(numThreads*OPS_PER_THREAD);
     }
     size_t memsize = numBlocks*sizeof(cufftReal); 
-    CHK(cudaMemcpy(output, deviceOutput, memsize, cudaMemcpyDeviceToHost)); //need synchronous copying so that cpu blocks and doesn't use this memory  until     finished copying
+    CHK(cudaMemcpy(output, deviceOutput, memsize, cudaMemcpyDeviceToHost)); //need synchronous copying so that cpu blocks and doesn't use this memory until finished copying
 
 }
 
@@ -366,14 +367,11 @@ cufftReal variance(cufftReal ssquare, cufftReal mean){
 }
 
 
-/**
- * CUDA reduction sum
- * we will take bsize complex numbers starting at ffts[istart+bsize*blocknumber]
- * and their copies in NCHUNS, and add the squares
- * correction corrects for the chunks nulled out because RFI and is equal to numChunks/(numChunks - numChunksCh1ORCh2)
- **/
-
-
+//Reduction algorithm to calculate power spectrum. Take bsize complex numbers starting at ffts[istart+bsize*blocknumber]
+//and their copies in NCHUNS, and add the squares
+//Input:
+//      correction: corrects for the chunks that were nulled out because RFI. It equaks numChunks/(numChunks - numChunksNulled), where numChunksNulled is 
+// the number of chunks nulled in this specific channel.
 __global__ void ps_reduce(cufftComplex *ffts, float* output_ps, size_t istart, size_t avgsize, float correction) {
   int tid=threadIdx.x; // thread
   int bl=blockIdx.x; // block, ps bin #
@@ -400,9 +398,10 @@ __global__ void ps_reduce(cufftComplex *ffts, float* output_ps, size_t istart, s
   if (tid==0) output_ps[bl]=work[0]*correction; //correcting for RFI
 }
 
-/** 
- * CROSS power spectrum reducer
- **/
+
+//Reduction algorith, to calculate cross power spectrum
+//Input:
+//      correction: corrects for the chunks that were nulled out because RFI. It equaks numChunks/(numChunks - numChunksNulledCh1ORCH2)
 __global__ void ps_X_reduce(cufftComplex *fftsA, cufftComplex *fftsB, 
 			    float* output_ps_real, float* output_ps_imag, size_t istart, size_t avgsize, float correction) {
   int tid=threadIdx.x; // thread
@@ -437,7 +436,7 @@ __global__ void ps_X_reduce(cufftComplex *fftsA, cufftComplex *fftsB,
   }
 } 
 
-
+//Print the elapsed time between 2 cuda events
 void printDt (cudaEvent_t cstart, cudaEvent_t cstop) {
   float gpu_time;
   CHK(cudaEventElapsedTime(&gpu_time, cstart, cstop));
@@ -455,6 +454,12 @@ void printTiming(GPUCARD *gc, int i) {
   tprintfn (" ");
 }
 
+//Process one data packet from the digitizer
+//Input:
+//	gc: graphics card
+//      buf: data from digitizer
+//      wr: writer to write out power spectra and outliers to files
+//	set: settings
 bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
    //streamed version
     bool deleteLinesInConsole = false;
@@ -524,7 +529,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 
     if(gc->active_streams == gc->nstreams){ //if no empty streams
     	printf("No free streams.\n");
-        if(gc->nstreams > 1) //first few packets come in before 122 ms, so for 1 stream, we need to queue them, and not just quit the program
+        if(gc->nstreams > 1) //first few packets come in close together (<122 ms), so for 1 stream, we need to queue them, and not just quit the program
 		exit(1);
     }
 
