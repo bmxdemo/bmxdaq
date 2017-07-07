@@ -555,7 +555,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 	int numChunks = gc->bufsize/gc->chunkSize;
 	int o[2] ={0}; //number of outliers per channel
 	int outliersOR = 0; //number of outliers obtained by a logical OR on the arrays of outlier flags from the different channels
-	memset(gc->isOutlier[1], 0, numChunks/gc->nchan*sizeof(int)); //reset outlier flags to 0
+	memset(gc->isOutlier[csi], 0, numChunks/gc->nchan*sizeof(int)); //reset outlier flags to 0
 	
 	cufftReal ** statistic = gc->variance; //desired statistic to use to determine outliers
 	
