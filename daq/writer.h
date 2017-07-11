@@ -25,16 +25,21 @@ struct BMXHEADER {
   int pssize[MAXCUTS];
 };
 
+struct RFIHEADER {
+    const char magic[8]=">>RFI<<";
+    int chunkSize; //number of elements per chunk 
+    int nSigma;    //number of sigma away from mean
+};
 
 struct WRITER {
-  char fname[2][MAXFNLEN];
-  uint32_t pslen; // full length of PS info
-  uint32_t outlen; //length of outlier chunks
+  char fnamePS[MAXFNLEN], fnameRFI[MAXFNLEN];  //file names
+  uint32_t lenPS; // full length of PS info
+  uint32_t lenRFI; //length of outlier chunk
   int save_every; // how many minutes we save.
-  FILE* fps; //file for PS
-  FILE* fout; //file for outliers
+  FILE* fPS, *fRFI;
   bool reopen;
-  BMXHEADER header;
+  BMXHEADER headerPS;  //header for power spectra files
+  RFIHEADER headerRFI; //header for rfi files
   float tone_freq;
   int counter; //number of PS written to current file
 };
@@ -42,6 +47,6 @@ struct WRITER {
 
 void writerInit(WRITER *writer, SETTINGS *set);
 void writerWritePS (WRITER *writer, float* ps);
-void writerWriteOutlier(WRITER *writer, int8_t * outlier, int chunk, int channel);
+void writerWriteRFI(WRITER *writer, int8_t * outlier, int chunk, int channel);
 void writerCleanUp(WRITER *writer);
 

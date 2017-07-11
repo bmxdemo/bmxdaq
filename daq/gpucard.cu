@@ -590,7 +590,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 		 for(uint32_t j =0; j<gc->chunkSize; j++)
 		    gc->outlierBuf[j] = buf[2*i + ch]; //deinterleave data in order to write out to file 
 		//Write outlier to file
-		writerWriteOutlier(wr, gc->outlierBuf, i%2 , ch);
+		writerWriteRFI(wr, gc->outlierBuf, i%2 , ch);
 	       }
 	}
 	tprintfn(" ");

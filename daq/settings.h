@@ -44,7 +44,7 @@ struct SETTINGS {
 
   // output options
   char ps_output_pattern[MAXCHAR];
-  char outlier_output_pattern[MAXCHAR];
+  char rfi_output_pattern[MAXCHAR];
   int save_every;
   
   // printout options
