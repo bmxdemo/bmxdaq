@@ -577,21 +577,21 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 	    tvar[ch] = variance(tsqMean[ch], tmean[ch]);
 	    trms[ch] = sqrt(tvar[ch]);
              
-
-	    for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++)
+	    for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++){
 	       if(abs(statistic[csi][i] - tmean[ch]) > gc->nsigma * trms[ch]){
 		 o[ch]++;
 		 //mimic logical OR of flagged chunks in each channel
-		 if(gc->isOutlier[csi][i] == 0){//other channel didn't flag this chunk
-		 	gc->isOutlier[csi][i] = 1; //flag as outlier
+		 if(gc->isOutlier[csi][i%2] == 0){//other channel didn't flag this chunk
+		 	gc->isOutlier[csi][i%2] = 1; //flag as outlier
 			outliersOR++;
 		 }
 		 CHK(cudaMemset(&(gc->cfbuf[csi][i*gc->chunkSize]), 0, gc->chunkSize)); //zero out outliers for FFT
 		 for(uint32_t j =0; j<gc->chunkSize; j++)
-		    gc->outlierBuf[j] = buf[2*i + ch]; //deinterleave data in order to write out to file 
+		     gc->outlierBuf[j] = buf[i]; //deinterleave data in order to write out to file 
 		//Write outlier to file
 		writerWriteRFI(wr, gc->outlierBuf, i%2 , ch);
 	       }
+	     }
 	}
 	tprintfn(" ");
 	tprintfn("RFI analysis: ");
