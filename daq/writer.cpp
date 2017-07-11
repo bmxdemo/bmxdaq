@@ -35,6 +35,8 @@ void maybeReOpenFile(WRITER *writer, bool first=false) {
     }
     
     fwrite(&writer->headerPS, sizeof(BMXHEADER),1, writer->fPS);
+    fwrite(&writer->headerRFI, sizeof(RFIHEADER), 1, writer->fRFI);
+
     writer->reopen=false;
   }
   if (ti->tm_min%writer->save_every==1) {
