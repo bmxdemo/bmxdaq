@@ -611,7 +611,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 	int outliersOR = 0; //number of outliers obtained by a logical OR on the arrays of outlier flags from the different channels
 	memset(gc->isOutlier[csi], 0, numChunks/gc->nchan*sizeof(int)); //reset outlier flags to 0
 	
-	cufftReal ** statistic = gc->sqMean; //desired statistic(s) to use to determine outliers
+	cufftReal ** statistic = gc->variance; //desired statistic(s) to use to determine outliers
         
 	//synchronize so don't use memory before GPU finishes copying it to the CPU
         CHK(cudaStreamSynchronize(cs));
@@ -620,30 +620,35 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 	tprintfn("Time after synchronize stream: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
 	
 	for(int ch=0; ch<2; ch++){ //for each channel
+
+	    //calculate mean, variance, standard dev of the statistic over all chunks
 	    for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++){
 		gc->variance[csi][i] = variance(gc->sqMean[csi][i], gc->mean[csi][i]);
 		tmean[ch] += statistic[csi][i]/(numChunks/2);
 		tsqMean[ch]+=pow(statistic[csi][i], 2)/(numChunks/2);
 	    }
-	    //calculate mean, variance, standard dev of the statistic over all chunks
 	    tvar[ch] = variance(tsqMean[ch], tmean[ch]);
 	    trms[ch] = sqrt(tvar[ch]);
-            printf("SQMEAN: %f, MEAN: %f", tsqMean[ch], tmean[ch]); 
+	    
+            //handle rfi
 	    for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++){
-	       if(abs(statistic[csi][i] - tmean[ch]) > gc->nsigma * trms[ch]){
+		if(abs(statistic[csi][i] - tmean[ch]) > gc->nsigma * trms[ch]){
 		 o[ch]++;
 		 //mimic logical OR of flagged chunks in each channel
 		 if(gc->isOutlier[csi][i%2] == 0){//other channel didn't flag this chunk
 		 	gc->isOutlier[csi][i%2] = 1; //flag as outlier
 			outliersOR++;
 		 }
+		
 		 CHK(cudaMemsetAsync(&(gc->cfbuf[csi][i*gc->chunkSize]), 0, gc->chunkSize, cs)); //zero out outliers for FFT
+		 
 		 for(uint32_t j =0; j<gc->chunkSize; j++)
-		     gc->outlierBuf[j] = buf[i]; //deinterleave data in order to write out to file 
-		//Write outlier to file
-		writerWriteRFI(wr, gc->outlierBuf, i%2 , ch);
+		     gc->outlierBuf[j] = buf[2*(i%2 * gc->chunkSize + j) + ch]; //deinterleave data in order to write out to file 
+                 		 
+		 //Write outlier to file
+		 writerWriteRFI(wr, gc->outlierBuf, i%2 , ch);
 	       }
-	     }
+	   }
 	}
         clock_gettime(CLOCK_REALTIME, &now);
 	tprintfn("Time after finished writing: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
