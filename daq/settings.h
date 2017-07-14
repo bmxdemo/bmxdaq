@@ -66,6 +66,7 @@ struct SETTINGS {
   //RFI rejection
   int log_chunk_size; //log base 2 of chunk size to be used to collect RFI statistics
   int n_sigma; //number of standard deviations used to determine outliers.
+  bool null_RFI; //whether to null RFI chunks before performing FFT
 };
 
 // Fixed defines

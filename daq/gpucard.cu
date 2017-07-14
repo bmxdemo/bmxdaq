@@ -640,7 +640,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 			outliersOR++;
 		 }
 		
-		 CHK(cudaMemsetAsync(&(gc->cfbuf[csi][i*gc->chunkSize]), 0, gc->chunkSize, cs)); //zero out outliers for FFT
+		 if(set->null_RFI) CHK(cudaMemsetAsync(&(gc->cfbuf[csi][i*gc->chunkSize]), 0, gc->chunkSize, cs)); //zero out outliers for FFT
 		 
 		 for(uint32_t j =0; j<gc->chunkSize; j++)
 		     gc->outlierBuf[j] = buf[2*(i%2 * gc->chunkSize + j) + ch]; //deinterleave data in order to write out to file 
