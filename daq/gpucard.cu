@@ -208,7 +208,8 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   }
 
   gc->nsigma = set->n_sigma;
-
+  gc->avgOutliersPerChannel = (float *)malloc(gc->nchan*sizeof(float));
+  memset(gc->avgOutliersPerChannel, 0, gc->nchan*sizeof(float));
   printf ("GPU ready.\n");
 
 }
@@ -602,13 +603,10 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 	getAbsMax(gc->cfbuf[csi], gc->absMax[csi], gc->cabsMax[csi], gc->bufsize, gc->chunkSize, cs, gc->devProp->maxThreadsPerBlock); 
 
         clock_gettime(CLOCK_REALTIME, &now);
-	tprintfn("Time after kernel calls: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
+	//tprintfn("Time after kernel calls: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
 
 
 	cufftDoubleReal tmean[2]={0}, tsqMean[2]={0}, tvar[2], trms[2]; //for 2 channels. Note: double precision is neccesary or results will be incorrect!
-	int numChunks = gc->bufsize/gc->chunkSize;
-	int o[2] ={0}; //number of outliers per channel
-	int outliersOR = 0; //number of outliers obtained by a logical OR on the arrays of outlier flags from the different channels
 	memset(gc->isOutlier[csi], 0, numChunks/gc->nchan*sizeof(int)); //reset outlier flags to 0
 	
 	cufftReal ** statistic = gc->variance; //desired statistic(s) to use to determine outliers
@@ -617,7 +615,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
         CHK(cudaStreamSynchronize(cs));
 
         clock_gettime(CLOCK_REALTIME, &now);
-	tprintfn("Time after synchronize stream: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
+	//tprintfn("Time after synchronize stream: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
 	
 	for(int ch=0; ch<2; ch++){ //for each channel
 
@@ -651,12 +649,19 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 	   }
 	}
         clock_gettime(CLOCK_REALTIME, &now);
-	tprintfn("Time after finished writing: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
-	
+	//tprintfn("Time after finished writing: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
+
+
+	//calculate approximate average of outliers per channel per sample (approximate because using wr->counter which might be a bit behind)
+	int n = wr->counter; 
+        for(int i=0; i <gc->nchan; i++)
+	    gc->avgOutliersPerChannel[i]= (gc->avgOutliersPerChannel[i]*n + o[i])/(n+1);
+
 	tprintfn(" ");
 	tprintfn("RFI analysis: ");
 	tprintfn("CH1 mean/var/rms: %f %f %f CH2 mean/var/rms: %f %f %f", tmean[0], tvar[0], trms[0], tmean[1], tvar[1], trms[1]);
 	tprintfn("CH1 outliers: %d CH2 outliers: %d", o[0], o[1]); 
+	tprintfn("CH1 average outliers: %f CH2 average outliers: %f", gc->avgOutliersPerChannel[0], gc->avgOutliersPerChannel[1]); 
     }
     cudaEventRecord(gc->eDoneRFI[csi],cs);
 
