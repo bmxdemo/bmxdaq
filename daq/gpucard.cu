@@ -520,17 +520,17 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
                   // now find some statistic over subsamples of samples
                   uint32_t bs=gc->bufsize;
                   uint32_t step=gc->bufsize/(32768);
-                  float fac=bs/step;
+                  float NSub=bs/step; // number of subsamples to take
                   float m1=0.,m2=0.,v1=0.,v2=0.;
-                  for (int i=0; i<bs; i+=step) {
+                  for (int i=0; i<bs; i+=step) { // take them in steps of step
                  	float n=buf[i];
                 	m1+=n; v1+=n*n;
                 	n=buf[i+1];
                 	m2+=n; v2+=n*n;
                   }
-                  m1/=fac; v1=sqrt(v1/fac-m1*m1);
-                  m2/=fac; v2=sqrt(v2/fac-m1*m1);
-                  tprintfn ("CH1 min/rms: %f %f   CH2 min/rms: %f %f   ",m1,v1,m2,v2);
+                  m1/=NSub; v1=sqrt(v1/NSub-m1*m1); //mean and variance
+                  m2/=NSub; v2=sqrt(v2/NSub-m2*m2);
+                  tprintfn ("CH1 mean/rms: %f %f   CH2 mean/rms: %f %f   ",m1,v1,m2,v2);
                 }
                 if (set->print_maxp) {
                   // find max power in each cutout in each channel.
