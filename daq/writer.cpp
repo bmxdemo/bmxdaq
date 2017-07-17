@@ -82,9 +82,9 @@ void writerWritePS (WRITER *writer, float* ps) {
 
 void writerWriteRFI(WRITER * writer, int8_t * outlier, int chunk, int channel){
   maybeReOpenFile(writer);
-  char * tag = (char *)malloc(100*sizeof(char));
-  int tagLen=sprintf(tag, "sample: %d, chunk: %d, channel: %d", writer->counter, chunk, channel);
-  fwrite(tag, sizeof(char), tagLen, writer->fRFI);
+  fwrite(&writer->counter, sizeof(int), 1, writer->fRFI);
+  fwrite(&chunk, sizeof(int), 1, writer->fRFI);
+  fwrite(&channel, sizeof(int), 1, writer->fRFI);
   fwrite (outlier, sizeof(int8_t), writer->lenRFI, writer->fRFI);
   fflush(writer->fRFI);
 }
