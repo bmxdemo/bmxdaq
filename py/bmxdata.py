@@ -68,11 +68,11 @@ class BMXFile(object):
             self.data=np.hstack((self.data,ndata))
         return nd
 
-    def getNames(self, chan):
+    def getNames(self, cut):
         if self.nChan==1:
-            return ['chan1_'+str(chan)]
+            return ['chan1_'+str(cut)]
         else:
-            return ['chan1_'+str(chan),'chan2_'+str(chan),'chanXR_'+str(chan),'chanXI_'+str(chan)]
+            return ['chan1_'+str(cut),'chan2_'+str(cut),'chanXR_'+str(cut),'chanXI_'+str(cut)]
         
     def plotAvgSpec(self, cut=0):
         for i, n in enumerate(self.getNames(cut)):
