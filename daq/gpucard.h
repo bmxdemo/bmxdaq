@@ -59,7 +59,6 @@ struct GPUCARD {
   CUDA_EVENT_T *eStart, *eDoneCopy, *eDoneFloatize, *eDoneRFI,  *eDoneFFT, *eDonePost, *eBeginCopyBack, *eDoneCopyBack; //events
   CUFFT_REAL ** mean, **cmean, **sqMean, **csqMean, **variance, **absMax, **cabsMax; //statistics for rfi rejection (mean, mean sum of squares, variance) 
   int chunkSize; //size of chunk
-  int nsigma; //number of standard deviations used to mark outliers
   int8_t * outlierBuf; //holds outlier data to print to file
   int ** isOutlier; //array of flags detemining if chunk is outlier or not
   float * avgOutliersPerChannel; //average number of outlier chunks per channel per sample since program began running

@@ -41,7 +41,8 @@ void init_settings(SETTINGS *s, char* fname) {
     s->fg_switchevery=10;
     sprintf(s->fg_port,"ttyS0");
     s->log_chunk_size = 20;
-    s->n_sigma = 3;
+    s->n_sigma_null = 3;
+    s->n_sigma_write = 3;
     s->null_RFI = true;
     s->nsamples=0;
     s->wave_nbytes=0;
@@ -123,8 +124,10 @@ void init_settings(SETTINGS *s, char* fname) {
 	     s->log_chunk_size=atoi(s2);
 	   else if(!strcmp(s1,"null_RFI="))
 	     s->null_RFI=atoi(s2);
-	   else if(!strcmp(s1,"n_sigma="))
-	     s->n_sigma=atoi(s2);
+	   else if(!strcmp(s1,"n_sigma_null="))
+	     s->n_sigma_null=atoi(s2);
+	   else if(!strcmp(s1,"n_sigma_write="))
+	     s->n_sigma_write=atoi(s2);
 	   else if(!strcmp(s1,"nsamples="))
 	     s->nsamples=atoi(s2);
 	   else found=false;
@@ -179,6 +182,11 @@ void init_settings(SETTINGS *s, char* fname) {
 	   }
 	 }
 	 fclose(fi);
+     }
+
+     if(s->n_sigma_null > s->n_sigma_write){
+	 printf("n_sigma_write needs to be greater or equal to n_sigma_null");
+	 exit(1);
      }
 }
 

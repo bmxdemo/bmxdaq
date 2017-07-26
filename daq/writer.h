@@ -28,7 +28,7 @@ struct BMXHEADER {
 struct RFIHEADER {
     const char magic[8]=">>RFI<<";
     int chunkSize; //number of elements per chunk 
-    int nSigma;    //number of sigma away from mean
+    float nSigma;    //number of sigma away from mean
 };
 
 struct WRITER {

@@ -54,7 +54,7 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   writer->headerPS.fft_size=s->fft_size;
   writer->headerPS.ncuts=s->n_cuts;
   writer->headerRFI.chunkSize = pow(2, s->log_chunk_size);
-  writer->headerRFI.nSigma = s->n_sigma;
+  writer->headerRFI.nSigma = s->n_sigma_write;
   writer->lenPS=0.0;
   for (int i=0; i<s->n_cuts; i++) {
     writer->headerPS.nu_min[i]=s->nu_min[i];

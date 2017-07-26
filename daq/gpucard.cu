@@ -207,7 +207,6 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
       gc->isOutlier[i] = (int *)malloc(gc->bufsize/gc->chunkSize/gc->nchan * sizeof(int)); //number of chunks in 1 channel
   }
 
-  gc->nsigma = set->n_sigma;
   gc->avgOutliersPerChannel = (float *)malloc(gc->nchan*sizeof(float));
   memset(gc->avgOutliersPerChannel, 0, gc->nchan*sizeof(float));
   printf ("GPU ready.\n");
@@ -630,7 +629,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 	    
             //handle rfi
 	    for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++){
-		if(abs(statistic[csi][i] - tmean[ch]) > gc->nsigma * trms[ch]){
+		if(abs(statistic[csi][i] - tmean[ch]) > set->n_sigma_null* trms[ch]){
 		 o[ch]++;
 		 //mimic logical OR of flagged chunks in each channel
 		 if(gc->isOutlier[csi][i%2] == 0){//other channel didn't flag this chunk
@@ -644,7 +643,8 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 		     gc->outlierBuf[j] = buf[2*(i%2 * gc->chunkSize + j) + ch]; //deinterleave data in order to write out to file 
                  		 
 		 //Write outlier to file
-		 writerWriteRFI(wr, gc->outlierBuf, i%2 , ch);
+		 if(abs(statistic[csi][i] - tmean[ch]) > set->n_sigma_write* trms[ch])
+		 	writerWriteRFI(wr, gc->outlierBuf, i%2 , ch);
 	       }
 	   }
 	}
