@@ -10,6 +10,7 @@ THIS IS A COMPLETE PLACEHOLDER!
 #include "stdint.h"
 #include "settings.h"
 #include "writer.h"
+#include "terminal.h"
 
 #ifdef CUDA_COMPILE
 
@@ -62,6 +63,7 @@ struct GPUCARD {
   int8_t * outlierBuf; //holds outlier data to print to file
   int ** isOutlier; //array of flags detemining if chunk is outlier or not
   float * avgOutliersPerChannel; //average number of outlier chunks per channel per sample since program began running
+  TERMINALWRITER * twriter ; //write output to terminal
 };
 
 
