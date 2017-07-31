@@ -32,7 +32,8 @@ void terminalWriterAppend (TERMINALWRITER * t, bool newline, const char* fmt, ..
 	}
 	va_end(args);
     }
-}	
+}
+	
 void terminalWriterPrint(TERMINALWRITER * t){
         t->current = t->begin;
         printf("%s",t->begin);
@@ -42,22 +43,4 @@ void terminalWriterPrint(TERMINALWRITER * t){
         
 void terminalWriterCleanup(TERMINALWRITER * t){
 	free(t->begin);
-}
-
-
-int terminal_nlines=0;
-
-void tprintfn(const char* fmt, ...)
-{
-        va_list args;
-	    va_start(args,fmt);
-	        vprintf(fmt,args);
-		    printf("\n");
-		        terminal_nlines++;
-			    va_end(args);
-}
-
-void treturn() {
-      printf("\033[%iA",terminal_nlines);
-      terminal_nlines=0;
 }

@@ -513,7 +513,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
                 if (set->print_meanvar) {
                   // now find some statistic over subsamples of samples
                   uint32_t bs=gc->bufsize;
-                  uint32_t step= gc->bufsize/(32768);
+                  uint32_t step=gc->bufsize/(32768);
                   float NSub=bs/step; // number of subsamples to take
                   float m1=0.,m2=0.,v1=0.,v2=0.;
                   for (int i=0; i<bs; i+=step) { // take them in steps of step
