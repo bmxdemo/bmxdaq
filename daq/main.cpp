@@ -19,6 +19,7 @@ Anze Slosar, anze@bnl.gob
 #include <string.h>
 #include <stdlib.h>
 
+#define MAX_TERM_CHARACTERS = 1000 //maximum number of characters needed for terminal buffer
 
 /*
 **************************************************************************
@@ -48,7 +49,7 @@ int main(int argc,char **argv)
   if (!settings.dont_process) gpuCardInit(&gcard,&settings);
   if (settings.fg_nfreq) freqGenInit(&fgen, &writer, &settings);
   writerInit(&writer,&settings);
-
+  
   //work
   digiWorkLoop(&dcard, &gcard, &settings, &fgen, &writer);
   //shutdown

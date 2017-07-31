@@ -15,7 +15,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
-
+#include <algorithm>
+#include <chrono>
 /*
 **************************************************************************
 szTypeToName: doing name translation
@@ -142,23 +143,30 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
   } else {
     // Filling buffer
     printf ("Filling Fake buffer...\n");
-    int8_t ch1lu[64], ch2lu[64];
-    for(int i=0; i<64; i++) {
-      ch1lu[i]=-1;//int(20*cos(2*2*M_PI*i/64)+10*sin(2*M_PI*i/64));
-      ch2lu[i]=i;//31+i;
+    //int8_t ch1lu[2*16384], ch2lu[16384];
+    int8_t * ch1lu = (int8_t *) malloc(pow(2,27));
+    memset(ch1lu, 1, pow(2,26));
+    memset(ch1lu + (uint32_t)pow(2,26), 2, pow(2,26));
+    for(uint32_t i=0; i<pow(2,26); i++) {
+      ch1lu[i]=1;//int(20*cos(2*2*M_PI*i/64)+10*sin(2*M_PI*i/64));
+      ch1lu[uint32_t(pow(2,26)+i)]=2;//31+i;
     }
+    printf("hi");
+    //unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    //shuffle (ch1lu, ch1lu+uint32_t(pow(2,2)), std::default_random_engine(seed));
+
     int i=0;
     int32_t s=card->lBufferSize;
     int8_t *data=(int8_t*) card->pnData;
     printf ("buffer size=%i\n",s);
     for (int32_t k=0; k<s-1; k+=2) {
       data[k]=ch1lu[i];
-      data[k+1]=ch2lu[i];
+      data[k+1]=ch1lu[i];
       i+=1;
-      if (i==64) i=0;
+      //if (i==2*16384) i=0;
     }
+    free(ch1lu); 
   }
- 
   printf ("Digitizer card and buffer ready.\n");
 
 }
@@ -195,7 +203,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
   while (1) {
     clock_gettime(CLOCK_REALTIME, &t1);
     float dt=deltaT(tSim,t1);
-    tprintfn ("Cycle taking %fs, hope for < %fs",dt, towait);
+    //tprintfn ("Cycle taking %fs, hope for < %fs",dt, towait);
     if (set->simulate_digitizer) {
       lPCPos = dc->lNotifySize*sim_ofs;
       sim_ofs = (sim_ofs+1)%set->buf_mult;
@@ -225,8 +233,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
       {
 	clock_gettime(CLOCK_REALTIME, &timeNow);
 	double accum = deltaT(timeStart, timeNow);
-	tprintfn("Time: %fs; Status:%i; Pos:%08x; digitizer buffer fill %i/1000   ", 
-	       accum, lStatus, lPCPos,fill);
+	tprintfn("Time: %fs; Status:%i; Pos:%08x; digitizer buffer fill %i/1000   ", accum, lStatus, lPCPos,fill);
 
 
 	int8_t* bufstart=((int8_t*)dc->pnData+lPCPos);
@@ -235,6 +242,8 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 	else{
 	    gpuProcessBuffer(gc,bufstart,w,set);
 	}
+
+	treturn();
 
 	// tell driver we're done
 	if (!set->simulate_digitizer)

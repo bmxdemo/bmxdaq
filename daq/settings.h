@@ -38,7 +38,8 @@ struct SETTINGS {
   uint32_t fft_avg[MAXCUTS]; // how many bins to average over
   int buf_mult; // buffer multiplier, we allocate
                 //buf_mult*fft_size for transfer
-  //
+  
+  //cuda settings
   int cuda_streams; // number of cuda streams
   int cuda_threads; // number of cuda threads
 
@@ -47,10 +48,12 @@ struct SETTINGS {
   char rfi_output_pattern[MAXCHAR];
   int save_every;
   
-  // printout options
+  //console printout options
+  int print_every; //print output to console every nth sample (with small FFT size, printing too often gets hard to read)
   int print_meanvar;
   int print_maxp;
   
+
   // "derived" quantities for passing
   int pssize[MAXCUTS];
 

@@ -4,6 +4,7 @@
 #include "gpucard.h"
 #include "freqgen.h"
 #include "writer.h"
+#include "terminal.h"
 #include "spcm_examples/c_cpp/c_header/dlltyp.h"
 #include "spcm_examples/c_cpp/c_header/regs.h"
 #include "spcm_examples/c_cpp/c_header/spcerr.h"
