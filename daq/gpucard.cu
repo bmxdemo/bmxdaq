@@ -195,7 +195,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   gc->cabsMax = (cufftReal **) malloc(Nb*sizeof(cufftReal*));
   gc->isOutlier = (int **)malloc(Nb*sizeof(int*));
   gc->outlierBuf = (int8_t * )malloc(gc->chunkSize);
-  gc->twriter = (TERMINALWRITER * )malloc(Nb * sizeof(TERMINALWRITER));  
+  
   for(int i=0; i<Nb; i++){
       CHK(cudaMalloc(&gc->cmean[i], numBlocks*sizeof(cufftReal)));
       CHK(cudaMallocHost(&gc->mean[i], gc->bufsize/gc->chunkSize*sizeof(cufftReal)));
@@ -205,7 +205,6 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
       CHK(cudaMalloc(&gc->cabsMax[i], numBlocks*sizeof(cufftReal)));
       CHK(cudaMallocHost(&gc->absMax[i], gc->bufsize/gc->chunkSize*sizeof(cufftReal)));
       gc->isOutlier[i] = (int *)malloc(gc->bufsize/gc->chunkSize/gc->nchan * sizeof(int)); //number of chunks in 1 channel
-      terminalWriterInit(&gc->twriter[i], 1000);
   }
 
   gc->avgOutliersPerChannel = (float *)malloc(gc->nchan*sizeof(float));
@@ -472,23 +471,23 @@ __global__ void ps_X_reduce(cufftComplex *fftsA, cufftComplex *fftsB,
 } 
 
 //Print the elapsed time between 2 cuda events
-void printDt (GPUCARD *gc, cudaEvent_t cstart, cudaEvent_t cstop, float & total) {
+void printDt (cudaEvent_t cstart, cudaEvent_t cstop, float & total) {
   float gpu_time;
   CHK(cudaEventElapsedTime(&gpu_time, cstart, cstop));
-  terminalWriterAppend(&gc->twriter[gc->fstream], false, " %3.2fms ", gpu_time);
+  printf (" %3.2fms ", gpu_time);
   total +=gpu_time;
 }
 
-void printTiming(GPUCARD *gc) {
+void printTiming(GPUCARD *gc, int i) {
   float totalTime = 0;
-  terminalWriterAppend(&gc->twriter[gc->fstream], false, "GPU timing (copy/floatize/RFI/fft/post/copyback): ", false);
-  printDt (gc, gc->eStart[gc->fstream], gc->eDoneCopy[gc->fstream], totalTime);
-  printDt (gc, gc->eDoneCopy[gc->fstream], gc->eDoneFloatize[gc->fstream], totalTime);
-  printDt (gc, gc->eDoneFloatize[gc->fstream], gc->eDoneRFI[gc->fstream], totalTime);
-  printDt (gc, gc->eDoneRFI[gc->fstream], gc->eDoneFFT[gc->fstream], totalTime);
-  printDt (gc, gc->eDoneFFT[gc->fstream], gc->eDonePost[gc->fstream], totalTime);
-  printDt (gc, gc->eBeginCopyBack[gc->fstream], gc->eDoneCopyBack[gc->fstream], totalTime);
-  terminalWriterAppend (&gc->twriter[gc->fstream], true,  " total: %3.2f ", totalTime);
+  printf ("GPU timing (copy/floatize/RFI/fft/post/copyback): ");
+  printDt (gc->eStart[i], gc->eDoneCopy[i], totalTime);
+  printDt (gc->eDoneCopy[i], gc->eDoneFloatize[i], totalTime);
+  printDt (gc->eDoneFloatize[i], gc->eDoneRFI[i], totalTime);
+  printDt (gc->eDoneRFI[i], gc->eDoneFFT[i], totalTime);
+  printDt (gc->eDoneFFT[i], gc->eDonePost[i], totalTime);
+  printDt (gc->eBeginCopyBack[i], gc->eDoneCopyBack[i], totalTime);
+  tprintfn (" total: %3.2f ", totalTime);
 }
 
 
@@ -500,16 +499,22 @@ void printTiming(GPUCARD *gc) {
 //	set: settings
 bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
     //streamed version
+    bool deleteLinesInConsole = false;
    //Check if other streams are finished and proccess the finished ones in order (i.e. print output to file)
    while(gc->active_streams > 0){
 	if(cudaEventQuery(gc->eDonePost[gc->fstream])==cudaSuccess){
+                if(deleteLinesInConsole) 
+		    for(int i=0; i<4; i++){
+			printf("\33[2K"); //delete line in console
+			treturn(1); //move cursor up a line;
+		    }
 	        //print time and write to file
                 cudaEventRecord(gc->eBeginCopyBack[gc->fstream], gc->streams[gc->fstream]);
 		CHK(cudaMemcpyAsync(gc->outps,gc->coutps[gc->fstream], gc->tot_pssize*sizeof(float), cudaMemcpyDeviceToHost, gc->streams[gc->fstream]));
                 cudaEventRecord(gc->eDoneCopyBack[gc->fstream], gc->streams[gc->fstream]);
                 //cudaThreadSynchronize();
 		cudaEventSynchronize(gc->eDoneCopyBack[gc->fstream]);
-		printTiming(gc);
+		printTiming(gc,gc->fstream);
                 if (set->print_meanvar) {
                   // now find some statistic over subsamples of samples
                   uint32_t bs=gc->bufsize;
@@ -524,7 +529,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
                   }
                   m1/=NSub; v1=sqrt(v1/NSub-m1*m1); //mean and variance
                   m2/=NSub; v2=sqrt(v2/NSub-m2*m2);
-                  terminalWriterAppend (&gc->twriter[gc->fstream], true,  "CH1 mean/rms: %f %f   CH2 mean/rms: %f %f   ",m1,v1,m2,v2);
+                  tprintfn ("CH1 mean/rms: %f %f   CH2 mean/rms: %f %f   ",m1,v1,m2,v2);
                 }
                 if (set->print_maxp) {
                   // find max power in each cutout in each channel.
@@ -542,13 +547,14 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
             	float nustep=(set->nu_max[i]-set->nu_min[i])/(gc->pssize1[i]);
             	float ch1f=(numin+nustep*(0.5+ch1i))/1e6;
             	float ch2f=(numin+nustep*(0.5+ch2i))/1e6;
-            	terminalWriterAppend (&gc->twriter[gc->fstream],true,  "Peak pow (cutout %i): CH1 %f at %f MHz;   CH2 %f at %f MHz  ",i,log(ch1p),ch1f,log(ch2p),ch2f);
+            	tprintfn ("Peak pow (cutout %i): CH1 %f at %f MHz;   CH2 %f at %f MHz  ",i,log(ch1p),ch1f,log(ch2p),ch2f);
                   }
                 }
-		terminalWriterPrint(&gc->twriter[gc->fstream]);
                 writerWritePS(wr,gc->outps);
         	gc->fstream = (++gc->fstream)%(gc->nstreams);
                 gc->active_streams--;
+		
+		deleteLinesInConsole =  true;
 
  	}
         else 
@@ -596,7 +602,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 	getAbsMax(gc->cfbuf[csi], gc->absMax[csi], gc->cabsMax[csi], gc->bufsize, gc->chunkSize, cs, gc->devProp->maxThreadsPerBlock); 
 
         clock_gettime(CLOCK_REALTIME, &now);
-	//terminalWriterAppend(&gc->twriter[csi], "Time after kernel calls: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
+	//tprintfn("Time after kernel calls: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
 
 
 	cufftDoubleReal tmean[2]={0}, tsqMean[2]={0}, tvar[2], trms[2]; //for 2 channels. Note: double precision is neccesary or results will be incorrect!
@@ -608,7 +614,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
         CHK(cudaStreamSynchronize(cs));
 
         clock_gettime(CLOCK_REALTIME, &now);
-	//terminalWriterAppend(&gc->twriter[csi], "Time after synchronize stream: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
+	//tprintfn("Time after synchronize stream: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
 	
 	for(int ch=0; ch<2; ch++){ //for each channel
 
@@ -643,7 +649,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 	   }
 	}
         clock_gettime(CLOCK_REALTIME, &now);
-	//terminalWriterAppend(&gc->twriter[csi], "Time after finished writing: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
+	//tprintfn("Time after finished writing: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
 
 
 	//calculate approximate average of outliers per channel per sample (approximate because using wr->counter which might be a bit behind)
@@ -651,11 +657,11 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
         for(int i=0; i <gc->nchan; i++)
 	    gc->avgOutliersPerChannel[i]= (gc->avgOutliersPerChannel[i]*n + o[i])/(n+1);
 
-	terminalWriterAppend(&gc->twriter[csi], true, " ");
-	terminalWriterAppend(&gc->twriter[csi], true, "RFI analysis: ");
-	terminalWriterAppend(&gc->twriter[csi], true, "CH1 mean/var/rms: %f %f %f CH2 mean/var/rms: %f %f %f", tmean[0], tvar[0], trms[0], tmean[1], tvar[1], trms[1]);
-	terminalWriterAppend(&gc->twriter[csi], true, "CH1 outliers: %d CH2 outliers: %d", o[0], o[1]); 
-	terminalWriterAppend(&gc->twriter[csi], true, "CH1 average outliers: %f CH2 average outliers: %f", gc->avgOutliersPerChannel[0], gc->avgOutliersPerChannel[1]); 
+	tprintfn(" ");
+	tprintfn("RFI analysis: ");
+	tprintfn("CH1 mean/var/rms: %f %f %f CH2 mean/var/rms: %f %f %f", tmean[0], tvar[0], trms[0], tmean[1], tvar[1], trms[1]);
+	tprintfn("CH1 outliers: %d CH2 outliers: %d", o[0], o[1]); 
+	tprintfn("CH1 average outliers: %f CH2 average outliers: %f", gc->avgOutliersPerChannel[0], gc->avgOutliersPerChannel[1]); 
     }
     cudaEventRecord(gc->eDoneRFI[csi],cs);
 

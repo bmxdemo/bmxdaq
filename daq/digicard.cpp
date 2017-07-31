@@ -145,7 +145,7 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
     int8_t ch1lu[64], ch2lu[64];
     for(int i=0; i<64; i++) {
       ch1lu[i]=-1;//int(20*cos(2*2*M_PI*i/64)+10*sin(2*M_PI*i/64));
-      ch2lu[i]=i;//31+i;
+      ch2lu[i]=-1;//31+i;
     }
     int i=0;
     int32_t s=card->lBufferSize;
@@ -254,6 +254,8 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 	// break if sufficient number of samples
 	if ((++sample_count) == set->nsamples) break;
 
+	// return terminal cursor
+	treturn();
       }
   }
     
