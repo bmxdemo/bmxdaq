@@ -80,11 +80,12 @@ void writerWritePS (WRITER *writer, float* ps) {
   writer->counter++;
 }
 
-void writerWriteRFI(WRITER * writer, int8_t * outlier, int chunk, int channel){
+void writerWriteRFI(WRITER * writer, int8_t * outlier, int chunk, int channel, float nSigma){
   maybeReOpenFile(writer);
   fwrite(&writer->counter, sizeof(int), 1, writer->fRFI);
   fwrite(&chunk, sizeof(int), 1, writer->fRFI);
   fwrite(&channel, sizeof(int), 1, writer->fRFI);
+  fwrite(&nSigma, sizeof(float), 1, writer->fRFI);
   fwrite (outlier, sizeof(int8_t), writer->lenRFI, writer->fRFI);
   fflush(writer->fRFI);
 }

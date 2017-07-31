@@ -629,7 +629,8 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 	    
             //handle rfi
 	    for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++){
-		if(abs(statistic[csi][i] - tmean[ch]) > set->n_sigma_null* trms[ch]){
+		float nSigma = abs(statistic[csi][i] - tmean[ch])/trms[ch]; //number of standard deviations away from mean
+		if(nSigma > set->n_sigma_null){
 		 o[ch]++;
 		 //mimic logical OR of flagged chunks in each channel
 		 if(gc->isOutlier[csi][i%2] == 0){//other channel didn't flag this chunk
@@ -643,8 +644,8 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 		     gc->outlierBuf[j] = buf[2*(i%2 * gc->chunkSize + j) + ch]; //deinterleave data in order to write out to file 
                  		 
 		 //Write outlier to file
-		 if(abs(statistic[csi][i] - tmean[ch]) > set->n_sigma_write* trms[ch])
-		 	writerWriteRFI(wr, gc->outlierBuf, i%2 , ch);
+		 if(nSigma > set->n_sigma_write)
+		 	writerWriteRFI(wr, gc->outlierBuf, i%2 , ch, nSigma);
 	       }
 	   }
 	}
