@@ -72,8 +72,9 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   maybeReOpenFile(writer,true);
 }
 
-void writerWritePS (WRITER *writer, float* ps) {
+void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled) {
   maybeReOpenFile(writer);
+  fwrite(numOutliersNulled, sizeof(int), writer->headerPS.nChannels, writer->fPS);
   fwrite (ps, sizeof(float), writer->lenPS, writer->fPS);
   fwrite (&writer->tone_freq, sizeof(float), 1, writer->fPS);
   fflush(writer->fPS);

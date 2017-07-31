@@ -195,7 +195,8 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   gc->cabsMax = (cufftReal **) malloc(Nb*sizeof(cufftReal*));
   gc->isOutlier = (int **)malloc(Nb*sizeof(int*));
   gc->outlierBuf = (int8_t * )malloc(gc->chunkSize);
-  
+  gc->numOutliersNulled = (int **)malloc(Nb * sizeof(int *));
+
   for(int i=0; i<Nb; i++){
       CHK(cudaMalloc(&gc->cmean[i], numBlocks*sizeof(cufftReal)));
       CHK(cudaMallocHost(&gc->mean[i], gc->bufsize/gc->chunkSize*sizeof(cufftReal)));
@@ -205,6 +206,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
       CHK(cudaMalloc(&gc->cabsMax[i], numBlocks*sizeof(cufftReal)));
       CHK(cudaMallocHost(&gc->absMax[i], gc->bufsize/gc->chunkSize*sizeof(cufftReal)));
       gc->isOutlier[i] = (int *)malloc(gc->bufsize/gc->chunkSize/gc->nchan * sizeof(int)); //number of chunks in 1 channel
+      gc->numOutliersNulled[i] = (int *)malloc(gc->nchan * sizeof(int));
   }
 
   gc->avgOutliersPerChannel = (float *)malloc(gc->nchan*sizeof(float));
@@ -550,7 +552,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
             	tprintfn ("Peak pow (cutout %i): CH1 %f at %f MHz;   CH2 %f at %f MHz  ",i,log(ch1p),ch1f,log(ch2p),ch2f);
                   }
                 }
-                writerWritePS(wr,gc->outps);
+                writerWritePS(wr,gc->outps, gc->numOutliersNulled[gc->fstream]);
         	gc->fstream = (++gc->fstream)%(gc->nstreams);
                 gc->active_streams--;
 		
@@ -593,9 +595,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 
     //RFI rejection       
     int numChunks = gc->bufsize/gc->chunkSize; //total number of chunks in all channels
-    int o[2] ={0}; //number of outliers per channel
     int outliersOR = 0; //number of outliers obtained by a logical OR on the arrays of outlier flags from the different channels
-    
     if(gc->nchan==2){//so far specific to 2 channels. Can generalize when know data format of 3 or 4 channels
 	getMeans(gc->cfbuf[csi], gc->mean[csi], gc->cmean[csi], gc->bufsize, gc->chunkSize, cs, gc->devProp->maxThreadsPerBlock); 
 	getMeansOfSquares(gc->cfbuf[csi], gc->sqMean[csi], gc->csqMean[csi], gc->bufsize, gc->chunkSize, cs, gc->devProp->maxThreadsPerBlock); 
@@ -617,6 +617,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 	//tprintfn("Time after synchronize stream: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
 	
 	for(int ch=0; ch<2; ch++){ //for each channel
+            gc->numOutliersNulled[csi][ch] = 0;    
 
 	    //calculate mean, variance, standard dev of the statistic over all chunks
 	    for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++){
@@ -631,7 +632,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 	    for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++){
 		float nSigma = abs(statistic[csi][i] - tmean[ch])/trms[ch]; //number of standard deviations away from mean
 		if(nSigma > set->n_sigma_null){
-		 o[ch]++;
+		 gc->numOutliersNulled[csi][ch]++;
 		 //mimic logical OR of flagged chunks in each channel
 		 if(gc->isOutlier[csi][i%2] == 0){//other channel didn't flag this chunk
 		 	gc->isOutlier[csi][i%2] = 1; //flag as outlier
@@ -656,12 +657,12 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 	//calculate approximate average of outliers per channel per sample (approximate because using wr->counter which might be a bit behind)
 	int n = wr->counter; 
         for(int i=0; i <gc->nchan; i++)
-	    gc->avgOutliersPerChannel[i]= (gc->avgOutliersPerChannel[i]*n + o[i])/(n+1);
+	    gc->avgOutliersPerChannel[i]= (gc->avgOutliersPerChannel[i]*n + gc->numOutliersNulled[csi][i])/(n+1);
 
 	tprintfn(" ");
 	tprintfn("RFI analysis: ");
 	tprintfn("CH1 mean/var/rms: %f %f %f CH2 mean/var/rms: %f %f %f", tmean[0], tvar[0], trms[0], tmean[1], tvar[1], trms[1]);
-	tprintfn("CH1 outliers: %d CH2 outliers: %d", o[0], o[1]); 
+	tprintfn("CH1 outliers: %d CH2 outliers: %d", gc->numOutliersNulled[csi][0], gc->numOutliersNulled[csi][1]); 
 	tprintfn("CH1 average outliers: %f CH2 average outliers: %f", gc->avgOutliersPerChannel[0], gc->avgOutliersPerChannel[1]); 
     }
     cudaEventRecord(gc->eDoneRFI[csi],cs);
@@ -691,8 +692,8 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 	  // note that pssize is the full *nchan pssize
       	  
 	  //calculate power spectra corrections due to nulling out chunks flagged as RFI
-	  float ch1Correction = numChunks/(numChunks - o[0]);  //correction for channel 1 power spectrum
-	  float ch2Correction = numChunks/(numChunks - o[1]);  //correction for channel 2 power spectrum
+	  float ch1Correction = numChunks/(numChunks - gc->numOutliersNulled[csi][0]);  //correction for channel 1 power spectrum
+	  float ch2Correction = numChunks/(numChunks - gc->numOutliersNulled[csi][1]);  //correction for channel 2 power spectrum
 	  float crossCorrection = numChunks/(numChunks - outliersOR); //correction for cross spectrum
 
 	  int psofs=0;

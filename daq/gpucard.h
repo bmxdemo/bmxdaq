@@ -62,6 +62,7 @@ struct GPUCARD {
   int8_t * outlierBuf; //holds outlier data to print to file
   int ** isOutlier; //array of flags detemining if chunk is outlier or not
   float * avgOutliersPerChannel; //average number of outlier chunks per channel per sample since program began running
+  int ** numOutliersNulled; //number of outliers nulled per channel
 };
 
 
