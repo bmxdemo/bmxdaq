@@ -43,7 +43,8 @@ struct SETTINGS {
   int cuda_threads; // number of cuda threads
 
   // output options
-  char output_pattern[MAXCHAR];
+  char ps_output_pattern[MAXCHAR];
+  char rfi_output_pattern[MAXCHAR];
   int save_every;
   
   // printout options
@@ -60,6 +61,13 @@ struct SETTINGS {
   char fg_port[MAXCHAR];
   float fg_freq[MAXFREQ];
   float fg_ampl[MAXFREQ];
+
+
+  //RFI rejection
+  int log_chunk_size; //log base 2 of chunk size to be used to collect RFI statistics
+  float n_sigma_null; //number of standard deviations used to determine outliers to null out
+  float n_sigma_write; //number of standard deviations used to determine outliers to write to file
+  bool null_RFI; //whether to null RFI chunks before performing FFT
 };
 
 // Fixed defines

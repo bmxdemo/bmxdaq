@@ -1,5 +1,6 @@
 #include "settings.h"
 #include "digicard.h"
+#include "digicardalloc.h"
 #include "gpucard.h"
 #include "terminal.h"
 #include "freqgen.h"
@@ -15,12 +16,12 @@
 #include <stdlib.h>
 #include <math.h>
 
-
 /*
 **************************************************************************
 szTypeToName: doing name translation
 **************************************************************************
 */
+
 
 char* szTypeToName (int32 lCardType)
     {
@@ -126,7 +127,7 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
   card->lBufferSize = card->lNotifySize*set->buf_mult;
     
   /// alocate buffer
-  card->pnData = (int16*) pvAllocMemPageAligned ((uint64) card->lBufferSize);
+  digiCardAlloc(card->pnData, card->lBufferSize);
   if (!card->pnData)
     {
       printf ("memory allocation failed\n");
@@ -143,8 +144,8 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
     printf ("Filling Fake buffer...\n");
     int8_t ch1lu[64], ch2lu[64];
     for(int i=0; i<64; i++) {
-      ch1lu[i]=int(20*cos(2*2*M_PI*i/64)+10*sin(2*M_PI*i/64));
-      ch2lu[i]=-31+i;
+      ch1lu[i]=-1;//int(20*cos(2*2*M_PI*i/64)+10*sin(2*M_PI*i/64));
+      ch2lu[i]=-1;//31+i;
     }
     int i=0;
     int32_t s=card->lBufferSize;
@@ -171,8 +172,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 
   printf ("\n\nStarting main loop\n");
   printf ("==========================\n");
-
-
+  
   uint32      dwError;
   int32       lStatus, lAvailUser, lPCPos, fill;
 
@@ -232,8 +232,9 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 	int8_t* bufstart=((int8_t*)dc->pnData+lPCPos);
 	if (set->dont_process) 
 	  tprintfn (" ** no GPU processing");
-	else
-	  gpuProcessBuffer(gc,bufstart,w,set);
+	else{
+	    gpuProcessBuffer(gc,bufstart,w,set);
+	}
 
 	// tell driver we're done
 	if (!set->simulate_digitizer)
@@ -268,6 +269,6 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 
 
 void digiCardCleanUp(DIGICARD *card, SETTINGS *set) {
-  vFreeMemPageAligned (card->pnData, (uint64) card->lBufferSize);
+  digiCardFree(card->pnData);
   if (!set->simulate_digitizer) spcm_vClose (card->hCard);
 }

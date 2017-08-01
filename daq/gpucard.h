@@ -11,11 +11,35 @@ THIS IS A COMPLETE PLACEHOLDER!
 #include "settings.h"
 #include "writer.h"
 
+#ifdef CUDA_COMPILE
+
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <cufft.h>
+
+#define CUFFT_REAL cufftReal
+#define CUFFT_COMPLEX cufftComplex
+#define CUDA_STREAM_T cudaStream_t
+#define CUDA_EVENT_T cudaEvent_t
+#define CUDA_DEVICE_PROP cudaDeviceProp
+
+#else
+
+#define CUFFT_REAL void
+#define CUFFT_COMPLEX void
+#define CUDA_STREAM_T void
+#define CUDA_EVENT_T void
+#define CUDA_DEVICE_PROP void
+
+#endif
+
+
 struct GPUCARD {
-  void **cbuf; // pointer to pointers of GPU sample buffer
-  void **cfbuf; // floats
-  void **cfft; // ffts
-  void **coutps; // output power spectra
+  CUDA_DEVICE_PROP * devProp; //gpu device properties  
+  int8_t **cbuf; // pointer to pointers of GPU sample buffer
+  CUFFT_REAL **cfbuf; // floats
+  CUFFT_COMPLEX **cfft; // ffts
+  float **coutps; // output power spectra
   float *outps;
   int nchan; // nchannels
   uint32_t fftsize; // fft size
@@ -29,12 +53,16 @@ struct GPUCARD {
   int threads; // threads to use
   int plan;
   int nstreams;
-  void *streams; // streams
+  CUDA_STREAM_T *streams; // streams
   int fstream, bstream; // front stream (oldest running), back stream (newest runnig);
   int active_streams; // really needed just at the beginning (when 0)
-  void *eStart, *eDoneCopy, *eDoneFloatize, *eDoneFFT, *eDonePost, *eDoneCopyBack; //events
-
-  
+  CUDA_EVENT_T *eStart, *eDoneCopy, *eDoneFloatize, *eDoneRFI,  *eDoneFFT, *eDonePost, *eBeginCopyBack, *eDoneCopyBack; //events
+  CUFFT_REAL ** mean, **cmean, **sqMean, **csqMean, **variance, **absMax, **cabsMax; //statistics for rfi rejection (mean, mean sum of squares, variance) 
+  int chunkSize; //size of chunk
+  int8_t * outlierBuf; //holds outlier data to print to file
+  int ** isOutlier; //array of flags detemining if chunk is outlier or not
+  float * avgOutliersPerChannel; //average number of outlier chunks per channel per sample since program began running
+  int ** numOutliersNulled; //number of outliers nulled per channel
 };
 
 

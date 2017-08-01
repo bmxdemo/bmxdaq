@@ -2,6 +2,7 @@
 #include "settings.h"
 #include "stdio.h"
 #include "time.h"
+#include <stdint.h>
 // character lengths
 #define MAXFNLEN 512
 // version of BMXHEADER structure to implement
@@ -24,18 +25,28 @@ struct BMXHEADER {
   int pssize[MAXCUTS];
 };
 
+struct RFIHEADER {
+    const char magic[8]=">>RFI<<";
+    int chunkSize; //number of elements per chunk 
+    float nSigma;    //number of sigma away from mean
+};
+
 struct WRITER {
-  char fname[MAXFNLEN];
-  int pslen; // full length of PS info
+  char fnamePS[MAXFNLEN], fnameRFI[MAXFNLEN];  //file names
+  uint32_t lenPS; // full length of PS info
+  uint32_t lenRFI; //length of outlier chunk
   int save_every; // how many minutes we save.
-  FILE* f;
+  FILE* fPS, *fRFI;
   bool reopen;
-  BMXHEADER header;
+  BMXHEADER headerPS;  //header for power spectra files
+  RFIHEADER headerRFI; //header for rfi files
   float tone_freq;
+  int counter; //number of PS written to current file
 };
 
 
 void writerInit(WRITER *writer, SETTINGS *set);
-void writerWritePS (WRITER *writer, float* ps);
+void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled);
+void writerWriteRFI(WRITER *writer, int8_t * outlier, int chunk, int channel, float nSigma);
 void writerCleanUp(WRITER *writer);
 

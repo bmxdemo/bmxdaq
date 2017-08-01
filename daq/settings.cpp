@@ -27,23 +27,27 @@ void init_settings(SETTINGS *s, char* fname) {
     s->ADC_range=1000;
     s->ext_clock_mode=0;
     s->buf_mult=8;
-    s->cuda_streams=1;
+    s->cuda_streams=2;
     s->cuda_threads=1024;
-    s->simulate_digitizer=0;
+    s->simulate_digitizer=1;
     s->dont_process=0;
     s->save_every=60;
     s->print_meanvar=1;
     s->print_maxp=0;
-    sprintf(s->output_pattern,"%%02d%%02d%%02d_%%02d%%02d.data");
+    sprintf(s->ps_output_pattern,"%%02d%%02d%%02d_%%02d%%02d.data");
+    sprintf(s->rfi_output_pattern,"%%02d%%02d%%02d_%%02d%%02d.outliers");
     s->fg_nfreq=0;
     s->fg_baudrate=9600;
     s->fg_switchevery=10;
     sprintf(s->fg_port,"ttyS0");
-
+    s->log_chunk_size = 20;
+    s->n_sigma_null = 3;
+    s->n_sigma_write = 3;
+    s->null_RFI = true;
     s->nsamples=0;
     s->wave_nbytes=0;
     sprintf(s->wave_fname,"wave.bin");
-    
+     
     if (fname) {
          FILE *fi;
 	 int n_lin,ii;
@@ -96,8 +100,10 @@ void init_settings(SETTINGS *s, char* fname) {
 	     s->n_cuts=atoi(s2);
 	   else if(!strcmp(s1,"save_every="))
 	     s->save_every=atoi(s2);
-	   else if(!strcmp(s1,"output_pattern="))
-	     strcpy(s->output_pattern,s2);
+	   else if(!strcmp(s1,"ps_output_pattern="))
+	     strcpy(s->ps_output_pattern,s2);
+	   else if(!strcmp(s1,"rfi_output_pattern="))
+	     strcpy(s->rfi_output_pattern,s2);
 	   else if(!strcmp(s1,"print_meanvar="))
 	     s->print_meanvar=atoi(s2);
 	   else if(!strcmp(s1,"print_maxp="))
@@ -114,6 +120,14 @@ void init_settings(SETTINGS *s, char* fname) {
 	     strcpy(s->wave_fname,s2);
 	   else if(!strcmp(s1,"wave_nbytes="))
 	     s->wave_nbytes=atoi(s2);
+	   else if(!strcmp(s1,"log_chunk_size="))
+	     s->log_chunk_size=atoi(s2);
+	   else if(!strcmp(s1,"null_RFI="))
+	     s->null_RFI=atoi(s2);
+	   else if(!strcmp(s1,"n_sigma_null="))
+	     s->n_sigma_null=atoi(s2);
+	   else if(!strcmp(s1,"n_sigma_write="))
+	     s->n_sigma_write=atoi(s2);
 	   else if(!strcmp(s1,"nsamples="))
 	     s->nsamples=atoi(s2);
 	   else found=false;
@@ -168,6 +182,11 @@ void init_settings(SETTINGS *s, char* fname) {
 	   }
 	 }
 	 fclose(fi);
+     }
+
+     if(s->n_sigma_null > s->n_sigma_write){
+	 printf("n_sigma_write needs to be greater or equal to n_sigma_null");
+	 exit(1);
      }
 }
 
