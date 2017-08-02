@@ -153,8 +153,8 @@ class BMXFile(object):
            arr = []
            for i in range(nsamples):
                arr.append(self.data[i]['chan' + str(n+1)+'_' + str(cut)][imin:imax])
-               arr[i] = np.reshape(arr[i],(-1, binSize )) #bin frequencies into groups of 4
-               arr[i] = np.mean(arr[i], axis = 1)  #average the 4
+               arr[i] = np.reshape(arr[i],(-1, binSize )) #bin frequencies
+               arr[i] = np.mean(arr[i], axis = 1)  #average the bins
    	   arr=np.array(arr)
            if(subtractMean):
                means = np.mean(arr, axis=0) #mean for each freq bin
