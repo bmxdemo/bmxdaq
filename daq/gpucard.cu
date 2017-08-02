@@ -32,6 +32,32 @@ static void HandleError( cudaError_t err,
 }
 #define CHK( err ) (HandleError( err, __FILE__, __LINE__ ))
 
+//Print GPU properties
+//inputs:
+//       prop: pointer to structure containing device properties
+//       dev: device number
+void printDeviceProperties(cudaDeviceProp * prop, int dev){
+    CHK(cudaGetDeviceProperties(prop, dev));
+    printf("\nGPU properties \n====================\n");
+    printf("Version number:                %d.%d\n",  prop->major, prop->minor);
+    printf("Name:                          %s\n",  prop->name);
+    printf("Total global memory:           %u\n",  prop->totalGlobalMem);
+    printf("Total shared memory per block: %u\n",  prop->sharedMemPerBlock);
+    printf("Total registers per block:     %d\n",  prop->regsPerBlock);
+    printf("Warp size:                     %d\n",  prop->warpSize);
+    printf("Maximum memory pitch:          %u\n",  prop->memPitch);
+    printf("Maximum threads per block:     %d\n",  prop->maxThreadsPerBlock);
+    for (int i = 0; i < 3; ++i)
+    printf("Maximum dimension %d of block:  %d\n", i, prop->maxThreadsDim[i]);
+    for (int i = 0; i < 3; ++i)
+    printf("Maximum dimension %d of grid:   %d\n", i, prop->maxGridSize[i]);
+    printf("Clock rate:                    %d\n",  prop->clockRate);
+    printf("Total constant memory:         %u\n",  prop->totalConstMem);
+    printf("Texture alignment:             %u\n",  prop->textureAlignment);
+    printf("Concurrent copy and execution: %s\n",  (prop->deviceOverlap ? "Yes" : "No"));
+    printf("Number of multiprocessors:     %d\n",  prop->multiProcessorCount);
+    printf("Kernel execution timeout:      %s\n\n",  (prop->kernelExecTimeoutEnabled ? "Yes" : "No"));
+}
 
 //Initialize instance of GPUCARD
 //Input:
@@ -40,31 +66,13 @@ static void HandleError( cudaError_t err,
 void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   
   //print out gpu device properties
-    gc->devProp = (cudaDeviceProp *)malloc(sizeof(cudaDeviceProp));
-    CHK(cudaGetDeviceProperties(gc->devProp, 0));
-  printf("\nGPU properties \n====================\n");
-  printf("Version number:                %d.%d\n",  gc->devProp->major, gc->devProp->minor);
-  printf("Name:                          %s\n",  gc->devProp->name);
-  printf("Total global memory:           %u\n",  gc->devProp->totalGlobalMem);
-  printf("Total shared memory per block: %u\n",  gc->devProp->sharedMemPerBlock);
-  printf("Total registers per block:     %d\n",  gc->devProp->regsPerBlock);
-  printf("Warp size:                     %d\n",  gc->devProp->warpSize);
-  printf("Maximum memory pitch:          %u\n",  gc->devProp->memPitch);
-  printf("Maximum threads per block:     %d\n",  gc->devProp->maxThreadsPerBlock);
-  for (int i = 0; i < 3; ++i)
-  printf("Maximum dimension %d of block:  %d\n", i, gc->devProp->maxThreadsDim[i]);
-  for (int i = 0; i < 3; ++i)
-  printf("Maximum dimension %d of grid:   %d\n", i, gc->devProp->maxGridSize[i]);
-  printf("Clock rate:                    %d\n",  gc->devProp->clockRate);
-  printf("Total constant memory:         %u\n",  gc->devProp->totalConstMem);
-  printf("Texture alignment:             %u\n",  gc->devProp->textureAlignment);
-  printf("Concurrent copy and execution: %s\n",  (gc->devProp->deviceOverlap ? "Yes" : "No"));
-  printf("Number of multiprocessors:     %d\n",  gc->devProp->multiProcessorCount);
-  printf("Kernel execution timeout:      %s\n\n",  (gc->devProp->kernelExecTimeoutEnabled ? "Yes" : "No"));
-
+  gc->devProp = (cudaDeviceProp *)malloc(sizeof(cudaDeviceProp));
+  printDeviceProperties(gc->devProp, 0);  
+  
   printf ("\n\nInitializing GPU\n");
   printf ("====================\n");
   printf ("Allocating GPU buffers\n");
+  
   int Nb=set->cuda_streams;
   gc->cbuf=(int8_t**)malloc(Nb*sizeof(int8_t*));
   gc->cfbuf=(cufftReal**)malloc(Nb*sizeof(cufftReal*));
