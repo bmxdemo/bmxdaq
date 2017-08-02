@@ -142,10 +142,10 @@ class BMXFile(object):
             plt.plot(self.freq[cut],y)
             plt.xlabel('freq [MHz] ' + n)
    
-    #waterfall plot of frequencies over time. Can either use log scale, or subtract off mean 
-    def plotWaterfall(self, fmin=None, fmax=None,nsamples=None, cut=0, binSize = 4, subtractMean = False, minmax=None):
+    #waterfall plot of frequencies over time. Can either use log scale, or subtract and divide off the mean 
+    def plotWaterfall(self, fmin=None, fmax=None, nsamples=None, cut=0, binSize = 4, subtractMean = False, minmax=None):
         if nsamples is  None:
-            nsamples = self.nSamples
+            nsamples = self.nSamples  #plot all samples in file
         imin,imax,fmin,fmax=self.f2iminmax(fmin,fmax,cut,binSize)
         
         for n in range(2):
@@ -161,9 +161,15 @@ class BMXFile(object):
    	       for j in range(nsamples):
    	           arr[j,:] -= means
                    arr[j,:] /=means
-               plt.imshow(arr, interpolation="nearest", vmin=-minmax,vmax=+minmax, aspect = "auto", extent=[fmin, fmax, nsamples*.122016, 0])
-           else: 
-                plt.imshow(arr, norm=colors.LogNorm(), interpolation="nearest" , aspect = "auto", extent=[fmin, fmax, nsamples*.122016, 0]) 
+	       if minmax is not None:
+		   vmin = -minmax
+		   vmax = minmax
+	       else:
+	           vmin = None
+	           vmax = None
+               plt.imshow(arr, interpolation="nearest", vmin=vmin,vmax=vmax, aspect = "auto", extent=[fmin, fmax, nsamples*self.deltaT, 0])
+           else:
+                plt.imshow(arr, norm=colors.LogNorm(), interpolation="nearest" , aspect = "auto", extent=[fmin, fmax, nsamples*self.deltaT, 0]) 
            plt.colorbar()
            plt.xlabel('freq [MHz] Channel ' + str(n+1))
            plt.ylabel('time [s]')
