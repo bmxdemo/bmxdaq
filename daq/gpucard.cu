@@ -73,11 +73,11 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   printf ("====================\n");
   printf ("Allocating GPU buffers\n");
   
-  int Nb=set->cuda_streams;
-  gc->cbuf=(int8_t**)malloc(Nb*sizeof(int8_t*));
-  gc->cfbuf=(cufftReal**)malloc(Nb*sizeof(cufftReal*));
-  gc->cfft=(cufftComplex**)malloc(Nb*sizeof(cufftComplex*));
-  gc->coutps=(float**)malloc(Nb*sizeof(float*));
+  int nStreams=set->cuda_streams;
+  gc->cbuf=(int8_t**)malloc(nStreams*sizeof(int8_t*));
+  gc->cfbuf=(cufftReal**)malloc(nStreams*sizeof(cufftReal*));
+  gc->cfft=(cufftComplex**)malloc(nStreams*sizeof(cufftComplex*));
+  gc->coutps=(float**)malloc(nStreams*sizeof(float*));
   int nchan=gc->nchan=1+(set->channel_mask==3);
   if ((nchan==2) and (FLOATIZE_X%2==1)) {
     printf ("Need FLOATIZE_X even for two channels\n");
@@ -128,7 +128,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     printf ("   Actual freq range: %f - %f MHz (edges!)\n",numin/1e6, numax/1e6);
     printf ("   # PS offset, #PS bins: %i %i\n",gc->ndxofs[i],gc->pssize1[i]);
   }
-  for (int i=0;i<Nb;i++) {
+  for (int i=0;i<nStreams;i++) {
     CHK(cudaMalloc(&gc->cbuf[i],bufsize));
     CHK(cudaMalloc(&gc->cfbuf[i], bufsize*sizeof(cufftReal)));
     CHK(cudaMalloc(&gc->cfft[i],transform_size*sizeof(cufftComplex)));
@@ -189,18 +189,18 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   int numThreads = min(gc->devProp->maxThreadsPerBlock, gc->chunkSize/OPS_PER_THREAD);
   int numBlocks = gc->bufsize/(numThreads * OPS_PER_THREAD);  //number of blocks needed for first kernel call in parallel reduction algorithms
   
-  gc->mean = (cufftReal **)malloc(Nb*sizeof(cufftReal*));
-  gc->cmean = (cufftReal **) malloc(Nb *sizeof(cufftReal*));
-  gc->sqMean = (cufftReal **)malloc(Nb*sizeof(cufftReal*));
-  gc->csqMean = (cufftReal **) malloc(Nb *sizeof(cufftReal*));
-  gc->variance = (cufftReal **)malloc(Nb*sizeof(cufftReal*));
-  gc->absMax = (cufftReal **) malloc(Nb*sizeof(cufftReal*));
-  gc->cabsMax = (cufftReal **) malloc(Nb*sizeof(cufftReal*));
-  gc->isOutlier = (int **)malloc(Nb*sizeof(int*));
+  gc->mean = (cufftReal **)malloc(nStreams*sizeof(cufftReal*));
+  gc->cmean = (cufftReal **) malloc(nStreams *sizeof(cufftReal*));
+  gc->sqMean = (cufftReal **)malloc(nStreams*sizeof(cufftReal*));
+  gc->csqMean = (cufftReal **) malloc(nStreams *sizeof(cufftReal*));
+  gc->variance = (cufftReal **)malloc(nStreams*sizeof(cufftReal*));
+  gc->absMax = (cufftReal **) malloc(nStreams*sizeof(cufftReal*));
+  gc->cabsMax = (cufftReal **) malloc(nStreams*sizeof(cufftReal*));
+  gc->isOutlier = (int **)malloc(nStreams*sizeof(int*));
   gc->outlierBuf = (int8_t * )malloc(gc->chunkSize);
-  gc->numOutliersNulled = (int **)malloc(Nb * sizeof(int *));
+  gc->numOutliersNulled = (int **)malloc(nStreams * sizeof(int *));
 
-  for(int i=0; i<Nb; i++){
+  for(int i=0; i<nStreams; i++){
       CHK(cudaMalloc(&gc->cmean[i], numBlocks*sizeof(cufftReal)));
       CHK(cudaMallocHost(&gc->mean[i], gc->bufsize/gc->chunkSize*sizeof(cufftReal)));
       CHK(cudaMalloc(&gc->csqMean[i], numBlocks*sizeof(cufftReal)));
