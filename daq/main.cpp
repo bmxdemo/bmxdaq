@@ -34,7 +34,7 @@ int main(int argc,char **argv)
   DIGICARD dcard;                         // digitizer CARD
   GPUCARD gcard;                          // GPU card
   FREQGEN fgen;
-
+  RFI rfi;                                //rfi stuff
   if(argc>=2) {
     char fname_ini[256];
     sprintf(fname_ini,"%s",argv[1]);
@@ -48,9 +48,10 @@ int main(int argc,char **argv)
   if (!settings.dont_process) gpuCardInit(&gcard,&settings);
   if (settings.fg_nfreq) freqGenInit(&fgen, &writer, &settings);
   writerInit(&writer,&settings);
+  rfiInit(&rfi, &settings, &gcard);
 
   //work
-  digiWorkLoop(&dcard, &gcard, &settings, &fgen, &writer);
+  digiWorkLoop(&dcard, &gcard, &settings, &fgen, &writer, &rfi);
   //shutdown
   digiCardCleanUp(&dcard, &settings);
   writerCleanUp(&writer);

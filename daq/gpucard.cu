@@ -9,6 +9,7 @@ CUDA PART
 #undef CUDA_COMPILE
 #include "terminal.h"
 #include "reduction.h"
+#include "rfi.h"
 #include <memory.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -184,36 +185,6 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   gc->bstream = -1; //newest stream
   gc->active_streams = 0; //number of streams currently running
   
-  //allocate memory for RFI statistics
-  gc->chunkSize = pow(2,set->log_chunk_size);
-  int numThreads = min(gc->devProp->maxThreadsPerBlock, gc->chunkSize/OPS_PER_THREAD);
-  int numBlocks = gc->bufsize/(numThreads * OPS_PER_THREAD);  //number of blocks needed for first kernel call in parallel reduction algorithms
-  
-  gc->mean = (cufftReal **)malloc(nStreams*sizeof(cufftReal*));
-  gc->cmean = (cufftReal **) malloc(nStreams *sizeof(cufftReal*));
-  gc->sqMean = (cufftReal **)malloc(nStreams*sizeof(cufftReal*));
-  gc->csqMean = (cufftReal **) malloc(nStreams *sizeof(cufftReal*));
-  gc->variance = (cufftReal **)malloc(nStreams*sizeof(cufftReal*));
-  gc->absMax = (cufftReal **) malloc(nStreams*sizeof(cufftReal*));
-  gc->cabsMax = (cufftReal **) malloc(nStreams*sizeof(cufftReal*));
-  gc->isOutlier = (int **)malloc(nStreams*sizeof(int*));
-  gc->outlierBuf = (int8_t * )malloc(gc->chunkSize);
-  gc->numOutliersNulled = (int **)malloc(nStreams * sizeof(int *));
-
-  for(int i=0; i<nStreams; i++){
-      CHK(cudaMalloc(&gc->cmean[i], numBlocks*sizeof(cufftReal)));
-      CHK(cudaMallocHost(&gc->mean[i], gc->bufsize/gc->chunkSize*sizeof(cufftReal)));
-      CHK(cudaMalloc(&gc->csqMean[i], numBlocks*sizeof(cufftReal)));
-      CHK(cudaMallocHost(&gc->sqMean[i], gc->bufsize/gc->chunkSize*sizeof(cufftReal)));
-      CHK(cudaMallocHost(&gc->variance[i], gc->bufsize/gc->chunkSize*sizeof(cufftReal))); //total number of chunks in all channels
-      CHK(cudaMalloc(&gc->cabsMax[i], numBlocks*sizeof(cufftReal)));
-      CHK(cudaMallocHost(&gc->absMax[i], gc->bufsize/gc->chunkSize*sizeof(cufftReal)));
-      gc->isOutlier[i] = (int *)malloc(gc->bufsize/gc->chunkSize/gc->nchan * sizeof(int)); //number of chunks in 1 channel
-      gc->numOutliersNulled[i] = (int *)malloc(gc->nchan * sizeof(int));
-  }
-
-  gc->avgOutliersPerChannel = (float *)malloc(gc->nchan*sizeof(float));
-  memset(gc->avgOutliersPerChannel, 0, gc->nchan*sizeof(float));
   printf ("GPU ready.\n");
 
 }
@@ -249,11 +220,6 @@ void printDt (cudaEvent_t cstart, cudaEvent_t cstop, float & total) {
   total +=gpu_time;
 }
 
-
-cufftDoubleReal variance(cufftDoubleReal ssquare, cufftDoubleReal mean){
-        return ssquare - pow(mean, 2); 
-}
-
 void printTiming(GPUCARD *gc, int i) {
   float totalTime = 0;
   printf ("GPU timing (copy/floatize/RFI/fft/post/copyback): ");
@@ -272,8 +238,9 @@ void printTiming(GPUCARD *gc, int i) {
 //	gc: graphics card
 //      buf: data from digitizer
 //      wr: writer to write out power spectra and outliers to files
+//      rfi: structure containing rfi settings and memory for rfi statistics
 //	set: settings
-bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
+bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS *set) {
     //streamed version
     bool deleteLinesInConsole = false;
    //Check if other streams are finished and proccess the finished ones in order (i.e. print output to file)
@@ -326,7 +293,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
             	tprintfn ("Peak pow (cutout %i): CH1 %f at %f MHz;   CH2 %f at %f MHz  ",i,log(ch1p),ch1f,log(ch2p),ch2f);
                   }
                 }
-                writerWritePS(wr,gc->outps, gc->numOutliersNulled[gc->fstream]);
+                writerWritePS(wr,gc->outps, rfi->numOutliersNulled[gc->fstream]);
         	gc->fstream = (++gc->fstream)%(gc->nstreams);
                 gc->active_streams--;
 		
@@ -338,9 +305,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
         
     }
 
-    
     int csi = gc->bstream = (++gc->bstream)%(gc->nstreams); //add new stream
-
     if(gc->active_streams == gc->nstreams){ //if no empty streams
     	printf("No free streams.\n");
         if(gc->nstreams > 1) //first few packets come in close together (<122 ms), so for 1 stream, we need to queue them, and not just quit the program
@@ -363,83 +328,9 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
       floatize_2chan<<<blocksPerGrid, threadsPerBlock, 0, cs>>>(gc->cbuf[csi],gc->cfbuf[csi],&(gc->cfbuf[csi][gc->fftsize]));
     cudaEventRecord(gc->eDoneFloatize[csi], cs);
     
-
-    struct timespec start, now;
-    clock_gettime(CLOCK_REALTIME, &start);
-
-    //RFI rejection       
-    int numChunks = gc->bufsize/gc->chunkSize; //total number of chunks in all channels
-    int outliersOR = 0; //number of outliers obtained by a logical OR on the arrays of outlier flags from the different channels
-    if(gc->nchan==2){//so far specific to 2 channels. Can generalize when know data format of 3 or 4 channels
-	getMeans(gc->cfbuf[csi], gc->mean[csi], gc->cmean[csi], gc->bufsize, gc->chunkSize, cs, gc->devProp->maxThreadsPerBlock); 
-	getMeansOfSquares(gc->cfbuf[csi], gc->sqMean[csi], gc->csqMean[csi], gc->bufsize, gc->chunkSize, cs, gc->devProp->maxThreadsPerBlock); 
-	getAbsMax(gc->cfbuf[csi], gc->absMax[csi], gc->cabsMax[csi], gc->bufsize, gc->chunkSize, cs, gc->devProp->maxThreadsPerBlock); 
-
-        clock_gettime(CLOCK_REALTIME, &now);
-	//tprintfn("Time after kernel calls: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
-
-
-	cufftDoubleReal tmean[2]={0}, tsqMean[2]={0}, tvar[2], trms[2]; //for 2 channels. Note: double precision is neccesary or results will be incorrect!
-	memset(gc->isOutlier[csi], 0, numChunks/gc->nchan*sizeof(int)); //reset outlier flags to 0
-	
-	cufftReal ** statistic = gc->variance; //desired statistic(s) to use to determine outliers
-        
-	//synchronize so don't use memory before GPU finishes copying it to the CPU
-        CHK(cudaStreamSynchronize(cs));
-
-        clock_gettime(CLOCK_REALTIME, &now);
-	//tprintfn("Time after synchronize stream: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
-	
-	for(int ch=0; ch<2; ch++){ //for each channel
-            gc->numOutliersNulled[csi][ch] = 0;    
-
-	    //calculate mean, variance, standard dev of the statistic over all chunks
-	    for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++){
-		gc->variance[csi][i] = variance(gc->sqMean[csi][i], gc->mean[csi][i]);
-		tmean[ch] += statistic[csi][i]/(numChunks/2);
-		tsqMean[ch]+=pow(statistic[csi][i], 2)/(numChunks/2);
-	    }
-	    tvar[ch] = variance(tsqMean[ch], tmean[ch]);
-	    trms[ch] = sqrt(tvar[ch]);
-	    
-            //handle rfi
-	    for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++){
-		float nSigma = abs(statistic[csi][i] - tmean[ch])/trms[ch]; //number of standard deviations away from mean
-		if(nSigma > set->n_sigma_null){
-		 gc->numOutliersNulled[csi][ch]++;
-		 //mimic logical OR of flagged chunks in each channel
-		 if(gc->isOutlier[csi][i%2] == 0){//other channel didn't flag this chunk
-		 	gc->isOutlier[csi][i%2] = 1; //flag as outlier
-			outliersOR++;
-		 }
-		
-		 if(set->null_RFI) CHK(cudaMemsetAsync(&(gc->cfbuf[csi][i*gc->chunkSize]), 0, gc->chunkSize, cs)); //zero out outliers for FFT
-		 
-		 for(uint32_t j =0; j<gc->chunkSize; j++)
-		     gc->outlierBuf[j] = buf[2*(i%2 * gc->chunkSize + j) + ch]; //deinterleave data in order to write out to file 
-                 		 
-		 //Write outlier to file
-		 if(nSigma > set->n_sigma_write)
-		 	writerWriteRFI(wr, gc->outlierBuf, i%2 , ch, nSigma);
-	       }
-	   }
-	}
-        clock_gettime(CLOCK_REALTIME, &now);
-	//tprintfn("Time after finished writing: %f", (now.tv_sec-start.tv_sec)+(now.tv_nsec - start.tv_nsec)/1e9);
-
-
-	//calculate approximate average of outliers per channel per sample (approximate because using wr->counter which might be a bit behind)
-	int n = wr->counter; 
-        for(int i=0; i <gc->nchan; i++)
-	    gc->avgOutliersPerChannel[i]= (gc->avgOutliersPerChannel[i]*n + gc->numOutliersNulled[csi][i])/(n+1);
-
-	tprintfn(" ");
-	tprintfn("RFI analysis: ");
-	tprintfn("CH1 mean/var/rms: %f %f %f CH2 mean/var/rms: %f %f %f", tmean[0], tvar[0], trms[0], tmean[1], tvar[1], trms[1]);
-	tprintfn("CH1 outliers: %d CH2 outliers: %d", gc->numOutliersNulled[csi][0], gc->numOutliersNulled[csi][1]); 
-	tprintfn("CH1 average outliers: %f CH2 average outliers: %f", gc->avgOutliersPerChannel[0], gc->avgOutliersPerChannel[1]); 
-    }
-    cudaEventRecord(gc->eDoneRFI[csi],cs);
+    //RFI rejection 
+    if(gc->nchan == 2)
+	detectRFI(rfi, gc, csi, wr);
 
     //perform fft
     int status = cufftSetStream(gc->plan, cs);
@@ -464,11 +355,12 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, SETTINGS *set) {
 	  // note we need to take into account the tricky N/2+1 FFT size while we do N/2 binning
 	  // pssize+2 = transformsize+1
 	  // note that pssize is the full *nchan pssize
-      	  
+	  
 	  //calculate power spectra corrections due to nulling out chunks flagged as RFI
-	  float ch1Correction = numChunks/(numChunks - gc->numOutliersNulled[csi][0]);  //correction for channel 1 power spectrum
-	  float ch2Correction = numChunks/(numChunks - gc->numOutliersNulled[csi][1]);  //correction for channel 2 power spectrum
-	  float crossCorrection = numChunks/(numChunks - outliersOR); //correction for cross spectrum
+	  int numChunks = gc->bufsize/rfi->chunkSize;
+	  float ch1Correction = numChunks/(numChunks - rfi->numOutliersNulled[csi][0]);  //correction for channel 1 power spectrum
+	  float ch2Correction = numChunks/(numChunks - rfi->numOutliersNulled[csi][1]);  //correction for channel 2 power spectrum
+	  float crossCorrection = numChunks/(numChunks - rfi->outliersOR); //correction for cross spectrum
 
 	  int psofs=0;
 	  for (int i=0; i<gc->ncuts; i++) {

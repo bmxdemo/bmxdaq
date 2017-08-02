@@ -168,7 +168,7 @@ float deltaT (timespec t1,timespec t2) {
 	  + ( t2.tv_nsec - t1.tv_nsec )/ 1e9;
 }
 
-void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRITER *w) {
+void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRITER *w, RFI * rfi) {
 
   printf ("\n\nStarting main loop\n");
   printf ("==========================\n");
@@ -233,7 +233,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 	if (set->dont_process) 
 	  tprintfn (" ** no GPU processing");
 	else{
-	    gpuProcessBuffer(gc,bufstart,w,set);
+	    gpuProcessBuffer(gc,bufstart,w,rfi, set);
 	}
 
 	// tell driver we're done

@@ -33,6 +33,7 @@ THIS IS A COMPLETE PLACEHOLDER!
 
 #endif
 
+struct RFI; //forward declaration
 
 struct GPUCARD {
   CUDA_DEVICE_PROP * devProp; //gpu device properties  
@@ -57,16 +58,10 @@ struct GPUCARD {
   int fstream, bstream; // front stream (oldest running), back stream (newest runnig);
   int active_streams; // really needed just at the beginning (when 0)
   CUDA_EVENT_T *eStart, *eDoneCopy, *eDoneFloatize, *eDoneRFI,  *eDoneFFT, *eDonePost, *eBeginCopyBack, *eDoneCopyBack; //events
-  CUFFT_REAL ** mean, **cmean, **sqMean, **csqMean, **variance, **absMax, **cabsMax; //statistics for rfi rejection (mean, mean sum of squares, variance) 
-  int chunkSize; //size of chunk
-  int8_t * outlierBuf; //holds outlier data to print to file
-  int ** isOutlier; //array of flags detemining if chunk is outlier or not
-  float * avgOutliersPerChannel; //average number of outlier chunks per channel per sample since program began running
-  int ** numOutliersNulled; //number of outliers nulled per channel
 };
 
 
 extern "C" {
   void gpuCardInit (GPUCARD *gcard, SETTINGS *set);
-  bool gpuProcessBuffer(GPUCARD *gcard, int8_t *buf, WRITER *w, SETTINGS *set);
+  bool gpuProcessBuffer(GPUCARD *gcard, int8_t *buf, WRITER *w, RFI * rfi, SETTINGS *set);
 }
