@@ -18,117 +18,209 @@ static void HandleError( cudaError_t err,
 }
 #define CHK( err ) (HandleError( err, __FILE__, __LINE__ ))
 
-
-
-cufftDoubleReal variance(cufftDoubleReal ssquare, cufftDoubleReal mean){
+cufftDoubleReal var(cufftDoubleReal ssquare, cufftDoubleReal mean){
         return ssquare - pow(mean, 2);
 }
 
-void rfiInit(RFI * rfi, SETTINGS * s, GPUCARD *gc){
-  rfi->nSigmaNull = s->n_sigma_null;
-  rfi->nSigmaWrite = s->n_sigma_write;
-  rfi->chunkSize = pow(2, s->log_chunk_size);
-  int numThreads = min(gc->devProp->maxThreadsPerBlock, rfi->chunkSize/OPS_PER_THREAD);
-  int numBlocks = gc->bufsize/(numThreads * OPS_PER_THREAD);  //number of blocks needed for first kernel call in parallel reduction algorithms
+
+STATISTIC::STATISTIC(STATISTIC_TYPE type, CUFFT_REAL_RFI ** data, int size, int nStreams): type(type), data(data), size(size) {
+	tmean = (cufftDoubleReal **)malloc(nStreams * sizeof(cufftDoubleReal *));
+	tsqMean = (cufftDoubleReal **)malloc(nStreams * sizeof(cufftDoubleReal *));
+	tvar = (cufftDoubleReal **)malloc(nStreams * sizeof(cufftDoubleReal *));
+	trms = (cufftDoubleReal **)malloc(nStreams * sizeof(cufftDoubleReal *));
+	nulledCounter = (int **)malloc(nStreams * sizeof(cufftDoubleReal *));
+        
+	for(int i = 0; i < 2; i++){
+	    tmean[i] = (cufftDoubleReal * )malloc(2*sizeof(cufftDoubleReal));
+	    tsqMean[i] = (cufftDoubleReal * )malloc(2*sizeof(cufftDoubleReal));
+	    tvar[i] = (cufftDoubleReal * )malloc(2*sizeof(cufftDoubleReal));
+	    trms[i] = (cufftDoubleReal * )malloc(2*sizeof(cufftDoubleReal));
+	    nulledCounter[i] = (int * )malloc(2*sizeof(int));
+	}
+}
  
+//calculate mean, variance, standard dev of the statistic over all chunks
+void STATISTIC::getMeanRMS(int csi){
+    for(int ch=0; ch<2; ch++){ //for each channel
+        tmean[csi][ch] = 0;
+        tsqMean[csi][ch] = 0;
+
+	for(int i=ch* size/2; i<(ch+1) * size/2; i++){
+	    tmean[csi][ch] += data[csi][i]/(size/2);
+	    tsqMean[csi][ch]+=pow(data[csi][i], 2)/(size/2);
+	}
+
+	tvar[csi][ch] = var(tsqMean[csi][ch], tmean[csi][ch]);
+	trms[csi][ch] = sqrt(tvar[csi][ch]);
+    }
+}
+
+//number of standard deviations away from mean
+float STATISTIC::nSigma(int i, int csi){
+    int ch = i/(size/2); 
+    return  abs(data[csi][i] - tmean[csi][ch])/trms[csi][ch]; 
+}
+
+bool STATISTIC::isOutlier(int i, float nsig, int csi){
+     if(nSigma(i, csi) > nsig) return true;
+     else return false;
+}
+
+void STATISTIC::print(int csi){
+    if(type == mean_rfi) printf("MEAN: ");
+    if(type == variance_rfi) printf("VARIANCE: ");
+    if(type == absoluteMax_rfi) printf("ABSOLUTE MAXIMUM: ");
+    tprintfn("CH1 outliers: %d CH2 outliers: %d                                                                  ", nulledCounter[csi][0], nulledCounter[csi][1]);
+    tprintfn("CH1 mean/var/rms: %f %f %f CH2 mean/var/rms: %f %f %f", tmean[csi][0], tvar[csi][0], trms[csi][0], tmean[csi][1], tvar[csi][1], trms[csi][1]);
+    tprintfn("                                                                                                          ");
+}
+
+void rfiInit(RFI * rfi, SETTINGS * s, GPUCARD *gc){
+    rfi->nSigmaNull = s->n_sigma_null;
+    rfi->nSigmaWrite = s->n_sigma_write;
+    rfi->chunkSize = pow(2, s->log_chunk_size);
+    rfi->numChunks = gc->bufsize/rfi->chunkSize; //total number of chunks in all channels
+    int numThreads = min(gc->devProp->maxThreadsPerBlock, rfi->chunkSize/OPS_PER_THREAD);
+    int numBlocks = gc->bufsize/(numThreads * OPS_PER_THREAD);  //number of blocks needed for first kernel call in parallel reduction algorithms
    
-  rfi->mean = (cufftReal **) malloc(s->cuda_streams *sizeof(cufftReal*));
-  rfi->cmean = (cufftReal **) malloc(s->cuda_streams *sizeof(cufftReal*));
-  rfi->sqMean = (cufftReal **)malloc(s->cuda_streams*sizeof(cufftReal*));
-  rfi->csqMean = (cufftReal **) malloc(s->cuda_streams *sizeof(cufftReal*));
-  rfi->variance = (cufftReal **)malloc(s->cuda_streams*sizeof(cufftReal*));
-  rfi->absMax = (cufftReal **) malloc(s->cuda_streams*sizeof(cufftReal*));
-  rfi->cabsMax = (cufftReal **) malloc(s->cuda_streams*sizeof(cufftReal*));
-  rfi->isOutlier = (int **)malloc(s->cuda_streams*sizeof(int*));
-  rfi->outlierBuf = (int8_t * )malloc(rfi->chunkSize);
-  rfi->numOutliersNulled = (int **)malloc(s->cuda_streams * sizeof(int *));
-  rfi->outliersOR = (int *)malloc(s->cuda_streams * sizeof(int));
+    rfi->statFlags = 0;
+    if(s->use_mean_statistic) rfi->statFlags |= RFI_MEAN;
+    if(s->use_variance_statistic) rfi->statFlags |= RFI_VARIANCE;
+    if(s->use_abs_max_statistic) rfi->statFlags |= RFI_ABS_MAX;
+    
+    if(rfi->statFlags & RFI_VARIANCE){
+        rfi->mean = (cufftReal **) malloc(s->cuda_streams *sizeof(cufftReal*));
+        rfi->cmean = (cufftReal **) malloc(s->cuda_streams *sizeof(cufftReal*));
+        rfi->sqMean = (cufftReal **)malloc(s->cuda_streams*sizeof(cufftReal*));
+        rfi->csqMean = (cufftReal **) malloc(s->cuda_streams *sizeof(cufftReal*));
+        rfi->variance = (cufftReal **)malloc(s->cuda_streams*sizeof(cufftReal*));
+  
+        for(int i=0; i<s->cuda_streams; i++){
+            CHK(cudaMallocHost(&rfi->mean[i], rfi->numChunks*sizeof(cufftReal)));
+            CHK(cudaMalloc(&rfi->cmean[i], numBlocks*sizeof(cufftReal)));
+            CHK(cudaMallocHost(&rfi->sqMean[i], rfi->numChunks*sizeof(cufftReal)));
+            CHK(cudaMalloc(&rfi->csqMean[i], numBlocks*sizeof(cufftReal)));
+            CHK(cudaMallocHost(&rfi->variance[i], rfi->numChunks*sizeof(cufftReal)));
+         }   
+    }
+    else if(rfi->statFlags & RFI_MEAN){
+        rfi->mean = (cufftReal **) malloc(s->cuda_streams *sizeof(cufftReal*));
+        rfi->cmean = (cufftReal **) malloc(s->cuda_streams *sizeof(cufftReal*));
+  
+        for(int i=0; i<s->cuda_streams; i++){
+            CHK(cudaMallocHost(&rfi->mean[i], rfi->numChunks*sizeof(cufftReal)));
+            CHK(cudaMalloc(&rfi->cmean[i], numBlocks*sizeof(cufftReal)));
+         }
+    }
+    if(rfi->statFlags & RFI_ABS_MAX){
+        rfi->absMax = (cufftReal **) malloc(s->cuda_streams *sizeof(cufftReal*));
+        rfi->cabsMax = (cufftReal **) malloc(s->cuda_streams *sizeof(cufftReal*));
+  
+        for(int i=0; i<s->cuda_streams; i++){
+            CHK(cudaMallocHost(&rfi->absMax[i], rfi->numChunks*sizeof(cufftReal)));
+            CHK(cudaMalloc(&rfi->cabsMax[i], numBlocks*sizeof(cufftReal)));
+        }
+    }
+    
+    rfi->isOutlierNull = (bool **)malloc(s->cuda_streams*sizeof(bool*));
+    rfi->isOutlierWrite = (bool **)malloc(s->cuda_streams*sizeof(bool*));
+    rfi->numOutliersNulled = (int **)malloc(s->cuda_streams * sizeof(int *));
+    rfi->outlierBuf = (int8_t ** )malloc(s->cuda_streams * sizeof(int8_t *));
+    rfi->outliersOR = (int *)malloc(s->cuda_streams * sizeof(int));
+  
+    for(int i=0; i<s->cuda_streams; i++){
+        rfi->isOutlierNull[i] = (bool *)malloc(rfi->numChunks * sizeof(bool)); //number of chunks in 1 channel
+        rfi->isOutlierWrite[i] = (bool *)malloc(rfi->numChunks * sizeof(bool)); //number of chunks in 1 channel
+        rfi->numOutliersNulled[i] = (int *)malloc(gc->nchan * sizeof(int));
+	rfi->outlierBuf[i] = (int8_t *)malloc(rfi->chunkSize * sizeof(int8_t));
+     }   
+  
+    rfi->avgOutliersPerChannel = (float *)malloc(gc->nchan*sizeof(float));
+    memset(rfi->avgOutliersPerChannel, 0, gc->nchan*sizeof(float));
 
-  for(int i=0; i<s->cuda_streams; i++){
-      CHK(cudaMalloc(&rfi->cmean[i], numBlocks*sizeof(cufftReal)));
-      CHK(cudaMallocHost(&rfi->mean[i], gc->bufsize/rfi->chunkSize*sizeof(cufftReal)));
-      CHK(cudaMalloc(&rfi->csqMean[i], numBlocks*sizeof(cufftReal)));
-      CHK(cudaMallocHost(&rfi->sqMean[i], gc->bufsize/rfi->chunkSize*sizeof(cufftReal)));
-      CHK(cudaMallocHost(&rfi->variance[i], gc->bufsize/rfi->chunkSize*sizeof(cufftReal))); //total number of chunks in all channels
-      CHK(cudaMalloc(&rfi->cabsMax[i], numBlocks*sizeof(cufftReal)));
-      CHK(cudaMallocHost(&rfi->absMax[i], gc->bufsize/rfi->chunkSize*sizeof(cufftReal)));
-      rfi->isOutlier[i] = (int *)malloc(gc->bufsize/rfi->chunkSize/gc->nchan * sizeof(int)); //number of chunks in 1 channel
-      rfi->numOutliersNulled[i] = (int *)malloc(gc->nchan * sizeof(int));
-   }   
+    if(rfi->statFlags & RFI_MEAN) rfi->statistics.insert(std::pair<STATISTIC_TYPE, STATISTIC> (mean_rfi, STATISTIC(mean_rfi, rfi->mean, rfi->numChunks, gc->nstreams)));
+    if(rfi->statFlags & RFI_VARIANCE) rfi->statistics.insert(std::pair<STATISTIC_TYPE,  STATISTIC>(variance_rfi,STATISTIC(variance_rfi, rfi->variance, rfi->numChunks, gc->nstreams)));
+    if(rfi->statFlags & RFI_ABS_MAX) rfi->statistics.insert(std::pair<STATISTIC_TYPE, STATISTIC> (absoluteMax_rfi ,STATISTIC(absoluteMax_rfi, rfi->absMax, rfi->numChunks, gc->nstreams)));
 
-  rfi->avgOutliersPerChannel = (float *)malloc(gc->nchan*sizeof(float));
-  memset(rfi->avgOutliersPerChannel, 0, gc->nchan*sizeof(float));
 }
 
 
-
-void detectRFI(RFI* rfi, GPUCARD * gc, int csi, WRITER * wr){
+void collectRFIStatistics(RFI* rfi, GPUCARD * gc, int csi){
     cudaStream_t cs = gc->streams[csi];
-    int numChunks = gc->bufsize/rfi->chunkSize; //total number of chunks in all channels
-    rfi->outliersOR[csi] = 0; //number of outliers obtained by a logical OR on the arrays of outlier flags from the different channels
     
-    getMeans(gc->cfbuf[csi], rfi->mean[csi], rfi->cmean[csi], gc->bufsize, rfi->chunkSize, cs, gc->devProp->maxThreadsPerBlock);
-    getMeansOfSquares(gc->cfbuf[csi], rfi->sqMean[csi], rfi->csqMean[csi], gc->bufsize, rfi->chunkSize, cs, gc->devProp->maxThreadsPerBlock);
-    getAbsMax(gc->cfbuf[csi], rfi->absMax[csi], rfi->cabsMax[csi], gc->bufsize, rfi->chunkSize, cs, gc->devProp->maxThreadsPerBlock);
-
-    cufftDoubleReal tmean[2]={0}, tsqMean[2]={0}, tvar[2], trms[2]; //for 2 channels. Note: double precision is neccesary or results will be incorrect!
-    memset(rfi->isOutlier[csi], 0, numChunks/gc->nchan*sizeof(int)); //reset outlier flags to 0
-
-    cufftReal ** statistic = rfi->variance; //desired statistic(s) to use to determine outliers
+    if(rfi->statFlags & RFI_MEAN || rfi->statFlags & RFI_VARIANCE)
+        getMeans(gc->cfbuf[csi], rfi->mean[csi], rfi->cmean[csi], gc->bufsize, rfi->chunkSize, cs, gc->devProp->maxThreadsPerBlock);
+    if(rfi->statFlags & RFI_VARIANCE)
+        getMeansOfSquares(gc->cfbuf[csi], rfi->sqMean[csi], rfi->csqMean[csi], gc->bufsize, rfi->chunkSize, cs, gc->devProp->maxThreadsPerBlock);
+    if(rfi->statFlags & RFI_ABS_MAX)
+        getAbsMax(gc->cfbuf[csi], rfi->absMax[csi], rfi->cabsMax[csi], gc->bufsize, rfi->chunkSize, cs, gc->devProp->maxThreadsPerBlock);
+  
 
     //synchronize so don't use memory before GPU finishes copying it to the CPU
     CHK(cudaStreamSynchronize(cs));
-
-    for(int ch=0; ch<2; ch++){ //for each channel
-	rfi->numOutliersNulled[csi][ch] = 0;
-
-	//calculate mean, variance, standard dev of the statistic over all chunks
-	for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++){
-	    rfi->variance[csi][i] = variance(rfi->sqMean[csi][i], rfi->mean[csi][i]);
-	    tmean[ch] += statistic[csi][i]/(numChunks/2);
-	    tsqMean[ch]+=pow(statistic[csi][i], 2)/(numChunks/2);
-	}
-
-	tvar[ch] = variance(tsqMean[ch], tmean[ch]);
-	trms[ch] = sqrt(tvar[ch]);
-
-	//handle rfi
-	for(int i=ch* numChunks/2; i<(ch+1) * numChunks/2; i++){
-	    float nSigma = abs(statistic[csi][i] - tmean[ch])/trms[ch]; //number of standard deviations away from mean
-	    if(nSigma > rfi->nSigmaNull){
-       	       rfi->numOutliersNulled[csi][ch]++;
-	       //mimic logical OR of flagged chunks in each channel
-	       if(rfi->isOutlier[csi][i%2] == 0){//other channel didn't flag this chunk
-		    rfi->isOutlier[csi][i%2] = 1; //flag as outlier
-		    rfi->outliersOR++;
-	        }
-	        if(rfi->nSigmaNull > -1) CHK(cudaMemsetAsync(&(gc->cfbuf[csi][i*rfi->chunkSize]), 0, rfi->chunkSize, cs)); //zero out outliers for FFT
-
-	        //for(uint32_t j =0; j<rfi->chunkSize; j++)
-		  //  rfi->outlierBuf[j] = buf[2*(i%2 * rfi->chunkSize + j) + ch]; //deinterleave data in order to write out to file 
-
-	        //Write outlier to file
-	        if(rfi->nSigmaWrite > -1 && nSigma > rfi->nSigmaWrite)
-		    writerWriteRFI(wr, rfi->outlierBuf, i%2 , ch, nSigma);
-	   }
-       }
+    if(rfi->statFlags & RFI_VARIANCE){
+        //calculate variance
+	for(int i = 0; i <rfi->numChunks; i++)
+	    rfi->variance[csi][i] = var(rfi->sqMean[csi][i], rfi->mean[csi][i]);
     }
-    //calculate approximate average of outliers per channel per sample (approximate because using wr->counter which might be a bit behind)
-    int n = wr->counter;
-    for(int i=0; i <gc->nchan; i++)
-	rfi->avgOutliersPerChannel[i]= (rfi->avgOutliersPerChannel[i]*n + rfi->numOutliersNulled[csi][i])/(n+1);
+    for(std::pair<STATISTIC_TYPE, STATISTIC> s: rfi->statistics){
+	s.second.getMeanRMS(csi);
+	s.second.nulledCounter[csi][0] = 0; s.second.nulledCounter[csi][1] = 0;
+    }
+}
 
-    tprintfn(" ");
-    tprintfn("RFI analysis: ");
-    tprintfn("CH1 mean/var/rms: %f %f %f CH2 mean/var/rms: %f %f %f", tmean[0], tvar[0], trms[0], tmean[1], tvar[1], trms[1]);
-    tprintfn("CH1 outliers: %d CH2 outliers: %d", rfi->numOutliersNulled[csi][0], rfi->numOutliersNulled[csi][1]);
-    tprintfn("CH1 average outliers: %f CH2 average outliers: %f", rfi->avgOutliersPerChannel[0], rfi->avgOutliersPerChannel[1]); 
-    cudaEventRecord(gc->eDoneRFI[csi],cs);
-
+int hammingWeight(bool * a, bool * b, int size){
+	int n = 0;
+	for(int i = 0; i< size; i++)
+	    if(a[i] == 1 || b[i] == 1) n++;
+	return n;
 }
 
 
+void nullRFI(RFI* rfi, GPUCARD * gc, int csi, WRITER * wr){
+    if(rfi->nSigmaNull == 0) return;
+    
+    memset(rfi->isOutlierNull[csi], 0, rfi->numChunks*sizeof(bool)); //reset outlier flags to 0
+    int chunksPerChannel = rfi->numChunks/2;
+    rfi->numOutliersNulled[csi][0] = 0;   rfi->numOutliersNulled[csi][1] = 0;
+    
+    for(int i = 0; i < rfi->numChunks; i++)
+        for(std::pair<STATISTIC_TYPE, STATISTIC> s: rfi->statistics)
+	    if(s.second.isOutlier(i, rfi->nSigmaNull, csi)){
+		s.second.nulledCounter[csi][i/chunksPerChannel]++;
+		if(rfi->isOutlierNull[csi][i] == false){
+		    rfi->isOutlierNull[csi][i] = true;
+		    rfi->numOutliersNulled[csi][i/chunksPerChannel]++;
+		    CHK(cudaMemsetAsync(&(gc->cfbuf[csi][i*rfi->chunkSize]), 0, rfi->chunkSize, gc->streams[csi])); //null out outlier
+		}
+	     }
 
+    rfi->outliersOR[csi] = hammingWeight(rfi->isOutlierNull[csi], rfi->isOutlierNull[csi] + chunksPerChannel, chunksPerChannel);
+    //calculate approximate average of outliers per channel per sample (approximate because using wr->counter which might be a bit behind)
+    for(int i=0; i <gc->nchan; i++)
+	rfi->avgOutliersPerChannel[i]= (rfi->avgOutliersPerChannel[i]*wr->counter + rfi->numOutliersNulled[csi][i])/(wr->counter+1);
+    
+    tprintfn("                                                                                                               ");
+    tprintfn("RFI analysis:                                                                                                  ");
+    for(std::pair<STATISTIC_TYPE, STATISTIC> s: rfi->statistics)
+	s.second.print(csi);
+    tprintfn("TOTAL: CH1 outliers: %d CH2 outliers: %d", rfi->numOutliersNulled[csi][0], rfi->numOutliersNulled[csi][1]);
+    tprintfn("CH1 average outliers: %f CH2 average outliers: %f", rfi->avgOutliersPerChannel[0], rfi->avgOutliersPerChannel[1]); 
+}
 
-
+void writeRFI(RFI* rfi, GPUCARD * gc, int csi, WRITER * wr, int8_t * buf){
+    memset(rfi->isOutlierWrite[csi], 0, rfi->numChunks*sizeof(bool)); //reset outlier flags to 0
+    if(rfi->nSigmaWrite == 0) return;
+    for(int i = 0; i < rfi->numChunks; i++)
+        for(std::pair<STATISTIC_TYPE, STATISTIC> s: rfi->statistics)
+	    if(s.second.isOutlier(i, rfi->nSigmaWrite, csi)){
+	       if(rfi->isOutlierWrite[csi][i] == false){
+		   rfi->isOutlierWrite[csi][i] = true;
+		   int ch = i/(rfi->numChunks/2);
+   	           for(uint32_t j =0; j<rfi->chunkSize; j++)
+	              rfi->outlierBuf[csi][j] = buf[2*(i%2 * rfi->chunkSize + j) + ch]; //deinterleave data in order to write out to file 
+	           writerWriteRFI(wr, rfi->outlierBuf[csi], i%2 , ch, -2 );//INCORRECT NSIGMA (printing -2!)
+	       }
+	    }
+}
 

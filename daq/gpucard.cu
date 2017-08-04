@@ -304,7 +304,6 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
 		break;
         
     }
-
     int csi = gc->bstream = (++gc->bstream)%(gc->nstreams); //add new stream
     if(gc->active_streams == gc->nstreams){ //if no empty streams
     	printf("No free streams.\n");
@@ -329,8 +328,12 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
     cudaEventRecord(gc->eDoneFloatize[csi], cs);
     
     //RFI rejection 
-    if(gc->nchan == 2)
-	detectRFI(rfi, gc, csi, wr);
+    if(gc->nchan == 2 && (rfi->nSigmaNull > 0 || rfi->nSigmaWrite > 0)){
+	collectRFIStatistics(rfi, gc, csi);
+        nullRFI(rfi, gc, csi, wr);
+   	writeRFI(rfi, gc, csi, wr, buf);
+    }
+    cudaEventRecord(gc->eDoneRFI[csi],gc->streams[csi]);
 
     //perform fft
     int status = cufftSetStream(gc->plan, cs);
@@ -360,7 +363,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
 	  int numChunks = gc->bufsize/rfi->chunkSize;
 	  float ch1Correction = numChunks/(numChunks - rfi->numOutliersNulled[csi][0]);  //correction for channel 1 power spectrum
 	  float ch2Correction = numChunks/(numChunks - rfi->numOutliersNulled[csi][1]);  //correction for channel 2 power spectrum
-	  float crossCorrection = numChunks/(numChunks - rfi->outliersOR); //correction for cross spectrum
+	  float crossCorrection = numChunks/(numChunks - rfi->outliersOR[csi]); //correction for cross spectrum
 
 	  int psofs=0;
 	  for (int i=0; i<gc->ncuts; i++) {
