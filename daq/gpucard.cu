@@ -312,12 +312,13 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
     }
 
     gc->active_streams++;
-
     cudaStream_t cs= gc->streams[gc->bstream];
     cudaEventRecord(gc->eStart[csi], cs);
-
+    
+    //memory copy
     CHK(cudaMemcpyAsync(gc->cbuf[csi], buf, gc->bufsize , cudaMemcpyHostToDevice,cs));
     
+    //floatize
     cudaEventRecord(gc->eDoneCopy[csi], cs);
     int threadsPerBlock = gc->threads;
     int blocksPerGrid = gc->bufsize / threadsPerBlock/FLOATIZE_X;
@@ -328,7 +329,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
     cudaEventRecord(gc->eDoneFloatize[csi], cs);
     
     //RFI rejection 
-    if(gc->nchan == 2 && (rfi->nSigmaNull > 0 || rfi->nSigmaWrite > 0)){
+    if(gc->nchan == 2 && rfi->statFlags != 0 && (rfi->nSigmaNull > 0 || rfi->nSigmaWrite > 0)){
 	collectRFIStatistics(rfi, gc, csi);
         nullRFI(rfi, gc, csi, wr);
    	writeRFI(rfi, gc, csi, wr, buf);
@@ -348,6 +349,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
       exit(1);
     } 
 
+    //compute spectra
     if (gc->nchan==1) {
       int psofs=0;
       for (int i=0; i<gc->ncuts; i++) {
