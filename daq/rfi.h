@@ -1,6 +1,6 @@
 #pragma once
 
-#include "writer.h"
+#include "settings.h"
 #include <vector>
 #include <map>
 
@@ -20,9 +20,11 @@
 #define RFI_VARIANCE 2
 #define RFI_ABS_MAX 4
 
+//forward declarations to prevent two header files from including the other
+struct GPUCARD; 
+struct WRITER; 
 
-struct GPUCARD; //forward declaration
-enum STATISTIC_TYPE{mean_rfi, variance_rfi, absoluteMax_rfi};
+enum STATISTIC_TYPE{mean, variance, absoluteMax, STAT_COUNT_MINUS_ONE = absoluteMax};
 
 class STATISTIC {
     public:

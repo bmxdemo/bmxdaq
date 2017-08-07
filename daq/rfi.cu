@@ -6,6 +6,7 @@
 #include "terminal.h"
 #include <cuda.h>
 #include <cufft.h>
+#include <math.h>
    
 static void HandleError( cudaError_t err,
                          const char *file,
@@ -67,21 +68,27 @@ bool STATISTIC::isOutlier(int i, float nsig, int csi){
 }
 
 void STATISTIC::print(int csi){
-    if(type == mean_rfi) printf("MEAN: ");
-    if(type == variance_rfi) printf("VARIANCE: ");
-    if(type == absoluteMax_rfi) printf("ABSOLUTE MAXIMUM: ");
+    if(type == mean) printf("MEAN: ");
+    if(type == variance) printf("VARIANCE: ");
+    if(type == absoluteMax) printf("ABSOLUTE MAXIMUM: ");
     tprintfn("CH1 outliers: %d CH2 outliers: %d                                                                  ", nulledCounter[csi][0], nulledCounter[csi][1]);
     tprintfn("CH1 mean/var/rms: %f %f %f CH2 mean/var/rms: %f %f %f", tmean[csi][0], tvar[csi][0], trms[csi][0], tmean[csi][1], tvar[csi][1], trms[csi][1]);
     tprintfn("                                                                                                          ");
 }
 
 void rfiInit(RFI * rfi, SETTINGS * s, GPUCARD *gc){
+    if(!(OPS_PER_THREAD>0) ||  !((OPS_PER_THREAD & (OPS_PER_THREAD-1)) == 0)){
+        printf("Need OPS_PER_THREAD to be a power of 2.\n");
+        exit(1);
+    }
+
     rfi->nSigmaNull = s->n_sigma_null;
     rfi->nSigmaWrite = s->n_sigma_write;
     rfi->chunkSize = pow(2, s->log_chunk_size);
     rfi->numChunks = gc->bufsize/rfi->chunkSize; //total number of chunks in all channels
-    int numThreads = min(gc->devProp->maxThreadsPerBlock, rfi->chunkSize/OPS_PER_THREAD);
-    int numBlocks = gc->bufsize/(numThreads * OPS_PER_THREAD);  //number of blocks needed for first kernel call in parallel reduction algorithms
+    int opsPerThread = min(rfi->chunkSize, OPS_PER_THREAD);
+    int numThreads = min(gc->devProp->maxThreadsPerBlock, rfi->chunkSize/opsPerThread);
+    int numBlocks = gc->bufsize/(numThreads * opsPerThread);  //number of blocks needed for first kernel call in parallel reduction algorithms
    
     rfi->statFlags = 0;
     if(s->use_mean_statistic) rfi->statFlags |= RFI_MEAN;
@@ -138,9 +145,9 @@ void rfiInit(RFI * rfi, SETTINGS * s, GPUCARD *gc){
     rfi->avgOutliersPerChannel = (float *)malloc(gc->nchan*sizeof(float));
     memset(rfi->avgOutliersPerChannel, 0, gc->nchan*sizeof(float));
 
-    if(rfi->statFlags & RFI_MEAN) rfi->statistics.insert(std::pair<STATISTIC_TYPE, STATISTIC> (mean_rfi, STATISTIC(mean_rfi, rfi->mean, rfi->numChunks, gc->nstreams)));
-    if(rfi->statFlags & RFI_VARIANCE) rfi->statistics.insert(std::pair<STATISTIC_TYPE,  STATISTIC>(variance_rfi,STATISTIC(variance_rfi, rfi->variance, rfi->numChunks, gc->nstreams)));
-    if(rfi->statFlags & RFI_ABS_MAX) rfi->statistics.insert(std::pair<STATISTIC_TYPE, STATISTIC> (absoluteMax_rfi ,STATISTIC(absoluteMax_rfi, rfi->absMax, rfi->numChunks, gc->nstreams)));
+    if(rfi->statFlags & RFI_MEAN) rfi->statistics.insert(std::pair<STATISTIC_TYPE, STATISTIC> (mean, STATISTIC(mean, rfi->mean, rfi->numChunks, gc->nstreams)));
+    if(rfi->statFlags & RFI_VARIANCE) rfi->statistics.insert(std::pair<STATISTIC_TYPE,  STATISTIC>(variance,STATISTIC(variance, rfi->variance, rfi->numChunks, gc->nstreams)));
+    if(rfi->statFlags & RFI_ABS_MAX) rfi->statistics.insert(std::pair<STATISTIC_TYPE, STATISTIC> (absoluteMax ,STATISTIC(absoluteMax, rfi->absMax, rfi->numChunks, gc->nstreams)));
 
 }
 
@@ -209,8 +216,8 @@ void nullRFI(RFI* rfi, GPUCARD * gc, int csi, WRITER * wr){
 }
 
 void writeRFI(RFI* rfi, GPUCARD * gc, int csi, WRITER * wr, int8_t * buf){
-    memset(rfi->isOutlierWrite[csi], 0, rfi->numChunks*sizeof(bool)); //reset outlier flags to 0
     if(rfi->nSigmaWrite == 0) return;
+    memset(rfi->isOutlierWrite[csi], 0, rfi->numChunks*sizeof(bool)); //reset outlier flags to 0
     for(int i = 0; i < rfi->numChunks; i++)
         for(std::pair<STATISTIC_TYPE, STATISTIC> s: rfi->statistics)
 	    if(s.second.isOutlier(i, rfi->nSigmaWrite, csi)){

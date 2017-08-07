@@ -84,10 +84,6 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     printf ("Need FLOATIZE_X even for two channels\n");
     exit(1);
   }
-  if(!(OPS_PER_THREAD>0) ||  !((OPS_PER_THREAD & (OPS_PER_THREAD-1)) == 0)){
-    printf("Need OPS_PER_THREAD to be a power of 2.\n");
-    exit(1);
-  }
   gc->fftsize=set->fft_size;
   uint32_t bufsize=gc->bufsize=set->fft_size*nchan;
   uint32_t transform_size=(set->fft_size/2+1)*nchan;
@@ -241,8 +237,8 @@ void printTiming(GPUCARD *gc, int i) {
 //      rfi: structure containing rfi settings and memory for rfi statistics
 //	set: settings
 bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS *set) {
-    //streamed version
-    bool deleteLinesInConsole = false;
+   //streamed version
+   bool deleteLinesInConsole = false;
    //Check if other streams are finished and proccess the finished ones in order (i.e. print output to file)
    while(gc->active_streams > 0){
 	if(cudaEventQuery(gc->eDonePost[gc->fstream])==cudaSuccess){
@@ -261,7 +257,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
                 if (set->print_meanvar) {
                   // now find some statistic over subsamples of samples
                   uint32_t bs=gc->bufsize;
-                  uint32_t step=gc->bufsize/(32768);
+                  uint32_t step=gc->bufsize/1;//(32768);
                   float NSub=bs/step; // number of subsamples to take
                   float m1=0.,m2=0.,v1=0.,v2=0.;
                   for (int i=0; i<bs; i+=step) { // take them in steps of step
