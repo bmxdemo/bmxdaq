@@ -257,8 +257,8 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
                 if (set->print_meanvar) {
                   // now find some statistic over subsamples of samples
                   uint32_t bs=gc->bufsize;
-                  uint32_t step=gc->bufsize/1;//(32768);
-                  float NSub=bs/step; // number of subsamples to take
+		  float NSub = min(32768, bs); //number of subsample to take
+                  uint32_t step=bs/NSub;
                   float m1=0.,m2=0.,v1=0.,v2=0.;
                   for (int i=0; i<bs; i+=step) { // take them in steps of step
                  	float n=buf[i];
@@ -323,12 +323,13 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
     else 
       floatize_2chan<<<blocksPerGrid, threadsPerBlock, 0, cs>>>(gc->cbuf[csi],gc->cfbuf[csi],&(gc->cfbuf[csi][gc->fftsize]));
     cudaEventRecord(gc->eDoneFloatize[csi], cs);
+    CHK(cudaGetLastError()); 
     
     //RFI rejection 
     if(gc->nchan == 2 && rfi->statFlags != 0 && (rfi->nSigmaNull > 0 || rfi->nSigmaWrite > 0)){
 	collectRFIStatistics(rfi, gc, csi);
         nullRFI(rfi, gc, csi, wr);
-   	writeRFI(rfi, gc, csi, wr, buf);
+	writeRFI(rfi, gc, csi, wr, buf);
     }
     cudaEventRecord(gc->eDoneRFI[csi],gc->streams[csi]);
 
