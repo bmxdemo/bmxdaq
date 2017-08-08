@@ -128,7 +128,6 @@ void rfiInit(RFI * rfi, SETTINGS * s, GPUCARD *gc){
             CHK(cudaMalloc(&rfi->cabsMax[i], numBlocks*sizeof(cufftReal)));
         }
     }
-    
     rfi->isOutlierNull = (bool **)malloc(s->cuda_streams*sizeof(bool*));
     rfi->isOutlierWrite = (bool **)malloc(s->cuda_streams*sizeof(bool*));
     rfi->numOutliersNulled = (int **)malloc(s->cuda_streams * sizeof(int *));
@@ -218,15 +217,17 @@ void nullRFI(RFI* rfi, GPUCARD * gc, int csi, WRITER * wr){
 void writeRFI(RFI* rfi, GPUCARD * gc, int csi, WRITER * wr, int8_t * buf){
     if(rfi->nSigmaWrite == 0) return;
     memset(rfi->isOutlierWrite[csi], 0, rfi->numChunks*sizeof(bool)); //reset outlier flags to 0
+    float sigs [STAT_COUNT_MINUS_ONE + 1] = {0};    
     for(int i = 0; i < rfi->numChunks; i++)
         for(std::pair<STATISTIC_TYPE, STATISTIC> s: rfi->statistics)
 	    if(s.second.isOutlier(i, rfi->nSigmaWrite, csi)){
+	       sigs[s.second.type] = s.second.nSigma(i, csi); //print out how many sigma away from mean
 	       if(rfi->isOutlierWrite[csi][i] == false){
 		   rfi->isOutlierWrite[csi][i] = true;
 		   int ch = i/(rfi->numChunks/2);
    	           for(uint32_t j =0; j<rfi->chunkSize; j++)
 	              rfi->outlierBuf[csi][j] = buf[2*(i%2 * rfi->chunkSize + j) + ch]; //deinterleave data in order to write out to file 
-	           writerWriteRFI(wr, rfi->outlierBuf[csi], i%2 , ch, -2 );//INCORRECT NSIGMA (printing -2!)
+	           writerWriteRFI(wr, rfi->outlierBuf[csi], i%2 , ch, sigs );
 	       }
 	    }
 }
