@@ -107,7 +107,6 @@ void getMeans(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, in
     int opsPerThread = min(chunkSize, OPS_PER_THREAD);
     int numThreads = min(maxThreadsPerBlock, chunkSize/opsPerThread);
     int numBlocks = n/(numThreads * opsPerThread);
-    printf("%d %d %d %d\n\n\n\n\n\n\n\n\n\n\n",n, numBlocks, numThreads, opsPerThread); 
     mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(input, deviceOutput, opsPerThread);
     
     int remaining = chunkSize/(numThreads*opsPerThread); //number of threads, and number of summations that remain to be done per chunk
