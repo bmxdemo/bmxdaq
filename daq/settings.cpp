@@ -191,10 +191,6 @@ void init_settings(SETTINGS *s, char* fname) {
 	 fclose(fi);
      }
 
-     if(s->n_sigma_null > s->n_sigma_write){
-	 printf("n_sigma_write needs to be greater or equal to n_sigma_null");
-	 exit(1);
-     }
 }
 
 void print_settings(SETTINGS *s) {
