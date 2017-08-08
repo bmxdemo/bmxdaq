@@ -271,23 +271,23 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
                   tprintfn ("CH1 mean/rms: %f %f   CH2 mean/rms: %f %f   ",m1,v1,m2,v2);
                 }
                 if (set->print_maxp) {
-                  // find max power in each cutout in each channel.
-                  int of1=0; // CH1 auto
-                  for (int i=0; i<gc->ncuts; i++) {
-            	float ch1p=0, ch2p=0;
-            	int ch1i=0, ch2i=0;
-            	int of2=of1+gc->pssize1[i]; //CH2 auto
-            	for (int j=0; j<gc->pssize1[i];j++) {
-            	  if (gc->outps[of1+j] > ch1p) {ch1p=gc->outps[of1+j]; ch1i=j;}
-            	  if (gc->outps[of2+j] > ch2p) {ch2p=gc->outps[of2+j]; ch2i=j;}
-            	}
-            	of1+=gc->pssize[i];  // next cutout 
-            	float numin=set->nu_min[i];
-            	float nustep=(set->nu_max[i]-set->nu_min[i])/(gc->pssize1[i]);
-            	float ch1f=(numin+nustep*(0.5+ch1i))/1e6;
-            	float ch2f=(numin+nustep*(0.5+ch2i))/1e6;
-            	tprintfn ("Peak pow (cutout %i): CH1 %f at %f MHz;   CH2 %f at %f MHz  ",i,log(ch1p),ch1f,log(ch2p),ch2f);
-                  }
+	            // find max power in each cutout in each channel.
+	            int of1=0; // CH1 auto
+	            for (int i=0; i<gc->ncuts; i++) {
+			float ch1p=0, ch2p=0;
+			int ch1i=0, ch2i=0;
+			int of2=of1+gc->pssize1[i]; //CH2 auto
+			for (int j=0; j<gc->pssize1[i];j++) {
+			  if (gc->outps[of1+j] > ch1p) {ch1p=gc->outps[of1+j]; ch1i=j;}
+			  if (gc->outps[of2+j] > ch2p) {ch2p=gc->outps[of2+j]; ch2i=j;}
+			}
+			of1+=gc->pssize[i];  // next cutout 
+			float numin=set->nu_min[i];
+			float nustep=(set->nu_max[i]-set->nu_min[i])/(gc->pssize1[i]);
+			float ch1f=(numin+nustep*(0.5+ch1i))/1e6;
+			float ch2f=(numin+nustep*(0.5+ch2i))/1e6;
+			tprintfn ("Peak pow (cutout %i): CH1 %f at %f MHz;   CH2 %f at %f MHz  ",i,log(ch1p),ch1f,log(ch2p),ch2f);
+	           }
                 }
                 writerWritePS(wr,gc->outps, rfi->numOutliersNulled[gc->fstream]);
         	gc->fstream = (++gc->fstream)%(gc->nstreams);
