@@ -4,6 +4,7 @@
 #include "gpucard.h"
 #include "freqgen.h"
 #include "writer.h"
+#include "terminal.h"
 #include "rfi.h"
 #include "spcm_examples/c_cpp/c_header/dlltyp.h"
 #include "spcm_examples/c_cpp/c_header/regs.h"
@@ -36,7 +37,7 @@ struct DIGICARD {
 void digiCardInit (DIGICARD *card, SETTINGS *set);
 
 //main worker loop
-void  digiWorkLoop(DIGICARD *card, GPUCARD *gcard, SETTINGS *set, FREQGEN *fgen, WRITER *w, RFI * rfi);
+void  digiWorkLoop(DIGICARD *card, GPUCARD *gcard, SETTINGS *set, FREQGEN *fgen, WRITER *w, TWRITER ** t, RFI * rfi);
 
 //shutdown
 void digiCardCleanUp(DIGICARD *card, SETTINGS *set);

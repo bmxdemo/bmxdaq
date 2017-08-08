@@ -10,6 +10,7 @@ THIS IS A COMPLETE PLACEHOLDER!
 #include "stdint.h"
 #include "settings.h"
 #include "writer.h"
+#include "terminal.h"
 
 #ifdef CUDA_COMPILE
 
@@ -63,5 +64,5 @@ struct GPUCARD {
 
 extern "C" {
   void gpuCardInit (GPUCARD *gcard, SETTINGS *set);
-  bool gpuProcessBuffer(GPUCARD *gcard, int8_t *buf, WRITER *w, RFI * rfi, SETTINGS *set);
+  int  gpuProcessBuffer(GPUCARD *gcard, int8_t *buf, WRITER *w, TWRITER ** t,  RFI * rfi, SETTINGS *set);
 }

@@ -67,13 +67,13 @@ bool STATISTIC::isOutlier(int i, float nsig, int csi){
      else return false;
 }
 
-void STATISTIC::print(int csi){
-    if(type == mean) printf("MEAN: ");
-    if(type == variance) printf("VARIANCE: ");
-    if(type == absoluteMax) printf("ABSOLUTE MAXIMUM: ");
-    tprintfn("CH1 outliers: %d CH2 outliers: %d                                                                  ", nulledCounter[csi][0], nulledCounter[csi][1]);
-    tprintfn("CH1 mean/var/rms: %f %f %f CH2 mean/var/rms: %f %f %f", tmean[csi][0], tvar[csi][0], trms[csi][0], tmean[csi][1], tvar[csi][1], trms[csi][1]);
-    tprintfn("                                                                                                          ");
+void STATISTIC::print(int csi, TWRITER * t){
+    if(type == mean) tprintfn(t, 0, "MEAN: ");
+    if(type == variance) tprintfn(t, 0, "VARIANCE: ");
+    if(type == absoluteMax) tprintfn(t, 0, "ABSOLUTE MAXIMUM: ");
+    tprintfn(t, 1, "CH1 outliers: %d CH2 outliers: %d", nulledCounter[csi][0], nulledCounter[csi][1]);
+    tprintfn(t, 1, "CH1 mean/var/rms: %f %f %f CH2 mean/var/rms: %f %f %f", tmean[csi][0], tvar[csi][0], trms[csi][0], tmean[csi][1], tvar[csi][1], trms[csi][1]);
+    tprintfn(t, 1, " ");
 }
 
 void rfiInit(RFI * rfi, SETTINGS * s, GPUCARD *gc){
@@ -183,7 +183,7 @@ int hammingWeight(bool * a, bool * b, int size){
 }
 
 
-void nullRFI(RFI* rfi, GPUCARD * gc, int csi, WRITER * wr){
+void nullRFI(RFI* rfi, GPUCARD * gc, int csi, WRITER * wr, TWRITER * twr){
     if(rfi->nSigmaNull == 0) return;
     
     memset(rfi->isOutlierNull[csi], 0, rfi->numChunks*sizeof(bool)); //reset outlier flags to 0
@@ -206,12 +206,11 @@ void nullRFI(RFI* rfi, GPUCARD * gc, int csi, WRITER * wr){
     for(int i=0; i <gc->nchan; i++)
 	rfi->avgOutliersPerChannel[i]= (rfi->avgOutliersPerChannel[i]*wr->counter + rfi->numOutliersNulled[csi][i])/(wr->counter+1);
     
-    tprintfn("                                                                                                               ");
-    tprintfn("RFI analysis:                                                                                                  ");
+    tprintfn(twr, 1, "RFI analysis:");
     for(std::pair<STATISTIC_TYPE, STATISTIC> s: rfi->statistics)
-	s.second.print(csi);
-    tprintfn("TOTAL: CH1 outliers: %d CH2 outliers: %d", rfi->numOutliersNulled[csi][0], rfi->numOutliersNulled[csi][1]);
-    tprintfn("CH1 average outliers: %f CH2 average outliers: %f", rfi->avgOutliersPerChannel[0], rfi->avgOutliersPerChannel[1]); 
+	s.second.print(csi, twr);
+    tprintfn(twr ,1, "TOTAL: CH1 outliers: %d CH2 outliers: %d", rfi->numOutliersNulled[csi][0], rfi->numOutliersNulled[csi][1]);
+    tprintfn(twr, 1, "CH1 average outliers: %f CH2 average outliers: %f", rfi->avgOutliersPerChannel[0], rfi->avgOutliersPerChannel[1]); 
 }
 
 void writeRFI(RFI* rfi, GPUCARD * gc, int csi, WRITER * wr, int8_t * buf){

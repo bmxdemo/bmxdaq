@@ -1,6 +1,7 @@
 #pragma once
 
 #include "settings.h"
+#include "terminal.h"
 #include <vector>
 #include <map>
 
@@ -8,6 +9,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <cufft.h>
+
 #define CUFFT_REAL_RFI cufftReal
 #define CUFFT_DOUBLE_REAL_RFI cufftDoubleReal
 
@@ -41,7 +43,7 @@ class STATISTIC {
     void getMeanRMS(int csi);
     bool isOutlier(int i, float nsig, int csi);
     float  nSigma(int i, int csi);
-    void print(int csi);
+    void print(int csi, TWRITER * t);
 };
 
 struct RFI{
@@ -65,7 +67,7 @@ struct RFI{
 
 void rfiInit(RFI * rfi, SETTINGS * s, GPUCARD *gc);
 void collectRFIStatistics(RFI* rfi, GPUCARD * gc, int csi);
-void nullRFI(RFI* rfi, GPUCARD * gc, int csi, WRITER * wr);
+void nullRFI(RFI* rfi, GPUCARD * gc, int csi, WRITER * wr, TWRITER * t);
 void writeRFI(RFI* rfi, GPUCARD * gc, int csi, WRITER * wr, int8_t * buf);
 //void cleanupRFI();
 
