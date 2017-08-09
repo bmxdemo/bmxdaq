@@ -52,7 +52,7 @@ int main(int argc,char **argv)
   twriter = (TWRITER **)malloc(settings.cuda_streams * sizeof(TWRITER *));
   for(int i =0; i < settings.cuda_streams ;  i++){
       twriter[i] = (TWRITER *)malloc(sizeof(TWRITER));
-      terminalWriterInit(twriter[i], TERMINAL_BUFFER_SIZE);
+      terminalWriterInit(twriter[i], TERMINAL_BUFFER_SIZE, settings.print_every);
   }
   if (!settings.dont_process) gpuCardInit(&gcard,&settings);
   if (settings.fg_nfreq) freqGenInit(&fgen, &writer, &settings);

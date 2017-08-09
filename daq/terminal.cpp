@@ -13,11 +13,12 @@ Reverses cursor to allow continues overwrite over the terminal
 #include "terminal.h"
 
 
-void terminalWriterInit(TWRITER * t, int size){
+void terminalWriterInit(TWRITER * t, int size, int printEvery){
         t->begin = (char *)malloc(size * sizeof(char));
         t->end = t->begin+size;
         t->current = t->begin;
         t->terminal_nlines = 0;
+	t->printEvery = printEvery;
 }
 
 void tprintfn(TWRITER * t, bool newline, const char* fmt, ...){
@@ -37,11 +38,14 @@ void tprintfn(TWRITER * t, bool newline, const char* fmt, ...){
     }   
 }    
 
-void tflush(TWRITER * t){ 
+void tflush(TWRITER * t, int packetIndex){ 
         t->current = t->begin;
-        printf("%s",t->begin);
-        printf("\033[%iA",t->terminal_nlines);
-        t->terminal_nlines = 0;
+        if(packetIndex % t->printEvery == 0){
+	    printf("%s",t->begin);
+            printf("\033[%iA",t->terminal_nlines);
+	}
+        
+	t->terminal_nlines = 0;
 } 
     
 void terminalWriterCleanup(TWRITER * t){ 

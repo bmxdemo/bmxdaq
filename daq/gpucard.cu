@@ -238,7 +238,6 @@ void printTiming(GPUCARD *gc, int i, TWRITER * t) {
 //	set: settings
 //Returns the stream used to proccess buf.
 int gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, TWRITER ** twr, RFI * rfi, SETTINGS *set) {
-   //streamed version
    //Check if other streams are finished and proccess the finished ones in order (i.e. print output to file)
    while(gc->active_streams > 0){
 	if(cudaEventQuery(gc->eDonePost[gc->fstream])==cudaSuccess){
@@ -285,7 +284,7 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, TWRITER ** twr, RFI *
 	           }
                 }
                 writerWritePS(wr,gc->outps, rfi->numOutliersNulled[gc->fstream]);
-                tflush(twr[gc->fstream]);
+                tflush(twr[gc->fstream], wr->counter);
 		gc->fstream = (++gc->fstream)%(gc->nstreams);
                 gc->active_streams--;
 		
@@ -295,6 +294,7 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, TWRITER ** twr, RFI *
 		break;
         
     }
+
     int csi = gc->bstream = (++gc->bstream)%(gc->nstreams); //add new stream
     if(gc->active_streams == gc->nstreams){ //if no empty streams
     	printf("No free streams.\n");

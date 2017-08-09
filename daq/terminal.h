@@ -7,14 +7,15 @@ struct TWRITER{
     char * end;
     char * current;
     int terminal_nlines;
+    int printEvery;
 };
 
-void terminalWriterInit(TWRITER * t, int size);
+void terminalWriterInit(TWRITER * t, int size, int printEvery);
 
 //add formatted string to terminal buffer
 void tprintfn (TWRITER * t, bool newline,  const char * fmt, ...);
 
 //print to terminal and return cursor to beginning of output
-void tflush(TWRITER * t); 
+void tflush(TWRITER * t, int packetIndex); 
 
 void terminalWriterCleanup(TWRITER * t); 

@@ -248,7 +248,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
     }
     t1=tSim;
     clock_gettime(CLOCK_REALTIME, &tSim);
-    dt=deltaT(t1,tSim);
+    float dtDigi=deltaT(t1,tSim); //time for digicard to return a packet
     if (lAvailUser >= dc->lNotifySize)
       {
 	clock_gettime(CLOCK_REALTIME, &timeNow);
@@ -262,7 +262,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
             tprintfn(t[stream], 1, " ");
 	    tprintfn(t[stream], 1, "Cycle statistics");
 	    tprintfn (t[stream], 1, "Cycle taking %fs, hope for < %fs",dt, towait);
-            tprintfn (t[stream], 1, "Measured dt: %f ms, rate=%f MHz",dt*1e3, set->fft_size/dt/1e6);
+            tprintfn (t[stream], 1, "Measured dt: %f ms, rate=%f MHz",dtDigi*1e3, set->fft_size/dtDigi/1e6);
 	    tprintfn(t[stream], 1, "Time: %fs; Status:%i; Pos:%08x; digitizer buffer fill %i/1000   ", 
 	       accum, lStatus, lPCPos,fill);
 	}
@@ -274,6 +274,8 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 	// drive frequency generator if needed
 	if (set->fg_nfreq) freqGenLoop(fgen, w, t[stream]);
 	// write waveform if requested
+	struct timespec begin, end;
+        clock_gettime(CLOCK_REALTIME, &begin);
 	if (set->wave_nbytes>0) {
 	  FILE *fw=fopen(set->wave_fname,"wb");
 	  if (fw!=NULL) {
@@ -281,6 +283,8 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 	    fclose(fw);
 	  }
 	}
+	clock_gettime(CLOCK_REALTIME, &end);
+	tprintfn(t[stream], 1, "time to print waveform: %f", deltaT(begin, end));
 	// break if sufficient number of samples
 	if ((++sample_count) == set->nsamples) break;
       }
