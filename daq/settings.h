@@ -65,9 +65,12 @@ struct SETTINGS {
 
   //RFI rejection
   int log_chunk_size; //log base 2 of chunk size to be used to collect RFI statistics
-  float n_sigma_null; //number of standard deviations used to determine outliers to null out
-  float n_sigma_write; //number of standard deviations used to determine outliers to write to file
-  bool null_RFI; //whether to null RFI chunks before performing FFT
+  float n_sigma_null; //number of standard deviations used to determine outliers to null out. 0 for none
+  float n_sigma_write; //number of standard deviations used to determine outliers to write to file, 0 for none
+  bool use_mean_statistic;
+  bool use_variance_statistic;
+  bool use_abs_max_statistic;
+
 };
 
 // Fixed defines
