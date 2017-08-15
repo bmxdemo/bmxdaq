@@ -34,6 +34,7 @@ void init_settings(SETTINGS *s, char* fname) {
     s->save_every=60;
     s->print_meanvar=1;
     s->print_maxp=0;
+    s->print_every=1;
     sprintf(s->ps_output_pattern,"%%02d%%02d%%02d_%%02d%%02d.data");
     sprintf(s->rfi_output_pattern,"%%02d%%02d%%02d_%%02d%%02d.outliers");
     s->fg_nfreq=0;
@@ -111,6 +112,8 @@ void init_settings(SETTINGS *s, char* fname) {
 	     s->print_meanvar=atoi(s2);
 	   else if(!strcmp(s1,"print_maxp="))
 	     s->print_maxp=atoi(s2);
+	   else if(!strcmp(s1,"print_every="))
+	     s->print_every=atoi(s2);
 	   else if(!strcmp(s1,"fg_nfreq="))
 	     s->fg_nfreq=atoi(s2);
 	   else if(!strcmp(s1,"fg_baudrate="))
