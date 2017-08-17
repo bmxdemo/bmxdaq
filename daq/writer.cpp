@@ -49,7 +49,7 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   strcpy(writer->fnamePS,s->ps_output_pattern);
   strcpy(writer->fnameRFI,s->rfi_output_pattern);
   writer->save_every=s->save_every;
-  writer->headerPS.nChannels=1+s->channel_mask;
+  writer->headerPS.nChannels=1+(s->channel_mask==3);
   writer->headerPS.sample_rate=s->sample_rate;
   writer->headerPS.fft_size=s->fft_size;
   writer->headerPS.ncuts=s->n_cuts;
@@ -75,9 +75,10 @@ void writerInit(WRITER *writer, SETTINGS *s) {
 void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled) {
   maybeReOpenFile(writer);
   fwrite(numOutliersNulled, sizeof(int), writer->headerPS.nChannels, writer->fPS);
+  printf("number of channels:%d", writer->headerPS.nChannels);
   fwrite (ps, sizeof(float), writer->lenPS, writer->fPS);
   fwrite (&writer->tone_freq, sizeof(float), 1, writer->fPS);
-  uflush(writer->fPS);
+  fflush(writer->fPS);
   writer->counter++;
 }
 
