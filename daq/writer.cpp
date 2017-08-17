@@ -77,7 +77,7 @@ void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled) {
   fwrite(numOutliersNulled, sizeof(int), writer->headerPS.nChannels, writer->fPS);
   fwrite (ps, sizeof(float), writer->lenPS, writer->fPS);
   fwrite (&writer->tone_freq, sizeof(float), 1, writer->fPS);
-  fflush(writer->fPS);
+  uflush(writer->fPS);
   writer->counter++;
 }
 
