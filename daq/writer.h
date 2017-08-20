@@ -9,7 +9,8 @@
 // in python readers, etc.
 // CHANGES:
 //     v2 -- save float with cur tone freq every time you save
-#define HEADERVERSION 2
+//     v3 -- save MJD double
+#define HEADERVERSION 3
 
 
 struct BMXHEADER {

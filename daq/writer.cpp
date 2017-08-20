@@ -73,9 +73,17 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   maybeReOpenFile(writer,true);
 }
 
+double getMJDNow()
+{
+  long int t=time(NULL);
+  return (double)(t) / 86400.0  + 40587.0;
+}
+
 void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled) {
   maybeReOpenFile(writer);
-  fwrite(numOutliersNulled, sizeof(int), writer->headerPS.nChannels, writer->fPS);
+  double mjd=getMJDNow();
+  fwrite (&mjd, sizeof(double), 1, writer->fPS);
+  fwrite (numOutliersNulled, sizeof(int), writer->headerPS.nChannels, writer->fPS);
   fwrite (ps, sizeof(float), writer->lenPS, writer->fPS);
   fwrite (&writer->tone_freq, sizeof(float), 1, writer->fPS);
   fflush(writer->fPS);

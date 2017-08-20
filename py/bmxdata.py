@@ -18,7 +18,7 @@ class BMXFile(object):
             print("Bad magic.",H['magic'])
             sys.exit(1)
         self.version=H['version']
-        if self.version<=2:
+        if self.version<=3:
             maxcuts=10
             head_desc=[('nChan','i4'),('sample_rate','f4'),('fft_size','u4'),
                    ('ncuts','i4'),
@@ -42,8 +42,15 @@ class BMXFile(object):
             print("    Cut ",i," ",self.numin[i],'-',self.numax[i],'MHz #P=',self.nP[i])
             self.freq.append(self.freqOffset+self.numin[i]+(np.arange(self.nP[i])+0.5)*(self.numax[i]-self.numin[i])/self.nP[i])
         rec_desc=[]
+        self.haveMJD=False
+        self.haveNulled=False
+        self.haveToneFreq=False
+        if self.version>=3:
+            self.haveMJD=True
+            rec_desc+=[('mjd','f8')]
         if self.version>=2:
             rec_desc+=[('num_nulled','i4',H['nChan'])]
+            self.haveNulled=True
         if self.nChan==1:
             for i in range(self.ncuts):
                 rec_desc+=[('chan1_'+str(i),'f4',self.nP[i])]
@@ -55,6 +62,7 @@ class BMXFile(object):
                            ('chanXI_'+str(i),'f4',self.nP[i])]
         if self.version>=2:
             rec_desc+=[('nu_tone','f4')]
+            self.haveToneFreq=True
         rec_dt=np.dtype(rec_desc,align=False)
         self.rec_dt=rec_dt
         self.names=rec_dt.names
