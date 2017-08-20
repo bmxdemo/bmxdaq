@@ -65,17 +65,17 @@ void writerInit(WRITER *writer, SETTINGS *s) {
 
   }
   writer->lenRFI = pow(2,s->log_chunk_size);
-  writer->counter =0;
+  writer->counter = 0;
+  writer->tone_freq = 0;
   printf ("Record size: %i\n", writer->lenPS);
   printf ("Version: %i\n", writer->headerPS.version);
-  
+
   maybeReOpenFile(writer,true);
 }
 
 void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled) {
   maybeReOpenFile(writer);
   fwrite(numOutliersNulled, sizeof(int), writer->headerPS.nChannels, writer->fPS);
-  printf("number of channels:%d", writer->headerPS.nChannels);
   fwrite (ps, sizeof(float), writer->lenPS, writer->fPS);
   fwrite (&writer->tone_freq, sizeof(float), 1, writer->fPS);
   fflush(writer->fPS);

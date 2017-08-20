@@ -330,6 +330,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
     
     //RFI rejection 
     if(gc->nchan == 2 && rfi->statFlags != 0 && (rfi->nSigmaNull > 0 || rfi->nSigmaWrite > 0)){
+        printf("Inside rfi collection \n\n");
 	collectRFIStatistics(rfi, gc, csi);
         nullRFI(rfi, gc, csi, wr);
    	writeRFI(rfi, gc, csi, wr, buf);
@@ -359,15 +360,14 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
     } else if(gc->nchan==2){
 	  // note we need to take into account the tricky N/2+1 FFT size while we do N/2 binning
 	  // pssize+2 = transformsize+1
-	  // note that pssize is the full *nchan pssize
 	  
 	  //calculate power spectra corrections due to nulling out chunks flagged as RFI
 	  int numChunks = gc->bufsize/rfi->chunkSize;
-	  float ch1Correction = numChunks/(numChunks - rfi->numOutliersNulled[csi][0]);  //correction for channel 1 power spectrum
-	  float ch2Correction = numChunks/(numChunks - rfi->numOutliersNulled[csi][1]);  //correction for channel 2 power spectrum
-	  float crossCorrection = numChunks/(numChunks - rfi->outliersOR[csi]); //correction for cross spectrum
-
-	  int psofs=0;
+	  float ch1Correction = numChunks*1.0/(numChunks - rfi->numOutliersNulled[csi][0]);  //correction for channel 1 power spectrum
+	  float ch2Correction = numChunks*1.0/(numChunks - rfi->numOutliersNulled[csi][1]);  //correction for channel 2 power spectrum
+	  float crossCorrection = numChunks*1.0/(numChunks - rfi->outliersOR[csi]); //correction for cross spectrum
+	  
+          int psofs=0;
 	  for (int i=0; i<gc->ncuts; i++) {
 	    ps_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][0], &(gc->coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i], ch1Correction);
 	    psofs+=gc->pssize1[i];

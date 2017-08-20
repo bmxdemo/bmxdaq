@@ -28,10 +28,8 @@ class BMXFile(object):
             print ("Unknown version",H['version'])
             sys.exit(1)
         H=np.fromfile(f,head_desc,count=1)
-        H['nChan']=2
         self.ncuts=H['ncuts'][0]
         self.nChan=H['nChan'][0]
-        
         self.fft_size=H['fft_size'][0]
         self.sample_rate=H['sample_rate']/1e6
         self.deltaT = 1./self.sample_rate*self.fft_size/1e6
@@ -44,8 +42,8 @@ class BMXFile(object):
             print("    Cut ",i," ",self.numin[i],'-',self.numax[i],'MHz #P=',self.nP[i])
             self.freq.append(self.freqOffset+self.numin[i]+(np.arange(self.nP[i])+0.5)*(self.numax[i]-self.numin[i])/self.nP[i])
         rec_desc=[]
-        if self.version==2:
-            rec_desc+=[('num_nulled','4i4')]
+        if self.version>=2:
+            rec_desc+=[('num_nulled','i4',H['nChan'])]
         if self.nChan==1:
             for i in range(self.ncuts):
                 rec_desc+=[('chan1_'+str(i),'f4',self.nP[i])]
@@ -55,7 +53,7 @@ class BMXFile(object):
                            ('chan2_'+str(i),'f4',self.nP[i]), 
                            ('chanXR_'+str(i),'f4',self.nP[i]),
                            ('chanXI_'+str(i),'f4',self.nP[i])]
-        if self.version==2:
+        if self.version>=2:
             rec_desc+=[('nu_tone','f4')]
         rec_dt=np.dtype(rec_desc,align=False)
         self.rec_dt=rec_dt
