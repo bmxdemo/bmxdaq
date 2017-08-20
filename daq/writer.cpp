@@ -49,7 +49,7 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   strcpy(writer->fnamePS,s->ps_output_pattern);
   strcpy(writer->fnameRFI,s->rfi_output_pattern);
   writer->save_every=s->save_every;
-  writer->headerPS.nChannels=1+s->channel_mask;
+  writer->headerPS.nChannels=1+(s->channel_mask==3);
   writer->headerPS.sample_rate=s->sample_rate;
   writer->headerPS.fft_size=s->fft_size;
   writer->headerPS.ncuts=s->n_cuts;
@@ -65,10 +65,11 @@ void writerInit(WRITER *writer, SETTINGS *s) {
 
   }
   writer->lenRFI = pow(2,s->log_chunk_size);
-  writer->counter =0;
+  writer->counter = 0;
+  writer->tone_freq = 0;
   printf ("Record size: %i\n", writer->lenPS);
   printf ("Version: %i\n", writer->headerPS.version);
-  
+
   maybeReOpenFile(writer,true);
 }
 

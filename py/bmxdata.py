@@ -42,6 +42,8 @@ class BMXFile(object):
             print("    Cut ",i," ",self.numin[i],'-',self.numax[i],'MHz #P=',self.nP[i])
             self.freq.append(self.freqOffset+self.numin[i]+(np.arange(self.nP[i])+0.5)*(self.numax[i]-self.numin[i])/self.nP[i])
         rec_desc=[]
+        if self.version>=2:
+            rec_desc+=[('num_nulled','i4',H['nChan'])]
         if self.nChan==1:
             for i in range(self.ncuts):
                 rec_desc+=[('chan1_'+str(i),'f4',self.nP[i])]
@@ -51,15 +53,15 @@ class BMXFile(object):
                            ('chan2_'+str(i),'f4',self.nP[i]), 
                            ('chanXR_'+str(i),'f4',self.nP[i]),
                            ('chanXI_'+str(i),'f4',self.nP[i])]
-        if self.version==2:
-            rec_desc+=[('nu_tone','f4',1)]
+        if self.version>=2:
+            rec_desc+=[('nu_tone','f4')]
         rec_dt=np.dtype(rec_desc,align=False)
         self.rec_dt=rec_dt
         self.names=rec_dt.names
         self.data=np.fromfile(f,rec_dt)
         self.fhandle=f
         self.nSamples = len(self.data)
-        print ("Loading done.")
+        print ("Loading done, %i samples"%(len(self.data)))
 
     def update(self,replace=False):
         ndata=np.fromfile(self.fhandle,self.rec_dt)

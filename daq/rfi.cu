@@ -133,7 +133,13 @@ void rfiInit(RFI * rfi, SETTINGS * s, GPUCARD *gc){
         rfi->isOutlierWrite[i] = (bool *)malloc(rfi->numChunks * sizeof(bool)); //number of chunks in 1 channel
         rfi->numOutliersNulled[i] = (int *)malloc(gc->nchan * sizeof(int));
 	rfi->outlierBuf[i] = (int8_t *)malloc(rfi->chunkSize * sizeof(int8_t));
-     }   
+    
+        //intialize counters
+	for(int j = 0; j<gc->nchan; j++)
+		rfi->numOutliersNulled[i][j] = 0;
+        rfi->outliersOR[i] = 0;
+    } 
+
   
     rfi->avgOutliersPerChannel = (float *)malloc(gc->nchan*sizeof(float));
     memset(rfi->avgOutliersPerChannel, 0, gc->nchan*sizeof(float));

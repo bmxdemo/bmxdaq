@@ -14,6 +14,8 @@ parser.add_option("--interval", dest="interval", default=1000,
                   help="plotting interval", type='int')
 parser.add_option("--psavg", dest="psavg", action="store_true",
                   help="average ps")
+parser.add_option("--log", dest="log", action="store_true",
+                  help="plot log")
 
 (o, args) = parser.parse_args()
 
@@ -44,7 +46,10 @@ def animate(i):
         ax[1][0].clear()
         ax[0][0].plot(d.freq[0],d.data['chan1_0'].mean(axis=0))
         ax[1][0].plot(d.freq[0],d.data['chan2_0'].mean(axis=0))
-    
+        if o.log:
+            ax[0][0].semilogy()
+            ax[1][0].semilogy()
+
     if (len(o.wf)>0):
         wfile = open(o.wf)
         de=[('ch1','i1'),('ch2','i1')]
