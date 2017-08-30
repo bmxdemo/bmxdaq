@@ -5,7 +5,7 @@ import  matplotlib.colors as colors
 
 class BMXFile(object):
     freqOffset = 1100
-    def __init__(self,fname):
+    def __init__(self,fname, nsamples=None, force_version=None):
         ## old header!!
         #head_desc=[('nChan','i4'),
         #           ('fftsize','i4'),('fft_avg','i4'),('sample_rate','f4'),
@@ -17,7 +17,10 @@ class BMXFile(object):
         if H['magic'][:7]!=b'>>BMX<<':
             print("Bad magic.",H['magic'])
             sys.exit(1)
-        self.version=H['version']
+        if force_version is not None:
+            self.version=force_version
+        else:
+            self.version=H['version']
         if self.version<=3:
             maxcuts=10
             head_desc=[('nChan','i4'),('sample_rate','f4'),('fft_size','u4'),
@@ -60,13 +63,16 @@ class BMXFile(object):
                            ('chan2_'+str(i),'f4',self.nP[i]), 
                            ('chanXR_'+str(i),'f4',self.nP[i]),
                            ('chanXI_'+str(i),'f4',self.nP[i])]
-        if self.version>=2:
+        if self.version>=1.5:
             rec_desc+=[('nu_tone','f4')]
             self.haveToneFreq=True
         rec_dt=np.dtype(rec_desc,align=False)
         self.rec_dt=rec_dt
         self.names=rec_dt.names
-        self.data=np.fromfile(f,rec_dt)
+        if nsamples is None:
+            self.data=np.fromfile(f,rec_dt)
+        else:
+            self.data=np.fromfile(f,rec_dt,count=nsamples)
         self.fhandle=f
         self.nSamples = len(self.data)
         print ("Loading done, %i samples"%(len(self.data)))
