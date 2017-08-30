@@ -4,33 +4,40 @@
 #include "stdlib.h"
 #include <math.h>
 
+void closeAndRename(WRITER *writer) {
+	fclose(writer->fPS);
+	rename(writer->tafnamePS,writer->afnamePS);
+	fclose(writer->fRFI);
+	rename(writer->tafnameRFI,writer->afnameRFI);
+}
+
 void maybeReOpenFile(WRITER *writer, bool first=false) {
   time_t rawtime;   
   time ( &rawtime );
   struct tm *ti = localtime ( &rawtime );
   
   if (first || ((ti->tm_min%writer->save_every==0) && writer->reopen)) {
-    if (!first){
-	fclose(writer->fPS);
-	fclose(writer->fRFI);
-    }
+    if (!first) closeAndRename(writer);
+
     writer->counter =0; //reset sample counter to 0
-    char afnamePS[MAXFNLEN], afnameRFI[MAXFNLEN]; //file names
-    sprintf(afnamePS,writer->fnamePS, ti->tm_year - 100 , ti->tm_mon + 1, 
+    sprintf(writer->afnamePS,writer->fnamePS, ti->tm_year - 100 , ti->tm_mon + 1, 
 	    ti->tm_mday, ti->tm_hour, ti->tm_min);
-    sprintf(afnameRFI,writer->fnameRFI, ti->tm_year - 100 , ti->tm_mon + 1, 
+    sprintf(writer->afnameRFI,writer->fnameRFI, ti->tm_year - 100 , ti->tm_mon + 1, 
 	    ti->tm_mday, ti->tm_hour, ti->tm_min);
-    printf ("New File: %s\n", afnamePS);
-    printf ("New File: %s\n", afnameRFI);
-    writer->fPS=fopen(afnamePS,"wb");
-    writer->fRFI=fopen(afnameRFI,"wb");
+    sprintf(writer->tafnamePS,"%s.new",writer->afnamePS);
+    sprintf(writer->tafnameRFI,"%s.new",writer->afnameRFI);
+    
+    printf ("New File: %s\n", writer->tafnamePS);
+    printf ("New File: %s\n", writer->tafnameRFI);
+    writer->fPS=fopen(writer->tafnamePS,"wb");
+    writer->fRFI=fopen(writer->tafnameRFI,"wb");
     
     if (writer->fPS==NULL) {
-      printf ("CANNOT OPEN FILE:%s",afnamePS);
+      printf ("CANNOT OPEN FILE:%s",writer->tafnamePS);
       exit(1);
     }
     if (writer->fRFI==NULL) {
-      printf ("CANNOT OPEN FILE:%s",afnameRFI);
+      printf ("CANNOT OPEN FILE:%s",writer->tafnameRFI);
       exit(1);
     }
     
@@ -101,8 +108,8 @@ void writerWriteRFI(WRITER * writer, int8_t * outlier, int chunk, int channel, f
 }
 
 void writerCleanUp(WRITER *writer) {
-  fclose(writer->fPS);
-  fclose(writer->fRFI);
+  printf ("Closing/renaming output files...\n");
+  closeAndRename(writer);
 }
 
 

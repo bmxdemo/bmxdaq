@@ -33,7 +33,10 @@ struct RFIHEADER {
 };
 
 struct WRITER {
-  char fnamePS[MAXFNLEN], fnameRFI[MAXFNLEN];  //file names
+  char fnamePS[MAXFNLEN], fnameRFI[MAXFNLEN];  //file names, from settings
+  char afnamePS[MAXFNLEN], afnameRFI[MAXFNLEN];  //current file names
+  char tafnamePS[MAXFNLEN], tafnameRFI[MAXFNLEN];  //temporary current file names 
+                                                   //(with ".new")
   uint32_t lenPS; // full length of PS info
   uint32_t lenRFI; //length of outlier chunk
   int save_every; // how many minutes we save.
@@ -50,4 +53,5 @@ void writerInit(WRITER *writer, SETTINGS *set);
 void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled);
 void writerWriteRFI(WRITER *writer, int8_t * outlier, int chunk, int channel, float nSigma);
 void writerCleanUp(WRITER *writer);
+void closeAndRename(WRITER *writer);
 

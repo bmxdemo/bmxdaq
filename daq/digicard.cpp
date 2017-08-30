@@ -15,6 +15,19 @@
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
+#include <signal.h>
+#include <unistd.h>
+
+/* Ctrl+C hander */
+
+volatile sig_atomic_t stopSignal = 0;
+
+void loop_signal_handler(int sig){ // can be called asynchronously
+  stopSignal=1;
+}
+
+
+
 
 /*
 **************************************************************************
@@ -117,9 +130,6 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
     printf ("**Not using real card, simulating...**\n");
   }
 
-  
-
-
   printf ("Allocating digitizer buffer...\n");
   /// now set the memory
   card->two_channel = (set->channel_mask==3);
@@ -192,7 +202,8 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
   fill=69;
   float towait=set->fft_size/set->sample_rate;
   long int sample_count=0;
-  while (1) {
+  signal(SIGINT, loop_signal_handler);
+  while (!stopSignal) {
     clock_gettime(CLOCK_REALTIME, &t1);
     float dt=deltaT(tSim,t1);
     tprintfn ("Cycle taking %fs, hope for < %fs",dt, towait);
@@ -259,7 +270,10 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
       }
   }
     
-  printf("\n\n\n\n\n\n\n\n\nSending stop command\n");
+  printf("\n\n\n\n\n\n\n\n\n");
+  if (stopSignal) printf ("Ctrl-C detected. Stopping.\n");
+  if (sample_count==set->nsamples) printf ("Reached required number of samples.\n");
+  printf ("Stoping digitizer FIFO...\n");
   // send the stop command
   dwError = set->simulate_digitizer ? ERR_OK :
     spcm_dwSetParam_i32 (dc->hCard, SPC_M2CMD, M2CMD_CARD_STOP | 
@@ -269,6 +283,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 
 
 void digiCardCleanUp(DIGICARD *card, SETTINGS *set) {
+  printf ("Closing digitizer... \n");
   digiCardFree(card->pnData);
   if (!set->simulate_digitizer) spcm_vClose (card->hCard);
 }

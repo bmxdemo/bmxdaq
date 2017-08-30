@@ -56,6 +56,7 @@ int main(int argc,char **argv)
   digiCardCleanUp(&dcard, &settings);
   writerCleanUp(&writer);
   if (settings.fg_nfreq) freqGenCleanUp(&fgen);
+  printf ("Done.\n");
   return 0;
 }
 
