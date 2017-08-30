@@ -53,7 +53,7 @@ def initData(o,args):
     if len(args)>0:
         fname=args[0]
     else:
-        fname=max(glob.iglob('data/*.data'), key=os.path.getctime)
+        fname=max(glob.iglob('data/*.data.new'), key=os.path.getctime)
 
     print "Reading ",fname
     d=bmx.BMXFile(fname)
@@ -78,7 +78,7 @@ def animate(i):
     else:
         if (len(args)==0):
             print "Looking for new file..."
-            fnamet=max(glob.iglob('data/*.data'), key=os.path.getctime)
+            fnamet=max(glob.iglob('data/*.data.new'), key=os.path.getctime)
             if fnamet!=fname:
                  print "Picked up ",fnamet
                  time.sleep(2) ## wait for the file to start for real

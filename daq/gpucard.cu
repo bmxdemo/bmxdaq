@@ -330,8 +330,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
     
     //RFI rejection 
     if(gc->nchan == 2 && rfi->statFlags != 0 && (rfi->nSigmaNull > 0 || rfi->nSigmaWrite > 0)){
-        printf("Inside rfi collection \n\n");
-	collectRFIStatistics(rfi, gc, csi);
+  	collectRFIStatistics(rfi, gc, csi);
         nullRFI(rfi, gc, csi, wr);
    	writeRFI(rfi, gc, csi, wr, buf);
     }
