@@ -63,6 +63,7 @@ def initData(o,args):
 def animate(i):
     global fname,d
     nr=d.update(replace=not o.psavg)
+    print nr
     print "New records:",nr
     if d.haveMJD:
         print "Last MJD:",d.data['mjd'][-1]
