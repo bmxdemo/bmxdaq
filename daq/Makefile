@@ -13,10 +13,10 @@ SPCM_LINK=-lspcm
 -include settings.mak
 SPCM_INCLUDE=-I$(SPCM_DIR)
 SPCM_OBJ=$(SPCM_DIR)/spcm_examples/c_cpp//common/ostools/spcm_ostools_linux.o
+LJLINK=-lLabJackM
 
-
-HEADERFILES=settings.h digicard.h digicardalloc.h gpucard.h writer.h terminal.h freqgen.h rs232.h reduction.h rfi.h
-SOURCES=main.cpp settings.cpp digicard.cpp writer.cpp terminal.cpp freqgen.cpp rs232.cpp 
+HEADERFILES=settings.h digicard.h digicardalloc.h gpucard.h writer.h terminal.h freqgen.h rs232.h reduction.h rfi.h ljack.h
+SOURCES=main.cpp settings.cpp digicard.cpp writer.cpp terminal.cpp freqgen.cpp rs232.cpp ljack.cpp
 CUDASOURCES=digicardalloc.cu gpucard.cu reduction.cu rfi.cu
 OBJS=$(SOURCES:.cpp=.o) $(CUDASOURCES:.cu=.o) 
 
@@ -33,7 +33,7 @@ all: daq.out
 	$(NVCC)  -O3 -std=c++11 -c $(SPCM_INCLUDE) -o $@ $<
 
 daq.out: $(OBJS)
-	$(NVCC) -o $@ $(OBJS) -L. -lm -lcufft $(SPCM_OBJ) $(SPCM_LINK)
+	$(NVCC) -o $@ $(OBJS) -L. -lm -lcufft $(SPCM_OBJ) $(SPCM_LINK) $(LJLINK)
 
 clean:
 	rm *.o

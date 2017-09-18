@@ -74,6 +74,8 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   writer->lenRFI = pow(2,s->log_chunk_size);
   writer->counter = 0;
   writer->tone_freq = 0;
+  writer->lj_voltage0 = 0;
+  writer->lj_diode = 0;
   printf ("Record size: %i\n", writer->lenPS);
   printf ("Version: %i\n", writer->headerPS.version);
 
@@ -93,6 +95,8 @@ void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled) {
   fwrite (numOutliersNulled, sizeof(int), writer->headerPS.nChannels, writer->fPS);
   fwrite (ps, sizeof(float), writer->lenPS, writer->fPS);
   fwrite (&writer->tone_freq, sizeof(float), 1, writer->fPS);
+  fwrite (&writer->lj_voltage0, sizeof(float), 1, writer->fPS);
+  fwrite (&writer->lj_diode, sizeof(int), 1, writer->fPS);
   fflush(writer->fPS);
   writer->counter++;
 }

@@ -10,7 +10,8 @@
 // CHANGES:
 //     v2 -- save float with cur tone freq every time you save
 //     v3 -- save MJD double
-#define HEADERVERSION 3
+//     v4 -- save labjack voltage float and diode
+#define HEADERVERSION 4
 
 
 struct BMXHEADER {
@@ -45,6 +46,8 @@ struct WRITER {
   BMXHEADER headerPS;  //header for power spectra files
   RFIHEADER headerRFI; //header for rfi files
   float tone_freq;
+  float lj_voltage0;
+  int lj_diode;
   int counter; //number of PS written to current file
 };
 
