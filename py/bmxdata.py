@@ -68,7 +68,7 @@ class BMXFile(object):
             rec_desc+=[('nu_tone','f4')]
             self.haveToneFreq=True
         if self.version>=4:
-            rec_desc+=[('lj_voltage','f4','lj_diode','i4')]
+            rec_desc+=[('lj_voltage','f4'),('lj_diode','i4')]
             self.haveDiode=True
 
         rec_dt=np.dtype(rec_desc,align=False)
