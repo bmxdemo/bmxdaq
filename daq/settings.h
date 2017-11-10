@@ -63,6 +63,10 @@ struct SETTINGS {
   float fg_ampl[MAXFREQ];
 
 
+  // labjack
+  int lj_Noff; // number of samples with diode off
+  int lj_Non;  // number of samples with diode on;
+
   //RFI rejection
   int log_chunk_size; //log base 2 of chunk size to be used to collect RFI statistics
   float n_sigma_null; //number of standard deviations used to determine outliers to null out. 0 for none
@@ -75,7 +79,7 @@ struct SETTINGS {
 
 // Fixed defines
 
-#define VERSION "0.01"
+#define VERSION "0.5"
 
 
 void init_settings(SETTINGS *settings, char* inifile);

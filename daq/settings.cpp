@@ -40,6 +40,8 @@ void init_settings(SETTINGS *s, char* fname) {
     s->fg_baudrate=9600;
     s->fg_switchevery=10;
     sprintf(s->fg_port,"ttyS0");
+    s->lj_Noff=0;
+    s->lj_Non=0;
     s->log_chunk_size = 20;
     s->n_sigma_null = 3;
     s->n_sigma_write = 3;
@@ -119,6 +121,10 @@ void init_settings(SETTINGS *s, char* fname) {
 	     s->fg_switchevery=atoi(s2);
 	   else if(!strcmp(s1,"fg_port="))
 	     strcpy(s->fg_port,s2);
+	   else if(!strcmp(s1,"lj_Noff="))
+	     s->lj_Noff=atoi(s2);
+	   else if(!strcmp(s1,"lj_Non="))
+	     s->lj_Non=atoi(s2);
 	   else if(!strcmp(s1,"wave_fname="))
 	     strcpy(s->wave_fname,s2);
 	   else if(!strcmp(s1,"wave_nbytes="))

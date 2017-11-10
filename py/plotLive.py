@@ -24,6 +24,9 @@ def getOpts():
                       help="Plot waveform. It will assume it lives in data/wave.bin")
     parser.add_option("--interval", dest="interval", default=1000,
                       help="plotting interval", type='int')
+    parser.add_option("--ymax", dest="ymax", default=0.0,
+                      help="ymax", type='float')
+
     parser.add_option("--psavg", dest="psavg", action="store_true",
                       help="average ps")
     parser.add_option("--log", dest="log", action="store_true",
@@ -73,9 +76,15 @@ def animate(i):
         ax[1][0].clear()
         ax[0][0].plot(d.freq[0],d.data['chan1_0'].mean(axis=0))
         ax[1][0].plot(d.freq[0],d.data['chan2_0'].mean(axis=0))
+
         if o.log:
             ax[0][0].semilogy()
             ax[1][0].semilogy()
+        if (o.ymax>0):
+            ymin,ymax=ax[0][0].get_ylim()
+            ax[0][0].set_ylim(ymin,o.ymax)
+            ymin,ymax=ax[1][0].get_ylim()
+            ax[1][0].set_ylim(0,o.ymax)
     else:
         if (len(args)==0):
             print "Looking for new file..."
@@ -97,7 +106,6 @@ def animate(i):
         ax[1][1].clear()
         ax[0][1].plot(xx,da['ch1'])
         ax[1][1].plot(xx,da['ch2'])
-
 
 
 if __name__=="__main__":

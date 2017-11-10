@@ -21,7 +21,7 @@ class BMXFile(object):
             self.version=force_version
         else:
             self.version=H['version']
-        if self.version<=3:
+        if self.version<=4:
             maxcuts=10
             head_desc=[('nChan','i4'),('sample_rate','f4'),('fft_size','u4'),
                    ('ncuts','i4'),
@@ -48,6 +48,7 @@ class BMXFile(object):
         self.haveMJD=False
         self.haveNulled=False
         self.haveToneFreq=False
+        self.haveDiode=False
         if self.version>=3:
             self.haveMJD=True
             rec_desc+=[('mjd','f8')]
@@ -66,6 +67,10 @@ class BMXFile(object):
         if self.version>=1.5:
             rec_desc+=[('nu_tone','f4')]
             self.haveToneFreq=True
+        if self.version>=4:
+            rec_desc+=[('lj_voltage','f4'),('lj_diode','i4')]
+            self.haveDiode=True
+
         rec_dt=np.dtype(rec_desc,align=False)
         self.rec_dt=rec_dt
         self.names=rec_dt.names

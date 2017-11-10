@@ -27,8 +27,6 @@ void loop_signal_handler(int sig){ // can be called asynchronously
 }
 
 
-
-
 /*
 **************************************************************************
 szTypeToName: doing name translation
@@ -178,7 +176,8 @@ float deltaT (timespec t1,timespec t2) {
 	  + ( t2.tv_nsec - t1.tv_nsec )/ 1e9;
 }
 
-void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRITER *w, RFI * rfi) {
+void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJACK *lj,
+		   WRITER *w, RFI *rfi) {
 
   printf ("\n\nStarting main loop\n");
   printf ("==========================\n");
@@ -253,6 +252,8 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
       
 	// drive frequency generator if needed
 	if (set->fg_nfreq) freqGenLoop(fgen, w);
+	// drive labjack
+	if (set->lj_Non) LJLoop(lj,w);
 	// write waveform if requested
 	if (set->wave_nbytes>0) {
 	  tprintfn ("filename=%s",set->wave_fname);

@@ -13,6 +13,7 @@ Anze Slosar, anze@bnl.gob
 #include "digicard.h"
 #include "gpucard.h"
 #include "freqgen.h"
+#include "ljack.h"
 
 // ----- standard c include files -----
 #include <stdio.h>
@@ -33,7 +34,8 @@ int main(int argc,char **argv)
   WRITER writer;                          // writer module
   DIGICARD dcard;                         // digitizer CARD
   GPUCARD gcard;                          // GPU card
-  FREQGEN fgen;
+  FREQGEN fgen;                           // Freq generator
+  LJACK ljack;                            // Labjack
   RFI rfi;                                //rfi stuff
   if(argc>=2) {
     char fname_ini[256];
@@ -44,18 +46,25 @@ int main(int argc,char **argv)
 
   // intialize
   print_settings(&settings);
-  digiCardInit(&dcard,&settings);
-  if (!settings.dont_process) gpuCardInit(&gcard,&settings);
+  // first ephemeral things
   if (settings.fg_nfreq) freqGenInit(&fgen, &writer, &settings);
+  if (settings.lj_Non) LJInit(&ljack, &writer, &settings);
+  // digitizer
+  digiCardInit(&dcard,&settings);
+  // GPU
+  if (!settings.dont_process) gpuCardInit(&gcard,&settings);
+  // writer
   writerInit(&writer,&settings);
   rfiInit(&rfi, &settings, &gcard);
 
   //work
-  digiWorkLoop(&dcard, &gcard, &settings, &fgen, &writer, &rfi);
+  digiWorkLoop(&dcard, &gcard, &settings, &fgen, &ljack, &writer, &rfi);
   //shutdown
   digiCardCleanUp(&dcard, &settings);
   writerCleanUp(&writer);
   if (settings.fg_nfreq) freqGenCleanUp(&fgen);
+  if (settings.lj_Non) LJCleanUp(&ljack);
+
   printf ("Done.\n");
   return 0;
 }
