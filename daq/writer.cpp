@@ -55,6 +55,7 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   printf ("==========================\n");
   strcpy(writer->fnamePS,s->ps_output_pattern);
   strcpy(writer->fnameRFI,s->rfi_output_pattern);
+  strcpy(writer->fnameLastBuffer, s->last_buffer_output_pattern);
   writer->save_every=s->save_every;
   writer->headerPS.nChannels=1+(s->channel_mask==3);
   writer->headerPS.sample_rate=s->sample_rate;
@@ -109,6 +110,22 @@ void writerWriteRFI(WRITER * writer, int8_t * outlier, int chunk, int channel, f
   fwrite(&nSigma, sizeof(float), 1, writer->fRFI);
   fwrite (outlier, sizeof(int8_t), writer->lenRFI, writer->fRFI);
   fflush(writer->fRFI);
+}
+
+void writerWriteLastBuffer(WRITER * writer, int8_t * bufstart, int size){
+  time_t rawtime;
+  time (&rawtime);
+  struct tm *ti = localtime ( &rawtime );
+  sprintf(writer->afnameLastBuffer, writer->fnameLastBuffer, ti->tm_year - 100 , ti->tm_mon + 1,
+            ti->tm_mday, ti->tm_hour, ti->tm_min);
+  printf("NEW FILE: %s\n", writer->afnameLastBuffer);
+  FILE * fw = fopen(writer->afnameLastBuffer, "wb");
+  if(fw == NULL)
+	printf("CANNOT OPEN FILE: %s\n", writer->afnameLastBuffer);
+  else {
+  	fwrite(bufstart, sizeof(int8_t), size, fw);
+  	fclose(fw);
+  }
 }
 
 void writerCleanUp(WRITER *writer) {
