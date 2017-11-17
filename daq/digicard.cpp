@@ -271,13 +271,14 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
       }
   }   
   
-  //Write last digitizer bufer to a file 
-  if(set->print_last_buffer){
-  	writerWriteLastBuffer(w, bufstart,dc->lNotifySize);
-  }
   printf("\n\n\n\n\n\n\n\n\n");
   if (stopSignal) printf ("Ctrl-C detected. Stopping.\n");
   if (sample_count==set->nsamples) printf ("Reached required number of samples.\n");
+  //Write last digitizer bufer to a file 
+  if(set->print_last_buffer){
+  	printf("Printing last digitizer buffer to a file...\n");
+  	writerWriteLastBuffer(w, bufstart,dc->lNotifySize);
+  }
   printf ("Stoping digitizer FIFO...\n");
   // send the stop command
   dwError = set->simulate_digitizer ? ERR_OK :
