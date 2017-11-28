@@ -11,7 +11,8 @@
 //     v2 -- save float with cur tone freq every time you save
 //     v3 -- save MJD double
 //     v4 -- save labjack voltage float and diode
-#define HEADERVERSION 4
+//     v5 -- changed localtime to gmtime in filename -- header hasn't changed
+#define HEADERVERSION 5
 
 
 struct BMXHEADER {

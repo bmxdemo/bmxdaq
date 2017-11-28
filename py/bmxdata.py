@@ -21,7 +21,7 @@ class BMXFile(object):
             self.version=force_version
         else:
             self.version=H['version']
-        if self.version<=4:
+        if self.version<=5:
             maxcuts=10
             head_desc=[('nChan','i4'),('sample_rate','f4'),('fft_size','u4'),
                    ('ncuts','i4'),
@@ -49,6 +49,7 @@ class BMXFile(object):
         self.haveNulled=False
         self.haveToneFreq=False
         self.haveDiode=False
+        self.FilenameUTC=(self.version[0]>=5)
         if self.version>=3:
             self.haveMJD=True
             rec_desc+=[('mjd','f8')]

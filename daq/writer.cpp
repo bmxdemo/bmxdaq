@@ -14,7 +14,7 @@ void closeAndRename(WRITER *writer) {
 void maybeReOpenFile(WRITER *writer, bool first=false) {
   time_t rawtime;   
   time ( &rawtime );
-  struct tm *ti = localtime ( &rawtime );
+  struct tm *ti = gmtime ( &rawtime );
   
   if (first || ((ti->tm_min%writer->save_every==0) && writer->reopen)) {
     if (!first) closeAndRename(writer);
