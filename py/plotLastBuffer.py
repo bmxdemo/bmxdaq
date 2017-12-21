@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import sys, glob, os, time
 from optparse import OptionParser
 
+## This assumes 2 channels.
 
 parser = OptionParser()
 parser.add_option("--points", dest="points", default = 1000, 
