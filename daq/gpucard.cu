@@ -240,7 +240,7 @@ void printTiming(GPUCARD *gc, int i) {
 //      wr: writer to write out power spectra and outliers to files
 //      rfi: structure containing rfi settings and memory for rfi statistics
 //	set: settings
-bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS *set) {
+bool gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, RFI * rfi, SETTINGS *set) {
     //streamed version
     bool deleteLinesInConsole = false;
    //Check if other streams are finished and proccess the finished ones in order (i.e. print output to file)
@@ -265,9 +265,9 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
                   float NSub=bs/step; // number of subsamples to take
                   float m1=0.,m2=0.,v1=0.,v2=0.;
                   for (int i=0; i<bs; i+=step) { // take them in steps of step
-                 	float n=buf[i];
+                 	float n=buf[0][i];
                 	m1+=n; v1+=n*n;
-                	n=buf[i+1];
+                	n=buf[0][i+1];
                 	m2+=n; v2+=n*n;
                   }
                   m1/=NSub; v1=sqrt(v1/NSub-m1*m1); //mean and variance
@@ -308,7 +308,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
     if(gc->active_streams == gc->nstreams){ //if no empty streams
     	printf("No free streams.\n");
         if(gc->nstreams > 1) //first few packets come in close together (<122 ms), so for 1 stream, we need to queue them, and not just quit the program
-		exit(1);
+		;//exit(1);
     }
 
     gc->active_streams++;
@@ -316,7 +316,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
     cudaEventRecord(gc->eStart[csi], cs);
     
     //memory copy
-    CHK(cudaMemcpyAsync(gc->cbuf[csi], buf, gc->bufsize , cudaMemcpyHostToDevice,cs));
+    CHK(cudaMemcpyAsync(gc->cbuf[csi], buf[0], gc->bufsize , cudaMemcpyHostToDevice,cs));
     
     //floatize
     cudaEventRecord(gc->eDoneCopy[csi], cs);
@@ -332,7 +332,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
     if(gc->nchan == 2 && rfi->statFlags != 0 && (rfi->nSigmaNull > 0 || rfi->nSigmaWrite > 0)){
   	collectRFIStatistics(rfi, gc, csi);
         nullRFI(rfi, gc, csi, wr);
-   	writeRFI(rfi, gc, csi, wr, buf);
+   	writeRFI(rfi, gc, csi, wr, buf[0]);
     }
     cudaEventRecord(gc->eDoneRFI[csi],gc->streams[csi]);
 
