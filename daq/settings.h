@@ -9,7 +9,7 @@
 // modifiable settings
 struct SETTINGS {
   // basic settings
-
+  uint64_t card_mask; //bit mask representing which cards are to be used
   // digi card settings
   float sample_rate; // in samples/s
   long long int spc_sample_rate;

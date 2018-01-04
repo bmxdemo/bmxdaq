@@ -112,7 +112,7 @@ void writerWriteRFI(WRITER * writer, int8_t * outlier, int chunk, int channel, f
   fflush(writer->fRFI);
 }
 
-void writerWriteLastBuffer(WRITER * writer, int8_t * bufstart, int size){
+void writerWriteLastBuffer(WRITER * writer, int8_t ** bufstart, int numCards, int size){
   time_t rawtime;
   time (&rawtime);
   struct tm *ti = localtime ( &rawtime );
@@ -123,7 +123,8 @@ void writerWriteLastBuffer(WRITER * writer, int8_t * bufstart, int size){
   if(fw == NULL)
 	printf("CANNOT OPEN FILE: %s\n", writer->afnameLastBuffer);
   else {
-  	fwrite(bufstart, sizeof(int8_t), size, fw);
+    for(int i=0; i < numCards; i++)
+  	  fwrite(bufstart[i], sizeof(int8_t), size, fw);
   	fclose(fw);
   }
 }

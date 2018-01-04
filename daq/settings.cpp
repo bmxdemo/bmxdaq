@@ -15,6 +15,7 @@ int my_linecount(FILE *f)
 }
 
 void init_settings(SETTINGS *s, char* fname) {
+    s->card_mask = 3; //use both cards
     s->sample_rate=1.25e9;
     s->spc_sample_rate=1250*1000000;
     s->spc_ref_clock=1250*1000000;
@@ -79,7 +80,9 @@ void init_settings(SETTINGS *s, char* fname) {
 	   }
 
 	   bool found=true;
-	   if(!strcmp(s1,"sample_rate="))
+	   if(!strcmp(s1,"card_mask="))
+	     s->card_mask=atoi(s2);
+	   else if(!strcmp(s1,"sample_rate="))
 	     s->sample_rate=atof(s2)*1e6;
 	   else if(!strcmp(s1,"spc_sample_rate="))
 	     s->spc_sample_rate=atoi(s2)*1000000;
