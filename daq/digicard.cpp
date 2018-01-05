@@ -200,7 +200,8 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
   printf ("==========================\n");
   
   int numCards = 1 + (set->card_mask==3); //how many digitizer cards we are using
-  
+  printf("Number of digitizer cards: %d", numCards);
+
   uint32      dwError[2];
   int32       lStatus[2], lAvailUser[2], lPCPos[2], fill[2];
   int8_t * bufstart[2];
@@ -208,9 +209,9 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
   // start everything
   if(!set->simulate_digitizer){
     std::thread th[2];
-    for(int i=1; i<numCards; i++)
+    for(int i=0; i<numCards; i++)
       th[i] = std::thread(startDAQ, std::ref(dwError[i]), std::ref(dc->hCard[i]));
-    for(int i=1; i<numCards; i++)
+    for(int i=0; i<numCards; i++)
       th[i].join();
       
     // check for error
@@ -267,7 +268,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
         double accum = deltaT(timeStart, timeNow);
         for(int i=0; i<numCards; i++){
             tprintfn("Time: %fs; Status:%i; Pos:%08x; digitizer buffer fill %i/1000   ", 
-                accum, lStatus[i], lPCPos[i],fill[i]);
+                accum, lStatus[i], lPCPos[i], fill[i]);
             bufstart[i]=((int8_t*)dc->pnData[i]+lPCPos[i]);
         }
         if (set->dont_process) 
@@ -309,8 +310,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
   //Write last digitizer bufer to a file 
   if(set->print_last_buffer){
     printf("Printing last digitizer buffer to a file...\n");
-    for(int i=0; i < numCards; i++)
-      writerWriteLastBuffer(w, bufstart, numCards, dc->lNotifySize);
+    writerWriteLastBuffer(w, bufstart, numCards, dc->lNotifySize);
   }
   printf ("Stoping digitizer FIFO...\n");
   // send the stop command
