@@ -17,7 +17,7 @@
 #include <math.h>
 #include <signal.h>
 #include <unistd.h>
-
+#include <assert.h>
 #include <thread>
 /* Ctrl+C hander */
 
@@ -200,7 +200,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
   printf ("==========================\n");
   
   int numCards = 1 + (set->card_mask==3); //how many digitizer cards we are using
-  printf("Number of digitizer cards: %d", numCards);
+  printf("Number of digitizer cards: %d\n", numCards);
 
   uint32      dwError[2];
   int32       lStatus[2], lAvailUser[2], lPCPos[2], fill[2];
@@ -258,50 +258,51 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
         spcm_dwGetParam_i32 (dc->hCard[i], SPC_DATA_AVAIL_USER_LEN,  &lAvailUser[i]);
         spcm_dwGetParam_i32 (dc->hCard[i], SPC_DATA_AVAIL_USER_POS,  &lPCPos[i]);
         spcm_dwGetParam_i32 (dc->hCard[i], SPC_FILLSIZEPROMILLE,  &fill[i]);
+        assert(lAvailUser[i] >= dc->lNotifySize);
         clock_gettime(CLOCK_REALTIME, &tSim);
         dt=deltaT(t1,tSim);
         tprintfn ("Measured dt for card %d: %f ms, rate=%f MHz",i, dt*1e3, set->fft_size/dt/1e6);
+        
       }
     }
-    if (lAvailUser[0] >= dc->lNotifySize && (numCards ==1 || lAvailUser[1] >= dc->lNotifySize)){
-        clock_gettime(CLOCK_REALTIME, &timeNow);
-        double accum = deltaT(timeStart, timeNow);
-        for(int i=0; i<numCards; i++){
-            tprintfn("Time: %fs; Status:%i; Pos:%08x; digitizer buffer fill %i/1000   ", 
-                accum, lStatus[i], lPCPos[i], fill[i]);
-            bufstart[i]=((int8_t*)dc->pnData[i]+lPCPos[i]);
-        }
-        if (set->dont_process) 
-          tprintfn (" ** no GPU processing");
-        else{
-            gpuProcessBuffer(gc,bufstart,w,rfi, set);
-        }
 
-        // tell driver we're done
-        if (!set->simulate_digitizer)
-          for(int i = 0; i < numCards; i++)
-            spcm_dwSetParam_i32 (dc->hCard[i], SPC_DATA_AVAIL_CARD_LEN, dc->lNotifySize);
-        
-        // drive frequency generator if needed
-        if (set->fg_nfreq) freqGenLoop(fgen, w);
-        // drive labjack
-        if (set->lj_Non) LJLoop(lj,w);
-        // write waveform if requested
-        if (set->wave_nbytes>0) {
-          tprintfn ("filename=%s",set->wave_fname);
-          FILE *fw=fopen(set->wave_fname,"wb");
-          if (fw!=NULL) {
-            for(int i=0; i< numCards; i++)
-              fwrite(bufstart[i],sizeof(int8_t),set->wave_nbytes,fw);
-            fclose(fw);
-          }
-        }
-        // break if sufficient number of samples
-        if ((++sample_count) == set->nsamples) break;
-
-        // return terminal cursor
-        treturn();
+    clock_gettime(CLOCK_REALTIME, &timeNow);
+    double accum = deltaT(timeStart, timeNow);
+    for(int i=0; i<numCards; i++){
+        tprintfn("Time: %fs; Status:%i; Pos:%08x; digitizer buffer fill %i/1000   ", 
+            accum, lStatus[i], lPCPos[i], fill[i]);
+        bufstart[i]=((int8_t*)dc->pnData[i]+lPCPos[i]);
     }
+    if (set->dont_process) 
+      tprintfn (" ** no GPU processing");
+    else{
+        gpuProcessBuffer(gc,bufstart,w,rfi, set);
+    }
+
+    // tell driver we're done
+    if (!set->simulate_digitizer)
+      for(int i = 0; i < numCards; i++)
+        spcm_dwSetParam_i32 (dc->hCard[i], SPC_DATA_AVAIL_CARD_LEN, dc->lNotifySize);
+    
+    // drive frequency generator if needed
+    if (set->fg_nfreq) freqGenLoop(fgen, w);
+    // drive labjack
+    if (set->lj_Non) LJLoop(lj,w);
+    // write waveform if requested
+    if (set->wave_nbytes>0) {
+      tprintfn ("filename=%s",set->wave_fname);
+      FILE *fw=fopen(set->wave_fname,"wb");
+      if (fw!=NULL) {
+        for(int i=0; i< numCards; i++)
+          fwrite(bufstart[i],sizeof(int8_t),set->wave_nbytes,fw);
+        fclose(fw);
+      }
+    }
+    // break if sufficient number of samples
+    if ((++sample_count) == set->nsamples) break;
+
+    // return terminal cursor
+    treturn();
   }   
   
   printf("\n\n\n\n\n\n\n\n\n");
