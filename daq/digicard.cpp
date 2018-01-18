@@ -204,7 +204,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
 
   uint32      dwError[2];
   int32       lStatus[2], lAvailUser[2], lPCPos[2], fill[2];
-  int8_t * bufstart[2];
+  int8_t *    bufstart[2];
   
   // start everything
   if(!set->simulate_digitizer){
@@ -275,7 +275,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
     }
     if (set->dont_process) 
       tprintfn (" ** no GPU processing");
-    else{
+    else if(towait-dt<.005){//don't proccess if data is being returned  too fast i.e. in first few cycles
         gpuProcessBuffer(gc,bufstart,w,rfi, set);
     }
 
