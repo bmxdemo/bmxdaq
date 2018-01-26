@@ -213,6 +213,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
       th[i] = std::thread(startDAQ, std::ref(dwError[i]), std::ref(dc->hCard[i]));
     for(int i=0; i<numCards; i++)
       th[i].join();
+
       
     // check for error
     for(int i=0; i<numCards; i++)
@@ -230,6 +231,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
   float towait=set->fft_size/set->sample_rate;
   long int sample_count=0;
   signal(SIGINT, loop_signal_handler);
+  bool processed = true; //was the data processed properly on the gpu
   while (!stopSignal) {
     clock_gettime(CLOCK_REALTIME, &t1);
     float dt=deltaT(tSim,t1);
@@ -248,6 +250,10 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
           if (fill[i]>69) fill[i]-=30;
           } while (deltaT(tSim,t1)<towait);
       }
+      t1=tSim;
+      clock_gettime(CLOCK_REALTIME, &tSim);
+      dt=deltaT(t1,tSim);
+      tprintfn ("Measured dt: %f ms, rate=%f MHz",dt*1e3, set->fft_size/dt/1e6);
     }
     else {
       t1=tSim;
@@ -261,7 +267,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
         assert(lAvailUser[i] >= dc->lNotifySize);
         clock_gettime(CLOCK_REALTIME, &tSim);
         dt=deltaT(t1,tSim);
-        tprintfn ("Measured dt for card %d: %f ms, rate=%f MHz",i, dt*1e3, set->fft_size/dt/1e6);
+        tprintfn ("Measured dt for card %d: %f ms, rate=%f MHz, sample number=%d",i, dt*1e3, set->fft_size/dt/1e6, sample_count);
         
       }
     }
@@ -275,8 +281,8 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
     }
     if (set->dont_process) 
       tprintfn (" ** no GPU processing");
-    else if(towait-dt<.005){//don't proccess if data is being returned  too fast i.e. in first few cycles
-        gpuProcessBuffer(gc,bufstart,w,rfi, set);
+    else if(sample_count > 10 || set->simulate_digitizer){//don't proccess first few cycles if coming from ADC
+        processed = gpuProcessBuffer(gc,bufstart,w,rfi, set);
     }
 
     // tell driver we're done
@@ -300,7 +306,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
     }
     // break if sufficient number of samples
     if ((++sample_count) == set->nsamples) break;
-
+    if (!processed) break;
     // return terminal cursor
     treturn();
   }   
