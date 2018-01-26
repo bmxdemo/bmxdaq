@@ -35,12 +35,17 @@ THIS IS A COMPLETE PLACEHOLDER!
 
 struct RFI; //forward declaration
 
+
+struct GPUDATA { //object holding all the data buffers needed for one cuda stream
+};
+
 struct GPUCARD {
-  CUDA_DEVICE_PROP * devProp; //gpu device properties  
-  int8_t **cbuf; // pointer to pointers of GPU sample buffer
+  CUDA_DEVICE_PROP * devProp; //gpu device properties
+  int8_t ***cbuf; // original buffer data as bytes before it is converted to floats
   CUFFT_REAL **cfbuf; // floats
   CUFFT_COMPLEX **cfft; // ffts
   float **coutps; // output power spectra
+  GPUDATA * data; //pointer to data buffers for each cuda stream
   float *outps;
   int nchan; // nchannels
   uint32_t fftsize; // fft size
