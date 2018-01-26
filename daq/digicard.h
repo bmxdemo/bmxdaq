@@ -26,6 +26,7 @@ bDoCardSetuo: setup matching the calculation routine
 
 struct DIGICARD {
   drv_handle  hCard[2];
+  int32       serialNumber[2];
   int16**     pnData;
   int         two_channel;
   int32       lNotifySize;

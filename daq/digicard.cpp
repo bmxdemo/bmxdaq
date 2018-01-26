@@ -56,7 +56,7 @@ void printErrorDie(const char* message, DIGICARD *card, int cardIndex,  SETTINGS
   spcm_dwGetErrorInfo_i32 (card->hCard[cardIndex], NULL, NULL, szErrorTextBuffer);
   //correct card number in case where we are only using the second digitizer card
   int cardNum = (set->card_mask==2)? 1 : cardIndex;
-  printf ("Digitizer card %d fatal error: %s\n",cardNum, message);
+  printf ("Digitizer card %d fatal error: %s\n",card->serialNumber[cardNum], message);
   printf ("Error Text: %s\n", szErrorTextBuffer);
   digiCardCleanUp(card, set);
   exit(1);
@@ -117,7 +117,7 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
     return;
   }
   
-  printf ("\n\nInitializing digitizer\n");
+  printf ("\n\nInitializing digitizer(s)\n");
   printf ("==========================\n");
 
   //open digitizer cards
@@ -139,18 +139,18 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
   
   for(int i =0; i < numCards; i++){
     if (!card->hCard[i]) printErrorDie("Can't open digitizer card", card, i, set);
-    int32 lCardType, lSerialNumber, lFncType;
+    int32 lCardType, lFncType;
     // read type, function and sn and check for A/D card
     spcm_dwGetParam_i32 (card->hCard[i], SPC_PCITYP,         &lCardType);
-    spcm_dwGetParam_i32 (card->hCard[i], SPC_PCISERIALNO,    &lSerialNumber);
+    spcm_dwGetParam_i32 (card->hCard[i], SPC_PCISERIALNO,    &card->serialNumber[i]);
     spcm_dwGetParam_i32 (card->hCard[i], SPC_FNCTYPE,        &lFncType);
     switch (lFncType){
       case SPCM_TYPE_AI:
-        printf ("Found: %s sn %05d\n", szTypeToName (lCardType), lSerialNumber);
+        printf ("Found: %s sn %05d\n", szTypeToName(lCardType), card->serialNumber[i]);
         break;
 
       default:
-        printf ("Card: %s sn %05d not supported. \n", szTypeToName (lCardType), lSerialNumber);            
+        printf ("Card: %s sn %05d not supported. \n", szTypeToName(lCardType), card->serialNumber[i]);            
         exit(1);
     }
 
@@ -180,7 +180,7 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
     printf ("ADC ranges for CH1/2: %i/%i mV\n",range1,range2);
     long long int srate;
     spcm_dwGetParam_i64 (card->hCard[i], SPC_SAMPLERATE, &srate);
-    printf ("Sampling rate set to %.1lf MHz\n", srate/1000000.); 
+    printf ("Sampling rate set to %.1lf MHz\n\n", srate/1000000.); 
    
     // define transfer
     spcm_dwDefTransfer_i64 (card->hCard[i], SPCM_BUF_DATA, SPCM_DIR_CARDTOPC,
@@ -235,7 +235,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
   while (!stopSignal) {
     clock_gettime(CLOCK_REALTIME, &t1);
     float dt=deltaT(tSim,t1);
-    tprintfn ("Cycle taking %fs, hope for < %fs",dt, towait);
+    tprintfn ("Sample number=%d, Cycle taking %fs, hope for < %fs",sample_count, dt, towait);
     if (set->simulate_digitizer) {
       for(int i=0; i<numCards; i++){
         lPCPos[i] = dc->lNotifySize*sim_ofs;
@@ -267,16 +267,17 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
         assert(lAvailUser[i] >= dc->lNotifySize);
         clock_gettime(CLOCK_REALTIME, &tSim);
         dt=deltaT(t1,tSim);
-        tprintfn ("Measured dt for card %d: %f ms, rate=%f MHz, sample number=%d",i, dt*1e3, set->fft_size/dt/1e6, sample_count);
+        tprintfn ("Measured dt for card %d: %f ms, rate=%f MHz", dc->serialNumber[i], dt*1e3, set->fft_size/dt/1e6);
         
       }
     }
 
     clock_gettime(CLOCK_REALTIME, &timeNow);
     double accum = deltaT(timeStart, timeNow);
+    tprintfn("Time: %fs;", accum);
     for(int i=0; i<numCards; i++){
-        tprintfn("Time: %fs; Status:%i; Pos:%08x; digitizer buffer fill %i/1000   ", 
-            accum, lStatus[i], lPCPos[i], fill[i]);
+        tprintfn("Status:%i; Pos:%08x; digitizer buffer fill %i/1000   ", 
+            lStatus[i], lPCPos[i], fill[i]);
         bufstart[i]=((int8_t*)dc->pnData[i]+lPCPos[i]);
     }
     if (set->dont_process) 
