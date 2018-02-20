@@ -298,7 +298,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
     // write waveform if requested
     if (set->wave_nbytes>0) {
       tprintfn ("filename=%s",set->wave_fname);
-      FILE *fw=fopen(set->wave_fname,"wb");
+      FILE *fw=fopen(set->wave_fname,"ab");
       if (fw!=NULL) {
         for(int i=0; i< numCards; i++)
           fwrite(bufstart[i],sizeof(int8_t),set->wave_nbytes,fw);
