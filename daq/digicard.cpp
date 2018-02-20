@@ -276,7 +276,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
     double accum = deltaT(timeStart, timeNow);
     tprintfn("Time: %fs;", accum);
     for(int i=0; i<numCards; i++){
-        tprintfn("Status:%i; Pos:%08x; digitizer buffer fill %i/1000   ", 
+        tprintfn("Card %d Status:%i; Pos:%08x; digitizer buffer fill %i/1000   ", dc->serialNumber[i],
             lStatus[i], lPCPos[i], fill[i]);
         bufstart[i]=((int8_t*)dc->pnData[i]+lPCPos[i]);
     }
