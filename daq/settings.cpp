@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include "time.h"
 
 int my_linecount(FILE *f)
 {
@@ -132,8 +133,14 @@ void init_settings(SETTINGS *s, char* fname) {
 	     s->lj_Noff=atoi(s2);
 	   else if(!strcmp(s1,"lj_Non="))
 	     s->lj_Non=atoi(s2);
-	   else if(!strcmp(s1,"wave_fname="))
-	     strcpy(s->wave_fname,s2);
+	   else if(!strcmp(s1,"wave_fname=")){
+       time_t rawtime;
+       time ( &rawtime );
+       struct tm *ti = localtime ( &rawtime );
+       strcpy(s->wave_fname,s2);
+         sprintf(s->wave_fname,s->wave_fname, ti->tm_year - 100 , ti->tm_mon + 1,
+           ti->tm_mday, ti->tm_hour, ti->tm_min);
+     }
 	   else if(!strcmp(s1,"print_last_buffer="))
 	     s->print_last_buffer=atoi(s2);
            else if(!strcmp(s1,"wave_nbytes="))
