@@ -53,15 +53,16 @@ int main(int argc,char **argv)
   digiCardInit(&dcard,&settings);
   // GPU
   if (!settings.dont_process) gpuCardInit(&gcard,&settings);
-  // writer
-  writerInit(&writer,&settings);
+  //RFI
   rfiInit(&rfi, &settings, &gcard);
+  // writer
+  writerInit(&writer,&settings, rfi.isRFIOn);
 
   //work
   digiWorkLoop(&dcard, &gcard, &settings, &fgen, &ljack, &writer, &rfi);
   //shutdown
   digiCardCleanUp(&dcard, &settings);
-  writerCleanUp(&writer);
+  writerCleanUp(&writer, rfi.isRFIOn);
   if (settings.fg_nfreq) freqGenCleanUp(&fgen);
   if (settings.lj_Non) LJCleanUp(&ljack);
 
