@@ -4,54 +4,59 @@
 #include "stdlib.h"
 #include <math.h>
 
-void closeAndRename(WRITER *writer) {
+void closeAndRename(WRITER *writer, bool isRFIOn) {
 	fclose(writer->fPS);
 	rename(writer->tafnamePS,writer->afnamePS);
-	fclose(writer->fRFI);
-	rename(writer->tafnameRFI,writer->afnameRFI);
+  if(isRFIOn){
+	  fclose(writer->fRFI);
+	  rename(writer->tafnameRFI,writer->afnameRFI);
+  }
 }
 
-void maybeReOpenFile(WRITER *writer, bool first=false) {
+void maybeReOpenFile(WRITER *writer, bool isRFIOn, bool first=false) {
   time_t rawtime;   
   time ( &rawtime );
   struct tm *ti = localtime ( &rawtime );
   
   if (first || ((ti->tm_min%writer->save_every==0) && writer->reopen)) {
-    if (!first) closeAndRename(writer);
+    if (!first) closeAndRename(writer, isRFIOn);
 
     writer->counter =0; //reset sample counter to 0
     sprintf(writer->afnamePS,writer->fnamePS, ti->tm_year - 100 , ti->tm_mon + 1, 
 	    ti->tm_mday, ti->tm_hour, ti->tm_min);
-    sprintf(writer->afnameRFI,writer->fnameRFI, ti->tm_year - 100 , ti->tm_mon + 1, 
-	    ti->tm_mday, ti->tm_hour, ti->tm_min);
     sprintf(writer->tafnamePS,"%s.new",writer->afnamePS);
-    sprintf(writer->tafnameRFI,"%s.new",writer->afnameRFI);
-    
     printf ("New File: %s\n", writer->tafnamePS);
-    printf ("New File: %s\n", writer->tafnameRFI);
     writer->fPS=fopen(writer->tafnamePS,"wb");
-    writer->fRFI=fopen(writer->tafnameRFI,"wb");
     
     if (writer->fPS==NULL) {
       printf ("CANNOT OPEN FILE:%s",writer->tafnamePS);
       exit(1);
     }
-    if (writer->fRFI==NULL) {
-      printf ("CANNOT OPEN FILE:%s",writer->tafnameRFI);
-      exit(1);
-    }
     
     fwrite(&writer->headerPS, sizeof(BMXHEADER),1, writer->fPS);
-    fwrite(&writer->headerRFI, sizeof(RFIHEADER), 1, writer->fRFI);
+
+    if(isRFIOn){
+      sprintf(writer->afnameRFI,writer->fnameRFI, ti->tm_year - 100 , ti->tm_mon + 1, 
+	      ti->tm_mday, ti->tm_hour, ti->tm_min);
+      sprintf(writer->tafnameRFI,"%s.new",writer->afnameRFI);
+      printf ("New File: %s\n", writer->tafnameRFI);
+      writer->fRFI=fopen(writer->tafnameRFI,"wb");
+      if (writer->fRFI==NULL) {
+        printf ("CANNOT OPEN FILE:%s",writer->tafnameRFI);
+        exit(1);
+      }
+    
+      fwrite(&writer->headerRFI, sizeof(RFIHEADER), 1, writer->fRFI);    
+    }
 
     writer->reopen=false;
   }
-  if (ti->tm_min%writer->save_every==1) {
-      writer->reopen=true;
-  }
+
+  if (ti->tm_min%writer->save_every==1)  writer->reopen=true;
+  
 }
 
-void writerInit(WRITER *writer, SETTINGS *s) {
+void writerInit(WRITER *writer, SETTINGS *s, bool isRFIOn) {
   printf ("==========================\n");
   strcpy(writer->fnamePS,s->ps_output_pattern);
   strcpy(writer->fnameRFI,s->rfi_output_pattern);
@@ -80,7 +85,7 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   printf ("Record size: %i\n", writer->lenPS);
   printf ("Version: %i\n", writer->headerPS.version);
 
-  maybeReOpenFile(writer,true);
+  maybeReOpenFile(writer, isRFIOn, true);
 }
 
 double getMJDNow()
@@ -89,8 +94,8 @@ double getMJDNow()
   return (double)(t) / 86400.0  + 40587.0;
 }
 
-void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled) {
-  maybeReOpenFile(writer);
+void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled, bool isRFIOn) {
+  maybeReOpenFile(writer, isRFIOn);
   double mjd=getMJDNow();
   fwrite (&mjd, sizeof(double), 1, writer->fPS);
   fwrite (numOutliersNulled, sizeof(int), writer->headerPS.nChannels, writer->fPS);
@@ -103,7 +108,7 @@ void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled) {
 }
 
 void writerWriteRFI(WRITER * writer, int8_t * outlier, int chunk, int channel, float nSigma){
-  maybeReOpenFile(writer);
+  maybeReOpenFile(writer, true);
   fwrite(&writer->counter, sizeof(int), 1, writer->fRFI);
   fwrite(&chunk, sizeof(int), 1, writer->fRFI);
   fwrite(&channel, sizeof(int), 1, writer->fRFI);
@@ -129,9 +134,9 @@ void writerWriteLastBuffer(WRITER * writer, int8_t ** bufstart, int numCards, in
   }
 }
 
-void writerCleanUp(WRITER *writer) {
+void writerCleanUp(WRITER *writer, bool isRFIOn) {
   printf ("Closing/renaming output files...\n");
-  closeAndRename(writer);
+  closeAndRename(writer, isRFIOn);
 }
 
 

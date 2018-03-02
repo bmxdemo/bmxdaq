@@ -43,6 +43,7 @@ class STATISTIC {
 };
 
 struct RFI{
+  bool isRFIOn; //are we doing rfi rejection
   float nSigmaNull; //number of standard deviations used to determine outliers to null out, -1 for none
   float nSigmaWrite; //number of standard deviations used to determine outliers to write to file, -1 for none
   int chunkSize; //size of chunk

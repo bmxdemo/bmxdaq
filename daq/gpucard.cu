@@ -305,7 +305,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, RFI * rfi, SETTINGS
         }
       }
 
-      writerWritePS(wr,gc->outps, rfi->numOutliersNulled[gc->fstream]);
+      writerWritePS(wr,gc->outps, rfi->numOutliersNulled[gc->fstream], rfi->isRFIOn);
       gc->fstream = (++gc->fstream)%(gc->nstreams);
       gc->active_streams--;
       deleteLinesInConsole =  true;
@@ -343,7 +343,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, RFI * rfi, SETTINGS
   cudaEventRecord(gc->eDoneFloatize[csi], cs);
   
   //RFI rejection 
-  if(gc->nchan == 2 && rfi->statFlags != 0 && (rfi->nSigmaNull > 0 || rfi->nSigmaWrite > 0)){
+  if(rfi->isRFIOn){
     collectRFIStatistics(rfi, gc, csi);
     nullRFI(rfi, gc, csi, wr);
     writeRFI(rfi, gc, csi, wr, buf[0]);

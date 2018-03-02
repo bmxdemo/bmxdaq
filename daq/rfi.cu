@@ -76,6 +76,10 @@ void STATISTIC::print(int csi){
 }
 
 void rfiInit(RFI * rfi, SETTINGS * s, GPUCARD *gc){
+    if(s->dont_process){
+      rfi->isRFIOn = false;
+      return;
+    }
     rfi->nSigmaNull = s->n_sigma_null;
     rfi->nSigmaWrite = s->n_sigma_write;
     rfi->chunkSize = pow(2, s->log_chunk_size);
@@ -128,15 +132,15 @@ void rfiInit(RFI * rfi, SETTINGS * s, GPUCARD *gc){
     rfi->outlierBuf = (int8_t ** )malloc(s->cuda_streams * sizeof(int8_t *));
     rfi->outliersOR = (int *)malloc(s->cuda_streams * sizeof(int));
   
-    for(int i=0; i<s->cuda_streams; i++){
+    for(int i=0; i< s->cuda_streams; i++){
         rfi->isOutlierNull[i] = (bool *)malloc(rfi->numChunks * sizeof(bool)); //number of chunks in 1 channel
         rfi->isOutlierWrite[i] = (bool *)malloc(rfi->numChunks * sizeof(bool)); //number of chunks in 1 channel
         rfi->numOutliersNulled[i] = (int *)malloc(gc->nchan * sizeof(int));
-	rfi->outlierBuf[i] = (int8_t *)malloc(rfi->chunkSize * sizeof(int8_t));
+	      rfi->outlierBuf[i] = (int8_t *)malloc(rfi->chunkSize * sizeof(int8_t));
     
         //intialize counters
-	for(int j = 0; j<gc->nchan; j++)
-		rfi->numOutliersNulled[i][j] = 0;
+	      for(int j = 0; j<gc->nchan; j++)
+		      rfi->numOutliersNulled[i][j] = 0;
         rfi->outliersOR[i] = 0;
     } 
 
@@ -148,6 +152,10 @@ void rfiInit(RFI * rfi, SETTINGS * s, GPUCARD *gc){
     if(rfi->statFlags & RFI_VARIANCE) rfi->statistics.insert(std::pair<STATISTIC_TYPE,  STATISTIC>(variance_rfi,STATISTIC(variance_rfi, rfi->variance, rfi->numChunks, gc->nstreams)));
     if(rfi->statFlags & RFI_ABS_MAX) rfi->statistics.insert(std::pair<STATISTIC_TYPE, STATISTIC> (absoluteMax_rfi ,STATISTIC(absoluteMax_rfi, rfi->absMax, rfi->numChunks, gc->nstreams)));
 
+    if(gc->nchan == 2 && rfi->statFlags != 0 && (rfi->nSigmaNull > 0 || rfi->nSigmaWrite > 0))
+      rfi->isRFIOn = true;
+    else 
+      rfi->isRFIOn = false;
 }
 
 
