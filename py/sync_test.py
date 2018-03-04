@@ -15,22 +15,22 @@ wfile = open(o.fname)
 dat_type=[('ch1','i1'),('ch2','i1')]
 data=np.fromfile(wfile,dat_type)
 
-nsamples = 10
-size = 2**23
+nsamples = 12
+size = 2**27
 data = data['ch2']
 
 peaks = [[], []] 
-for i in range(nsamples):
+for i in range(nsamples-1):
   for j in range(2):
     ##find where waveform starts peaking (20 should be large enough voltage)
-    a = np.where(data[(2*i+j)*size:(2*i+j+1)*size] > 20)
+    a = np.where(data[(2*(i+1)+j)*size:(2*(i+1)+j+1)*size] > 20)
     ##make sure sample isn't starting in middle of peak
-    if i > 0:
-      b = max(data[(2*(i-1)+j+1)*size-1000:(2*(i-1)+j+1)*size])
-    else:
-      b = 0
+    ##if i > 0:
+    b = max(data[(2*(i)+j+1)*size-1000:(2*(i)+j+1)*size])
+    ##else:
+    ##  b = 0
     if any(map(len,a)) and  b < 10:
-      peaks[j].append(np.min(a) + i*2**27)  
+      peaks[j].append(np.min(a) + i*size)  
 
 delayFile = open(o.fdelays, 'a')
 peakFile = open(o.fpeaks, 'a')
