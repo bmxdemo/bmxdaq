@@ -62,10 +62,26 @@ void printErrorDie(const char* message, DIGICARD *card, int cardIndex,  SETTINGS
   exit(1);
 }
 
-void startDAQ(uint32 & dwError, drv_handle & hCard){
-  dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD, M2CMD_CARD_START |
-    M2CMD_CARD_ENABLETRIGGER | M2CMD_DATA_STARTDMA);
+float deltaT (timespec t1,timespec t2) {
+  return ( t2.tv_sec - t1.tv_sec )
+    + ( t2.tv_nsec - t1.tv_nsec )/ 1e9;
 }
+
+//void startDAQ(uint32 & dwError, drv_handle & hCard, struct timespec & begin, 
+//  struct timespec & end){
+//  clock_gettime(CLOCK_REALTIME, &begin);
+//  dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD, M2CMD_CARD_START);
+//  clock_gettime(CLOCK_REALTIME, &end);
+//
+//}
+//void startTrigger(uint32 & dwError, drv_handle & hCard, struct timespec & begin, 
+//  struct timespec & end){
+//  clock_gettime(CLOCK_REALTIME, &begin);
+//  dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD,
+//    M2CMD_CARD_ENABLETRIGGER | M2CMD_DATA_STARTDMA);
+//  clock_gettime(CLOCK_REALTIME, &end);
+//
+//}
 
 
 /*
@@ -157,7 +173,7 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
     // do a simple standard setup
     // always do two channels
     spcm_dwSetParam_i32 (card->hCard[i], SPC_CHENABLE,       set->channel_mask);     // just 1 channel enabled
-    spcm_dwSetParam_i32 (card->hCard[i], SPC_PRETRIGGER,     1024);                  // 1k of pretrigger data at start of FIFO mode
+    //spcm_dwSetParam_i32 (card->hCard[i], SPC_PRETRIGGER,     1024);                  // 1k of pretrigger data at start of FIFO mode
     spcm_dwSetParam_i32 (card->hCard[i], SPC_CARDMODE,       SPC_REC_FIFO_SINGLE);   // single FIFO mode
     spcm_dwSetParam_i32 (card->hCard[i], SPC_TIMEOUT,        5000);                  // timeout 5 s
     spcm_dwSetParam_i32 (card->hCard[i], SPC_TRIG_ORMASK,    SPC_TMASK_SOFTWARE);    // trigger set to software
@@ -189,10 +205,6 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
   printf ("Digitizer card and buffer ready.\n");
 }
 
-float deltaT (timespec t1,timespec t2) {
-  return ( t2.tv_sec - t1.tv_sec )
-    + ( t2.tv_nsec - t1.tv_nsec )/ 1e9;
-}
 
 void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJACK *lj,
        WRITER *w, RFI *rfi) {
@@ -209,15 +221,41 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
   // start everything
   if(!set->simulate_digitizer){
     std::thread th[2];
+    struct timespec begin[2], end[2];
     for(int i=0; i<numCards; i++)
-      th[i] = std::thread(startDAQ, std::ref(dwError[i]), std::ref(dc->hCard[i]));
-    for(int i=0; i<numCards; i++)
-      th[i].join();
+      //th[i] = std::thread(startDAQ, std::ref(dwError[i]), std::ref(dc->hCard[i]), std::ref(begin[i]), std::ref(end[i]));
+      dwError[i] = spcm_dwSetParam_i32 (dc->hCard[i], SPC_M2CMD, M2CMD_CARD_START);
 
-      
-    // check for error
     for(int i=0; i<numCards; i++)
       if (dwError[i] != ERR_OK) printErrorDie("Cannot start FIFO\n",dc, i, set);
+
+    for(int i=0; i<numCards; i++)
+      //th[i].join();
+      dwError[i] = spcm_dwSetParam_i32 (dc->hCard[i], SPC_M2CMD,  M2CMD_CARD_ENABLETRIGGER);
+
+    for(int i=0; i<numCards; i++)
+      if (dwError[i] != ERR_OK) printErrorDie("Cannot enable trigger\n",dc, i, set);
+
+    for(int i=0; i<numCards; i++)
+      dwError[i] = spcm_dwSetParam_i32 (dc->hCard[i], SPC_M2CMD,  M2CMD_DATA_STARTDMA);
+
+    for(int i=0; i<numCards; i++)
+      if (dwError[i] != ERR_OK) printErrorDie("Cannot start DMA\n",dc, i, set);
+    
+//    float startDelay = deltaT(begin[0], begin[1]);
+//    float endDelay = deltaT(end[0], end[1]);
+//    float totalDelay = deltaT(begin[0], end[0]) - deltaT(begin[1], end[1]);
+//    printf("Card starting delays: \n Start delay: %fms\n End delay: %fms\n Total delay: %f ms\n", 1000*startDelay, 1000*endDelay, 1000*totalDelay);
+//    
+//    for(int i=0; i<numCards; i++)
+//      th[i] = std::thread(startTrigger, std::ref(dwError[i]), std::ref(dc->hCard[i]), std::ref(begin[i]), std::ref(end[i]));
+//    for(int i=0; i<numCards; i++)
+//      th[i].join();
+//    startDelay = deltaT(begin[0], begin[1]);
+//    endDelay = deltaT(end[0], end[1]);
+//    totalDelay = deltaT(begin[0], end[0]) - deltaT(begin[1], end[1]);
+//    printf("Card starting trigger/dma delays: \n Start delay: %fms\n End delay: %fms\n Total delay: %f ms\n", 1000*startDelay, 1000*endDelay, 1000*totalDelay);
+
   }
   else
     dwError[0]=dwError[1] = ERR_OK;
