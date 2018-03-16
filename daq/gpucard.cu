@@ -60,9 +60,6 @@ void printDeviceProperties(cudaDeviceProp * prop, int dev){
   printf("Kernel execution timeout:      %s\n\n",  (prop->kernelExecTimeoutEnabled ? "Yes" : "No"));
 }
 
-void gpuDataInit(GPUDATA * data, SETTINGS * set){
-}
-
 //Initialize instance of GPUCARD
 //Input:
 //      gc: instance of GPUCARD to initialize
