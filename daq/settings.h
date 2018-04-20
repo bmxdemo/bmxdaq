@@ -30,6 +30,8 @@ struct SETTINGS {
   long int wave_nbytes;
   char wave_fname[MAXCHAR];
   
+  //print last digitizer  buffer to file before exiting program
+  int print_last_buffer;
 
   // size of FFT transform
   uint32_t fft_size; // must be power of 2
@@ -45,6 +47,7 @@ struct SETTINGS {
   // output options
   char ps_output_pattern[MAXCHAR];
   char rfi_output_pattern[MAXCHAR];
+  char last_buffer_output_pattern[MAXCHAR];
   int save_every;
   
   // printout options

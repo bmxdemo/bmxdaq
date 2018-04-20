@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import numpy as np
 import matplotlib.pyplot as plt
 import sys, glob, os, time
@@ -6,7 +7,7 @@ from optparse import OptionParser
 ## This assumes 2 channels.
 
 parser = OptionParser()
-parser.add_option("--points", dest="points", default = 1000,
+parser.add_option("--points", dest="points", default = 1000, 
             type = 'int', help = "number of points to plot")
 parser.add_option("--f", dest="file", help= "name of file containing buffer")
 (o, args) = parser.parse_args()
