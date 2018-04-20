@@ -35,8 +35,8 @@ struct RFIHEADER {
 };
 
 struct WRITER {
-  char fnamePS[MAXFNLEN], fnameRFI[MAXFNLEN];  //file names, from settings
-  char afnamePS[MAXFNLEN], afnameRFI[MAXFNLEN];  //current file names
+  char fnamePS[MAXFNLEN], fnameRFI[MAXFNLEN], fnameLastBuffer[MAXFNLEN];  //file names, from settings
+  char afnamePS[MAXFNLEN], afnameRFI[MAXFNLEN],  afnameLastBuffer[MAXFNLEN];  //current file names
   char tafnamePS[MAXFNLEN], tafnameRFI[MAXFNLEN];  //temporary current file names 
                                                    //(with ".new")
   uint32_t lenPS; // full length of PS info
@@ -56,6 +56,7 @@ struct WRITER {
 void writerInit(WRITER *writer, SETTINGS *set);
 void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled);
 void writerWriteRFI(WRITER *writer, int8_t * outlier, int chunk, int channel, float nSigma);
+void writerWriteLastBuffer(WRITER *writer, int8_t * bufstart, int size);
 void writerCleanUp(WRITER *writer);
 void closeAndRename(WRITER *writer);
 

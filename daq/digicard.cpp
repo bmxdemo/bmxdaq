@@ -184,7 +184,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
   
   uint32      dwError;
   int32       lStatus, lAvailUser, lPCPos, fill;
-
+  int8_t * bufstart;
   // start everything
   dwError = set->simulate_digitizer ? ERR_OK :
     spcm_dwSetParam_i32 (dc->hCard, SPC_M2CMD, M2CMD_CARD_START | 
@@ -239,7 +239,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
 	       accum, lStatus, lPCPos,fill);
 
 
-	int8_t* bufstart=((int8_t*)dc->pnData+lPCPos);
+	bufstart=((int8_t*)dc->pnData+lPCPos);
 	if (set->dont_process) 
 	  tprintfn (" ** no GPU processing");
 	else{
@@ -269,11 +269,16 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
 	// return terminal cursor
 	treturn();
       }
-  }
-    
+  }   
+  
   printf("\n\n\n\n\n\n\n\n\n");
   if (stopSignal) printf ("Ctrl-C detected. Stopping.\n");
   if (sample_count==set->nsamples) printf ("Reached required number of samples.\n");
+  //Write last digitizer bufer to a file 
+  if(set->print_last_buffer){
+  	printf("Printing last digitizer buffer to a file...\n");
+  	writerWriteLastBuffer(w, bufstart,dc->lNotifySize);
+  }
   printf ("Stoping digitizer FIFO...\n");
   // send the stop command
   dwError = set->simulate_digitizer ? ERR_OK :
