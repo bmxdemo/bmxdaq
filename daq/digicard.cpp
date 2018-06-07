@@ -54,7 +54,7 @@ char* szTypeToName (int32 lCardType){
 void printErrorDie(const char* message, DIGICARD *card, int cardIndex,  SETTINGS *set) {
   char szErrorTextBuffer[ERRORTEXTLEN];
   spcm_dwGetErrorInfo_i32 (card->hCard[cardIndex], NULL, NULL, szErrorTextBuffer);
-  //correct card number in case where we are only using the second digitizer card
+  //we correct card number in case where we are only using the second digitizer card
   int cardNum = (set->card_mask==2)? 1 : cardIndex;
   printf ("Digitizer card %d fatal error: %s\n",card->serialNumber[cardNum], message);
   printf ("Error Text: %s\n", szErrorTextBuffer);
@@ -67,28 +67,16 @@ float deltaT (timespec t1,timespec t2) {
     + ( t2.tv_nsec - t1.tv_nsec )/ 1e9;
 }
 
-void startDAQ(uint32 & dwError, drv_handle & hCard, struct timespec & begin, 
-  struct timespec & end)
-{
-  clock_gettime(CLOCK_REALTIME, &begin);
+void startDAQ(uint32 & dwError, drv_handle & hCard){
   dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD, M2CMD_CARD_START);
-  clock_gettime(CLOCK_REALTIME, &end);
 }
 
-void startTrigger(uint32 & dwError, drv_handle & hCard, struct timespec & begin, 
-  struct timespec & end)
-{
-  clock_gettime(CLOCK_REALTIME, &begin);
+void startTrigger(uint32 & dwError, drv_handle & hCard){
   dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD, M2CMD_CARD_ENABLETRIGGER);
-  clock_gettime(CLOCK_REALTIME, &end);
 }
 
-void startDMA(uint32 & dwError, drv_handle & hCard, struct timespec & begin, 
-  struct timespec & end)
-{
-  clock_gettime(CLOCK_REALTIME, &begin);
+void startDMA(uint32 & dwError, drv_handle & hCard){
   dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD, M2CMD_DATA_STARTDMA);
-  clock_gettime(CLOCK_REALTIME, &end);
 }
 
 /*
@@ -228,66 +216,31 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
   // start everything
   if(!set->simulate_digitizer){
     std::thread th[2];
-    struct timespec begin[2], end[2];
-    for(int i=0; i<numCards; i++){
-      //clock_gettime(CLOCK_REALTIME, &begin[i]);
-      th[i] = std::thread(startDAQ, std::ref(dwError[i]), std::ref(dc->hCard[i]), std::ref(begin[i]), std::ref(end[i]));
-      //dwError[i] = spcm_dwSetParam_i32 (dc->hCard[i], SPC_M2CMD, M2CMD_CARD_START);
-      //clock_gettime(CLOCK_REALTIME, &end[i]);
-    }
+    //start DAQ
+    for(int i=0; i<numCards; i++)
+      th[i] = std::thread(startDAQ, std::ref(dwError[i]), std::ref(dc->hCard[i]));
     for(int i=0; i<numCards; i++)
       th[i].join();
-
-    float startDelay = deltaT(begin[0], begin[1]);
-    float endDelay = deltaT(end[0], end[1]);
-    float totalDelay = deltaT(begin[0], end[0]) - deltaT(begin[1], end[1]);
-    float elapsed = deltaT(begin[0], end[0]);
-    printf("Card trigger  delays: \n Start delay (ms): %fms\n End delay: %fms\n Total delay: %f ms\n time elapsed: %f\n", 1000*startDelay, 1000*endDelay, 1000*totalDelay, 1000*elapsed);
-
     for(int i=0; i<numCards; i++)
       if (dwError[i] != ERR_OK) printErrorDie("Cannot start FIFO\n",dc, i, set);
-
-    for(int i=0; i<numCards; i++){
-      //clock_gettime(CLOCK_REALTIME, &begin[i]);
-      //dwError[i] = spcm_dwSetParam_i32 (dc->hCard[i], SPC_M2CMD,  M2CMD_CARD_ENABLETRIGGER);
-      //clock_gettime(CLOCK_REALTIME, &end[i]);
-      th[i] = std::thread(startTrigger, std::ref(dwError[i]), std::ref(dc->hCard[i]), std::ref(begin[i]), std::ref(end[i]));
-    }
+    //enable trigger
+    for(int i=0; i<numCards; i++)
+      th[i] = std::thread(startTrigger, std::ref(dwError[i]), std::ref(dc->hCard[i]));
     for(int i=0; i<numCards; i++)
       th[i].join();
-
-    startDelay = deltaT(begin[0], begin[1]);
-    endDelay = deltaT(end[0], end[1]);
-    totalDelay = deltaT(begin[0], end[0]) - deltaT(begin[1], end[1]);
-    elapsed = deltaT(begin[0], end[0]);
-    printf("Card trigger  delays: \n Start delay (ms): %fms\n End delay: %fms\n Total delay: %f ms\n time elapsed: %f\n", 1000*startDelay, 1000*endDelay, 1000*totalDelay, 1000*elapsed);
-
     for(int i=0; i<numCards; i++)
       if (dwError[i] != ERR_OK) printErrorDie("Cannot enable trigger\n",dc, i, set);
-
-    for(int i=0; i<numCards; i++){
-      //clock_gettime(CLOCK_REALTIME, &begin[i]);
-      //dwError[i] = spcm_dwSetParam_i32 (dc->hCard[i], SPC_M2CMD,  M2CMD_DATA_STARTDMA);
-      //clock_gettime(CLOCK_REALTIME, &end[i]);
-      th[i] = std::thread(startDMA, std::ref(dwError[i]), std::ref(dc->hCard[i]), std::ref(begin[i]), std::ref(end[i]));
-    }
+    //start DMA
+    for(int i=0; i<numCards; i++)
+      th[i] = std::thread(startDMA, std::ref(dwError[i]), std::ref(dc->hCard[i]));
     for(int i=0; i<numCards; i++)
       th[i].join();
-
-    startDelay = deltaT(begin[0], begin[1]);
-    endDelay = deltaT(end[0], end[1]);
-    totalDelay = deltaT(begin[0], end[0]) - deltaT(begin[1], end[1]);
-    elapsed = deltaT(begin[0], end[0]);
-    printf("Card DMA  delays: \n Start delay (ms): %fms\n End delay: %fms\n Total delay: %f ms\n time elapsed: %f\n", 1000*startDelay, 1000*endDelay, 1000*totalDelay, 1000*elapsed);
-
     for(int i=0; i<numCards; i++)
       if (dwError[i] != ERR_OK) printErrorDie("Cannot start DMA\n",dc, i, set);
-    
   }
   else
     dwError[0]=dwError[1] = ERR_OK;
 
-  
   struct timespec timeStart, timeNow, tSim, t1;
   int sim_ofs=0;
   clock_gettime(CLOCK_REALTIME, &timeStart);
