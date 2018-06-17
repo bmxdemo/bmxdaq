@@ -54,7 +54,7 @@ char* szTypeToName (int32 lCardType){
 void printErrorDie(const char* message, DIGICARD *card, int cardIndex,  SETTINGS *set) {
   char szErrorTextBuffer[ERRORTEXTLEN];
   spcm_dwGetErrorInfo_i32 (card->hCard[cardIndex], NULL, NULL, szErrorTextBuffer);
-  //correct card number in case where we are only using the second digitizer card
+  //we correct card number in case where we are only using the second digitizer card
   int cardNum = (set->card_mask==2)? 1 : cardIndex;
   printf ("Digitizer card %d fatal error: %s\n",card->serialNumber[cardNum], message);
   printf ("Error Text: %s\n", szErrorTextBuffer);
@@ -62,11 +62,22 @@ void printErrorDie(const char* message, DIGICARD *card, int cardIndex,  SETTINGS
   exit(1);
 }
 
-void startDAQ(uint32 & dwError, drv_handle & hCard){
-  dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD, M2CMD_CARD_START |
-    M2CMD_CARD_ENABLETRIGGER | M2CMD_DATA_STARTDMA);
+float deltaT (timespec t1,timespec t2) {
+  return ( t2.tv_sec - t1.tv_sec )
+    + ( t2.tv_nsec - t1.tv_nsec )/ 1e9;
 }
 
+void startDAQ(uint32 & dwError, drv_handle & hCard){
+  dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD, M2CMD_CARD_START);
+}
+
+void startTrigger(uint32 & dwError, drv_handle & hCard){
+  dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD, M2CMD_CARD_ENABLETRIGGER);
+}
+
+void startDMA(uint32 & dwError, drv_handle & hCard){
+  dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD, M2CMD_DATA_STARTDMA);
+}
 
 /*
 **************************************************************************
@@ -157,7 +168,7 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
     // do a simple standard setup
     // always do two channels
     spcm_dwSetParam_i32 (card->hCard[i], SPC_CHENABLE,       set->channel_mask);     // just 1 channel enabled
-    spcm_dwSetParam_i32 (card->hCard[i], SPC_PRETRIGGER,     1024);                  // 1k of pretrigger data at start of FIFO mode
+    //spcm_dwSetParam_i32 (card->hCard[i], SPC_PRETRIGGER,     1024);                  // 1k of pretrigger data at start of FIFO mode
     spcm_dwSetParam_i32 (card->hCard[i], SPC_CARDMODE,       SPC_REC_FIFO_SINGLE);   // single FIFO mode
     spcm_dwSetParam_i32 (card->hCard[i], SPC_TIMEOUT,        5000);                  // timeout 5 s
     spcm_dwSetParam_i32 (card->hCard[i], SPC_TRIG_ORMASK,    SPC_TMASK_SOFTWARE);    // trigger set to software
@@ -189,10 +200,6 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
   printf ("Digitizer card and buffer ready.\n");
 }
 
-float deltaT (timespec t1,timespec t2) {
-  return ( t2.tv_sec - t1.tv_sec )
-    + ( t2.tv_nsec - t1.tv_nsec )/ 1e9;
-}
 
 void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJACK *lj,
        WRITER *w, RFI *rfi) {
@@ -209,20 +216,31 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
   // start everything
   if(!set->simulate_digitizer){
     std::thread th[2];
+    //start DAQ
     for(int i=0; i<numCards; i++)
       th[i] = std::thread(startDAQ, std::ref(dwError[i]), std::ref(dc->hCard[i]));
     for(int i=0; i<numCards; i++)
       th[i].join();
-
-      
-    // check for error
     for(int i=0; i<numCards; i++)
       if (dwError[i] != ERR_OK) printErrorDie("Cannot start FIFO\n",dc, i, set);
+    //enable trigger
+    for(int i=0; i<numCards; i++)
+      th[i] = std::thread(startTrigger, std::ref(dwError[i]), std::ref(dc->hCard[i]));
+    for(int i=0; i<numCards; i++)
+      th[i].join();
+    for(int i=0; i<numCards; i++)
+      if (dwError[i] != ERR_OK) printErrorDie("Cannot enable trigger\n",dc, i, set);
+    //start DMA
+    for(int i=0; i<numCards; i++)
+      th[i] = std::thread(startDMA, std::ref(dwError[i]), std::ref(dc->hCard[i]));
+    for(int i=0; i<numCards; i++)
+      th[i].join();
+    for(int i=0; i<numCards; i++)
+      if (dwError[i] != ERR_OK) printErrorDie("Cannot start DMA\n",dc, i, set);
   }
   else
     dwError[0]=dwError[1] = ERR_OK;
 
-  
   struct timespec timeStart, timeNow, tSim, t1;
   int sim_ofs=0;
   clock_gettime(CLOCK_REALTIME, &timeStart);
@@ -276,8 +294,8 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
     double accum = deltaT(timeStart, timeNow);
     tprintfn("Time: %fs;", accum);
     for(int i=0; i<numCards; i++){
-        tprintfn("Card %d Status:%i; Pos:%08x; digitizer buffer fill %i/1000   ", dc->serialNumber[i],
-            lStatus[i], lPCPos[i], fill[i]);
+        tprintfn("Card %d Status:%i; Pos:%08x; Len:%08x; digitizer buffer fill %i/1000   ", dc->serialNumber[i],
+            lStatus[i], lPCPos[i], lAvailUser[i], fill[i]);
         bufstart[i]=((int8_t*)dc->pnData[i]+lPCPos[i]);
     }
     if (set->dont_process) 
@@ -320,6 +338,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
     printf("Printing last digitizer buffer to a file...\n");
     writerWriteLastBuffer(w, bufstart, numCards, dc->lNotifySize);
   }
+
   printf ("Stoping digitizer FIFO...\n");
   // send the stop command
   for(int i=0; i < numCards; i++){
