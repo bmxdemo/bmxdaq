@@ -41,7 +41,7 @@ void init_settings(SETTINGS *s, char* fname) {
     s->fg_switchevery=10;
     sprintf(s->fg_port,"ttyS0");
     s->log_chunk_size = 20;
-    s->n_sigma_null = 3;
+
     s->n_sigma_write = 3;
     s->use_mean_statistic = false;
     s->use_variance_statistic = false;

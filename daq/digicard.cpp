@@ -78,7 +78,7 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
   printf ("==========================\n");
 
   if (!set->simulate_digitizer) {
-  card->hCard = spcm_hOpen ((char*)"/dev/spcm0");
+  card->hCard = spcm_hOpen ((char*)"/dev/spcm1");
   if (!card->hCard) printErrorDie("Can't open digitizer card.",card,set);
   
   int32       lCardType, lSerialNumber, lFncType;
