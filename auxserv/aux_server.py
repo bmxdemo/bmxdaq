@@ -3,17 +3,24 @@
 
 ### configuration section
 
-mecom_config = [
+MECOM_CONFIG = [
     ('AMP1', "/dev/ttyUSB1", 26.5),
     ('AMP2', "/dev/ttyUSB2", 24.5),
     ('AMP3', "/dev/ttyUSB3", 24.5)
     ]
 
+DT=0.25
+SERVER="localhost"
+PORT=23000
+
 #### code section
 
 from mecom import MeCom
 import time
-
+import datetime
+import socket
+import socketserver
+import threading
 
 class BMX_Temp:
 
@@ -22,6 +29,7 @@ class BMX_Temp:
         self.mc=mc
         self.serialport=serialport
         self.ID=bmxid
+        self.temp=[-1,-1]
 
         # which device are we talking to?
         self.address = mc.identify()
@@ -84,11 +92,11 @@ class BMX_Temp:
 
         for pi in [1,2]:
             # get object temperature
-            temp = mc.get_parameter(parameter_name="Object Temperature", address=self.address, parameter_instance = 1)
-            print("Controller number:", self.ID, "Object Temperature: {}C".format(temp))
+            self.temp[pi-1] = mc.get_parameter(parameter_name="Object Temperature", address=self.address, parameter_instance = pi)
+            print("Controller number:", self.ID, "Object Temperature: {}C".format(self.temp[pi-1]))
 
             # get sink temperature
-            temp = mc.get_parameter(parameter_name="Sink Temperature", address=self.address, parameter_instance = 1)
+            temp = mc.get_parameter(parameter_name="Sink Temperature", address=self.address, parameter_instance = pi)
             print("Controller number:", self.ID, "Sink Temperature: {}C".format(temp))
 
 
@@ -112,15 +120,59 @@ class BMX_Temp:
         print("Controller number:", self.ID, "Status: {}".format(self.status))
        
 
+class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
+
+    def handle(self):
+        while True:
+            try:
+                command = str(self.request.recv(1024), 'ascii')
+                cur_thread = threading.current_thread()
+                if command=="LIST":
+                    response="  ".join([m.ID for m in mcs])
+                elif command=="DATA":
+                    response=""
+                    for mc in mcs:
+                        response+="{} {}".format(mc.temp[0],mc.temp[1])
+                elif command=="BYE":
+                    break
+                else:
+                    print ("UNKNOWN COMMAND RECEIVED!")
+                    response=""
+                self.request.sendall(bytes(response,'ascii'))
+            except:
+                break
+        print ("Exiting...")
+
+class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    pass
+
 
 if __name__ == "__main__":
 
-    mcs = [BMX_Temp(*params) for params in mecom_config]
+    mcs = [BMX_Temp(*params) for params in MECOM_CONFIG]
     time.sleep(1) 
-    temps = []
-    while True:
-        for mc in mcs:
-            mc.control()
-            time.sleep(1)
+    server = ThreadedTCPServer((HOST, PORT), ThreadedTCPRequestHandler)
+    ip, port = server.server_address
 
-    print("Closing connection.")
+    # Start a thread with the server -- that thread will then start one
+    # more thread for each request
+    server_thread = threading.Thread(target=server.serve_forever)
+    # Exit the server thread when the main thread terminates
+    server_thread.daemon = True
+    server_thread.start()
+    print("Server loop running in thread:", server_thread.name)
+
+    try:
+        while True:
+            for mc in mcs:
+                mc.control()
+                time.sleep(DT)
+
+    except KeyboardInterrupt:
+        print('Shutting down server...')
+        try:
+            server.shutdown()
+            server.server_close()
+            print ("Shutdown complete")
+        except SystemExit:
+            os._exit(0)
