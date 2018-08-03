@@ -10,7 +10,7 @@ MECOM_CONFIG = [
     ]
 
 DT=0.25
-SERVER="localhost"
+HOST="localhost"
 PORT=23000
 
 #### code section
@@ -132,16 +132,18 @@ class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
                 elif command=="DATA":
                     response=""
                     for mc in mcs:
-                        response+="{} {}".format(mc.temp[0],mc.temp[1])
+                        response+="{} {} ".format(mc.temp[0],mc.temp[1])
                 elif command=="BYE":
+                    print ("Received BYE")
                     break
                 else:
-                    print ("UNKNOWN COMMAND RECEIVED!")
+                    print ("UNKNOWN COMMAND RECEIVED! >"+command+"<")
                     response=""
+                    break
                 self.request.sendall(bytes(response,'ascii'))
             except:
                 break
-        print ("Exiting...")
+        print ("Exiting server on thread %s..."%cur_thread.name)
 
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     pass
