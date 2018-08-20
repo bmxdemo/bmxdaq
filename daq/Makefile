@@ -2,8 +2,8 @@
 # Settings mak include things that you might need to make it work,
 # eg gcc and NVCC settings, if you want to override
 #
-GPP=g++
-NVCC=nvcc 
+GPP=g++ -g
+NVCC=nvcc -g
 FFTWLINK=-lfftw3f
 #SPCM DIR (to be set in settings.mak)
 #SPCM_DIR= /path/to/spcm/

@@ -4,10 +4,11 @@
 ### configuration section
 
 MECOM_CONFIG = [
-    ('AMP1', "/dev/ttyUSB1", 26.5),
-    ('AMP2', "/dev/ttyUSB2", 24.5),
-    ('AMP3', "/dev/ttyUSB3", 24.5)
-    ]
+    ('AMP1', "/dev/ttyUSB0", 27.0),
+    ('AMP2', "/dev/ttyUSB1", 24.5),
+    ('AMP3', "/dev/ttyUSB2", 24.5),
+    ('TERMS', "/dev/ttyUSB3", 25.5)
+]
 
 DT=0.25
 HOST="localhost"
@@ -45,13 +46,13 @@ class BMX_Temp:
         print("Controller number:", bmxid, "Max V set?: {}".format(success))
 
         # Set Curremt limit to 6.0A for CP60233 TEC element
-        success = mc.set_parameter(value=.5, parameter_name="Current Limitation")
+        success = mc.set_parameter(value=1.0, parameter_name="Current Limitation")
         print("Controller number:", bmxid, "Max I set?: {}".format(success))
 
         # Set sink temperature to fixed or external
         success = mc.set_parameter(value=1, parameter_name="Sink Temperature Selection")    #0=External, 1=fixed value
         print("Controller number:", bmxid, "Sink temperature mode set?: {}".format(success))
-
+        
         # Set object sensor type
         success = mc.set_parameter(value=1, parameter_name="Sensor Type Selection")    #0=NTC, 1=PT100, 2=PT1k
         print("Controller number:", bmxid, "Sensor Type Selection Set?: {}".format(success))
@@ -67,25 +68,44 @@ class BMX_Temp:
         # Write data to Flash
         success = mc.set_parameter(value=0, parameter_name="Save Data to Flash")    #0=enable, 1=disable
         print("Controller number:", bmxid, "Saved to flash?:{}".format(success))
-
-        success = mc.set_parameter(value=0, parameter_name="Input Selection", parameter_instance = 1)       #0=static, 1=live, 2=temperature controller
-        print("Controller number:", bmxid, "Mode set: {}".format(success))
         
-        success = mc.set_parameter(value=2, parameter_name="Input Selection", parameter_instance = 2)       #0=static, 1=live, 2=temperature controller
-        print("Controller number:", bmxid, "Mode 2 set: {}".format(success))
+        if bmxid == "TERMS":
+            
+            success = mc.set_parameter(value=2, parameter_name="Input Selection", parameter_instance = 1)       #0=static, 1=live, 2=temperature controller
+            print("Controller number:", bmxid, "Mode set: {}".format(success))
+        
+            success = mc.set_parameter(value=2, parameter_name="Input Selection", parameter_instance = 2)       #0=static, 1=live, 2=temperature controller
+            print("Controller number:", bmxid, "Mode 2 set: {}".format(success))
+       
+        else:
+            success = mc.set_parameter(value=0, parameter_name="Input Selection", parameter_instance = 1)       #0=static, 1=live, 2=temperature controller
+            print("Controller number:", bmxid, "Mode set: {}".format(success))
+        
+            success = mc.set_parameter(value=2, parameter_name="Input Selection", parameter_instance = 2)       #0=static, 1=live, 2=temperature controller
+            print("Controller number:", bmxid, "Mode 2 set: {}".format(success))
 
-        #set target temperature
+        #set target temp
         for pi in [1,2]:
             success = mc.set_parameter(value=target_temp, parameter_id=3000, parameter_instance = pi)
             print("Controller number:", bmxid, "Target temperature set: {}".format(success))
+        
 
+        if bmxid == "TERMS":
         # Operating mode
-        success = mc.set_parameter(value=0, parameter_name="Status")    #0=Static OFF, 1=Static ON, 2=Live OFF/ON
-        print("Controller number:", bmxid, "Operating mode set: {}".format(success))
-
-        # Operating mode
-        success = mc.set_parameter(value=1, parameter_name="Status", parameter_instance = 2)    #0=Static OFF, 1=Static ON, 2=Live OFF/ON
-        print("Controller number:", bmxid, "Operating mode set 2: {}".format(success))
+            success = mc.set_parameter(value=1, parameter_name="Status")    #0=Static OFF, 1=Static ON, 2=Live OFF/ON
+            print("Controller number:", bmxid, "Operating mode set: {}".format(success))
+        
+            # Operating mode
+            success = mc.set_parameter(value=1, parameter_name="Status", parameter_instance = 2)    #0=Static OFF, 1=Static ON, 2=Live OFF/ON
+            print("Controller number:", bmxid, "Operating mode set 2: {}".format(success))
+        else:
+            # Operating mode
+            success = mc.set_parameter(value=0, parameter_name="Status")    #0=Static OFF, 1=Static ON, 2=Live OFF/ON
+            print("Controller number:", bmxid, "Operating mode set: {}".format(success))
+        
+            # Operating mode
+            success = mc.set_parameter(value=1, parameter_name="Status", parameter_instance = 2)    #0=Static OFF, 1=Static ON, 2=Live OFF/ON
+            print("Controller number:", bmxid, "Operating mode set 2: {}".format(success))
 
     def control(self):
         mc=self.mc
@@ -102,7 +122,16 @@ class BMX_Temp:
 
             temp = mc.get_parameter(parameter_id=3000, address=self.address, parameter_instance = pi)
             print("Controller number:", self.ID, "Target temp 2: {}C".format(temp))
-
+            
+            #if self.ID == "TERMS":
+            #    #reset target temp 
+            #    temp =  mc.get_parameter(parameter_id = 3000, address=self.address, parameter_instance = pi)
+            #    if temp == 20.0:
+            #        temp = mc.set_parameter(parameter_id = 3000, address=self.address, parameter_instance = pi, value = 26.0)
+            #    else:
+            #        temp = mc.set_parameter(parameter_id = 3000, address=self.address, parameter_instance = pi, value = 20.0)
+               
+                
 
             # is the control loop active, and if it is, is it stable?
             stable_id = mc.get_parameter(parameter_name="Temperature is Stable", address=self.address, parameter_instance = pi)
@@ -118,6 +147,9 @@ class BMX_Temp:
  
         self.status = mc.status()
         print("Controller number:", self.ID, "Status: {}".format(self.status))
+        #if self.ID == "TERMS":
+            # time.sleep(600)
+        
        
 
 class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):

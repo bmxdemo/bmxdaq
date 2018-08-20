@@ -306,7 +306,7 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, RFI * rfi, SETTINGS 
     }
     int csi = gc->bstream = (++gc->bstream)%(gc->nstreams); //add new stream
     if(gc->active_streams == gc->nstreams){ //if no empty streams
-    	printf("No free streams.\n");
+    	printf("No free streams %d.\n", gc->nstreams);
         if(gc->nstreams > 1) //first few packets come in close together (<122 ms), so for 1 stream, we need to queue them, and not just quit the program
 ;//		exit(1);
     }
