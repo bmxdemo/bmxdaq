@@ -118,7 +118,7 @@ void writerWriteLastBuffer(WRITER * writer, int8_t * bufstart, int size){
   struct tm *ti = localtime ( &rawtime );
   sprintf(writer->afnameLastBuffer, writer->fnameLastBuffer, ti->tm_year - 100 , ti->tm_mon + 1,
             ti->tm_mday, ti->tm_hour, ti->tm_min);
-  printf("NEW FILE: %s\n", writer->afnameLastBuffer);
+  printf("Creating: %s\n", writer->afnameLastBuffer);
   FILE * fw = fopen(writer->afnameLastBuffer, "wb");
   if(fw == NULL)
 	printf("CANNOT OPEN FILE: %s\n", writer->afnameLastBuffer);
