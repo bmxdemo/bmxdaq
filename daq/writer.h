@@ -1,7 +1,7 @@
 #pragma once
 #include "settings.h"
+#include "rfi.h"
 #include "stdio.h"
-#include "time.h"
 #include <stdint.h>
 // character lengths
 #define MAXFNLEN 512
@@ -11,7 +11,9 @@
 //     v2 -- save float with cur tone freq every time you save
 //     v3 -- save MJD double
 //     v4 -- save labjack voltage float and diode
-#define HEADERVERSION 4
+//     v5 -- changed localtime to gmtime in filename -- header hasn't changed
+//     v6 -- two digitizers (not implemented yet, FIX -- AS)
+#define HEADERVERSION 6
 
 
 struct BMXHEADER {
@@ -20,7 +22,8 @@ struct BMXHEADER {
   int nChannels;
   float sample_rate;
   uint32_t fft_size; 
-
+  int32_t ADC_range;
+  bool  statistics[STAT_COUNT_MINUS_ONE + 1]; //array indicating which statistics are being used
   int ncuts;
   float nu_min[MAXCUTS], nu_max[MAXCUTS];
   uint32_t fft_avg[MAXCUTS];
@@ -28,9 +31,9 @@ struct BMXHEADER {
 };
 
 struct RFIHEADER {
-    const char magic[8]=">>RFI<<";
-    int chunkSize; //number of elements per chunk 
-    float nSigma;    //number of sigma away from mean
+  const char magic[8]=">>RFI<<";
+  int chunkSize; //number of elements per chunk 
+  float nSigma;    //number of sigma away from mean
 };
 
 struct WRITER {
@@ -52,10 +55,12 @@ struct WRITER {
 };
 
 
+
 void writerInit(WRITER *writer, SETTINGS *set, bool isRFIOn);
 void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled, bool isRFIOn);
 void writerWriteRFI(WRITER *writer, int8_t * outlier, int chunk, int channel, float nSigma);
 void writerWriteLastBuffer(WRITER *writer, int8_t ** bufstart, int numCards, int size);
 void writerCleanUp(WRITER *writer, bool isRFIOn);
+
 void closeAndRename(WRITER *writer);
 

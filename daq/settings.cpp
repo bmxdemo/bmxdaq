@@ -36,6 +36,7 @@ void init_settings(SETTINGS *s, char* fname) {
     s->save_every=60;
     s->print_meanvar=1;
     s->print_maxp=0;
+    s->print_every=1;
     sprintf(s->ps_output_pattern,"%%02d%%02d%%02d_%%02d%%02d.data");
     sprintf(s->rfi_output_pattern,"%%02d%%02d%%02d_%%02d%%02d.outliers");
     sprintf(s->last_buffer_output_pattern, "%%02d%%02d%%02d_%%02d%%02d.lastBuffer");
@@ -46,7 +47,7 @@ void init_settings(SETTINGS *s, char* fname) {
     s->lj_Noff=0;
     s->lj_Non=0;
     s->log_chunk_size = 20;
-    s->n_sigma_null = 3;
+    s->n_sigma_null = 0;
     s->n_sigma_write = 3;
     s->use_mean_statistic = false;
     s->use_variance_statistic = false;
@@ -121,6 +122,8 @@ void init_settings(SETTINGS *s, char* fname) {
 	     s->print_meanvar=atoi(s2);
 	   else if(!strcmp(s1,"print_maxp="))
 	     s->print_maxp=atoi(s2);
+	   else if(!strcmp(s1,"print_every="))
+	     s->print_every=atoi(s2);
 	   else if(!strcmp(s1,"fg_nfreq="))
 	     s->fg_nfreq=atoi(s2);
 	   else if(!strcmp(s1,"fg_baudrate="))
@@ -213,10 +216,6 @@ void init_settings(SETTINGS *s, char* fname) {
 	 fclose(fi);
      }
 
-     if(s->n_sigma_null > s->n_sigma_write){
-	 printf("n_sigma_write needs to be greater or equal to n_sigma_null");
-	 exit(1);
-     }
 }
 
 void print_settings(SETTINGS *s) {

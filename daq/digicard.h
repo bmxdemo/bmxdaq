@@ -5,6 +5,7 @@
 #include "freqgen.h"
 #include "ljack.h"
 #include "writer.h"
+#include "terminal.h"
 #include "rfi.h"
 #include "spcm_examples/c_cpp/c_header/dlltyp.h"
 #include "spcm_examples/c_cpp/c_header/regs.h"
@@ -39,7 +40,7 @@ void digiCardInit (DIGICARD *card, SETTINGS *set);
 
 //main worker loop
 void  digiWorkLoop(DIGICARD *card, GPUCARD *gcard, SETTINGS *set, FREQGEN *fgen, 
-		   LJACK *lj, WRITER *w, RFI * rfi);
+		   LJACK *lj, WRITER *w, TWRITER *t, RFI * rfi);
 
 //shutdown
 void digiCardCleanUp(DIGICARD *card, SETTINGS *set);

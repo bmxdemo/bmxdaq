@@ -9,6 +9,7 @@ bDoCardSetuo: setup matching the calculation routine
 
 #include "settings.h"
 #include "writer.h"
+#include "terminal.h"
 
 struct FREQGEN {
   int   cport; //port number
@@ -24,7 +25,7 @@ struct FREQGEN {
 void freqGenInit (FREQGEN *fg, WRITER* wr, SETTINGS *set);
 
 //main worker loop
-void freqGenLoop (FREQGEN *fg, WRITER* wr);
+void freqGenLoop (FREQGEN *fg, WRITER* wr, TWRITER * twr);
 
 //shutdown
 void freqGenCleanUp(FREQGEN *fg);

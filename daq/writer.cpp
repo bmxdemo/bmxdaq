@@ -16,7 +16,7 @@ void closeAndRename(WRITER *writer, bool isRFIOn) {
 void maybeReOpenFile(WRITER *writer, bool isRFIOn, bool first=false) {
   time_t rawtime;   
   time ( &rawtime );
-  struct tm *ti = localtime ( &rawtime );
+  struct tm *ti = gmtime ( &rawtime );
   
   if (first || ((ti->tm_min%writer->save_every==0) && writer->reopen)) {
     if (!first) closeAndRename(writer, isRFIOn);
@@ -65,6 +65,13 @@ void writerInit(WRITER *writer, SETTINGS *s, bool isRFIOn) {
   writer->headerPS.nChannels=1+(s->channel_mask==3);
   writer->headerPS.sample_rate=s->sample_rate;
   writer->headerPS.fft_size=s->fft_size;
+  writer->headerPS.ADC_range = s->ADC_range;
+  
+  //initialize statistics array
+  writer->headerPS.statistics[mean] = s->use_mean_statistic? 1: 0;
+  writer->headerPS.statistics[variance] = s->use_variance_statistic? 1: 0;
+  writer->headerPS.statistics[absoluteMax] = s->use_abs_max_statistic? 1: 0;
+
   writer->headerPS.ncuts=s->n_cuts;
   writer->headerRFI.chunkSize = pow(2, s->log_chunk_size);
   writer->headerRFI.nSigma = s->n_sigma_write;
@@ -107,12 +114,13 @@ void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled, bool isR
   writer->counter++;
 }
 
+
 void writerWriteRFI(WRITER * writer, int8_t * outlier, int chunk, int channel, float nSigma){
   maybeReOpenFile(writer, true);
   fwrite(&writer->counter, sizeof(int), 1, writer->fRFI);
   fwrite(&chunk, sizeof(int), 1, writer->fRFI);
   fwrite(&channel, sizeof(int), 1, writer->fRFI);
-  fwrite(&nSigma, sizeof(float), 1, writer->fRFI);
+  fwrite(nSigma, sizeof(float), STAT_COUNT_MINUS_ONE +1, writer->fRFI);
   fwrite (outlier, sizeof(int8_t), writer->lenRFI, writer->fRFI);
   fflush(writer->fRFI);
 }
@@ -123,7 +131,7 @@ void writerWriteLastBuffer(WRITER * writer, int8_t ** bufstart, int numCards, in
   struct tm *ti = localtime ( &rawtime );
   sprintf(writer->afnameLastBuffer, writer->fnameLastBuffer, ti->tm_year - 100 , ti->tm_mon + 1,
             ti->tm_mday, ti->tm_hour, ti->tm_min);
-  printf("NEW FILE: %s\n", writer->afnameLastBuffer);
+  printf("Creating: %s\n", writer->afnameLastBuffer);
   FILE * fw = fopen(writer->afnameLastBuffer, "wb");
   if(fw == NULL)
 	printf("CANNOT OPEN FILE: %s\n", writer->afnameLastBuffer);
@@ -138,7 +146,3 @@ void writerCleanUp(WRITER *writer, bool isRFIOn) {
   printf ("Closing/renaming output files...\n");
   closeAndRename(writer, isRFIOn);
 }
-
-
-
-
