@@ -4,33 +4,40 @@
 #include "stdlib.h"
 #include <math.h>
 
+void closeAndRename(WRITER *writer) {
+	fclose(writer->fPS);
+	rename(writer->tafnamePS,writer->afnamePS);
+	fclose(writer->fRFI);
+	rename(writer->tafnameRFI,writer->afnameRFI);
+}
+
 void maybeReOpenFile(WRITER *writer, bool first=false) {
   time_t rawtime;   
   time ( &rawtime );
-  struct tm *ti = localtime ( &rawtime );
+  struct tm *ti = gmtime ( &rawtime );
   
   if (first || ((ti->tm_min%writer->save_every==0) && writer->reopen)) {
-    if (!first){
-	fclose(writer->fPS);
-	fclose(writer->fRFI);
-    }
+    if (!first) closeAndRename(writer);
+
     writer->counter =0; //reset sample counter to 0
-    char afnamePS[MAXFNLEN], afnameRFI[MAXFNLEN]; //file names
-    sprintf(afnamePS,writer->fnamePS, ti->tm_year - 100 , ti->tm_mon + 1, 
+    sprintf(writer->afnamePS,writer->fnamePS, ti->tm_year - 100 , ti->tm_mon + 1, 
 	    ti->tm_mday, ti->tm_hour, ti->tm_min);
-    sprintf(afnameRFI,writer->fnameRFI, ti->tm_year - 100 , ti->tm_mon + 1, 
+    sprintf(writer->afnameRFI,writer->fnameRFI, ti->tm_year - 100 , ti->tm_mon + 1, 
 	    ti->tm_mday, ti->tm_hour, ti->tm_min);
-    printf ("New File: %s\n", afnamePS);
-    printf ("New File: %s\n", afnameRFI);
-    writer->fPS=fopen(afnamePS,"wb");
-    writer->fRFI=fopen(afnameRFI,"wb");
+    sprintf(writer->tafnamePS,"%s.new",writer->afnamePS);
+    sprintf(writer->tafnameRFI,"%s.new",writer->afnameRFI);
+    
+    printf ("New File: %s\n", writer->tafnamePS);
+    printf ("New File: %s\n", writer->tafnameRFI);
+    writer->fPS=fopen(writer->tafnamePS,"wb");
+    writer->fRFI=fopen(writer->tafnameRFI,"wb");
     
     if (writer->fPS==NULL) {
-      printf ("CANNOT OPEN FILE:%s",afnamePS);
+      printf ("CANNOT OPEN FILE:%s",writer->tafnamePS);
       exit(1);
     }
     if (writer->fRFI==NULL) {
-      printf ("CANNOT OPEN FILE:%s",afnameRFI);
+      printf ("CANNOT OPEN FILE:%s",writer->tafnameRFI);
       exit(1);
     }
     
@@ -48,8 +55,9 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   printf ("==========================\n");
   strcpy(writer->fnamePS,s->ps_output_pattern);
   strcpy(writer->fnameRFI,s->rfi_output_pattern);
+  strcpy(writer->fnameLastBuffer, s->last_buffer_output_pattern);
   writer->save_every=s->save_every;
-  writer->headerPS.nChannels=1+s->channel_mask;
+  writer->headerPS.nChannels=1+(s->channel_mask==3);
   writer->headerPS.sample_rate=s->sample_rate;
   writer->headerPS.fft_size=s->fft_size;
   writer->headerPS.ADC_range = s->ADC_range;
@@ -72,18 +80,31 @@ void writerInit(WRITER *writer, SETTINGS *s) {
 
   }
   writer->lenRFI = pow(2,s->log_chunk_size);
-  writer->counter =0;
+  writer->counter = 0;
+  writer->tone_freq = 0;
+  writer->lj_voltage0 = 0;
+  writer->lj_diode = 0;
   printf ("Record size: %i\n", writer->lenPS);
   printf ("Version: %i\n", writer->headerPS.version);
-  
+
   maybeReOpenFile(writer,true);
 }
 
-void writerWritePS (WRITER *writer, float* ps, int32_t * numOutliersNulled) {
+double getMJDNow()
+{
+  long int t=time(NULL);
+  return (double)(t) / 86400.0  + 40587.0;
+}
+
+void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled) {
   maybeReOpenFile(writer);
-  fwrite(numOutliersNulled, sizeof(int32_t), writer->headerPS.nChannels, writer->fPS);
+  double mjd=getMJDNow();
+  fwrite (&mjd, sizeof(double), 1, writer->fPS);
+  fwrite (numOutliersNulled, sizeof(int), writer->headerPS.nChannels, writer->fPS);
   fwrite (ps, sizeof(float), writer->lenPS, writer->fPS);
   fwrite (&writer->tone_freq, sizeof(float), 1, writer->fPS);
+  fwrite (&writer->lj_voltage0, sizeof(float), 1, writer->fPS);
+  fwrite (&writer->lj_diode, sizeof(int), 1, writer->fPS);
   fflush(writer->fPS);
   writer->counter++;
 }
@@ -98,7 +119,23 @@ void writerWriteRFI(WRITER * writer, int8_t * outlier, int chunk, int channel, f
   fflush(writer->fRFI);
 }
 
+void writerWriteLastBuffer(WRITER * writer, int8_t * bufstart, int size){
+  time_t rawtime;
+  time (&rawtime);
+  struct tm *ti = localtime ( &rawtime );
+  sprintf(writer->afnameLastBuffer, writer->fnameLastBuffer, ti->tm_year - 100 , ti->tm_mon + 1,
+            ti->tm_mday, ti->tm_hour, ti->tm_min);
+  printf("NEW FILE: %s\n", writer->afnameLastBuffer);
+  FILE * fw = fopen(writer->afnameLastBuffer, "wb");
+  if(fw == NULL)
+	printf("CANNOT OPEN FILE: %s\n", writer->afnameLastBuffer);
+  else {
+  	fwrite(bufstart, sizeof(int8_t), size, fw);
+  	fclose(fw);
+  }
+}
+
 void writerCleanUp(WRITER *writer) {
-  fclose(writer->fPS);
-  fclose(writer->fRFI);
+  printf ("Closing/renaming output files...\n");
+  closeAndRename(writer);
 }

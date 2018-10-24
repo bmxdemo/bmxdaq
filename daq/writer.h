@@ -9,7 +9,10 @@
 // in python readers, etc.
 // CHANGES:
 //     v2 -- save float with cur tone freq every time you save
-#define HEADERVERSION 2
+//     v3 -- save MJD double
+//     v4 -- save labjack voltage float and diode
+//     v5 -- changed localtime to gmtime in filename -- header hasn't changed
+#define HEADERVERSION 5
 
 
 struct BMXHEADER {
@@ -33,7 +36,10 @@ struct RFIHEADER {
 };
 
 struct WRITER {
-  char fnamePS[MAXFNLEN], fnameRFI[MAXFNLEN];  //file names
+  char fnamePS[MAXFNLEN], fnameRFI[MAXFNLEN], fnameLastBuffer[MAXFNLEN];  //file names, from settings
+  char afnamePS[MAXFNLEN], afnameRFI[MAXFNLEN],  afnameLastBuffer[MAXFNLEN];  //current file names
+  char tafnamePS[MAXFNLEN], tafnameRFI[MAXFNLEN];  //temporary current file names 
+                                                   //(with ".new")
   uint32_t lenPS; // full length of PS info
   uint32_t lenRFI; //length of outlier chunk
   int save_every; // how many minutes we save.
@@ -42,12 +48,17 @@ struct WRITER {
   BMXHEADER headerPS;  //header for power spectra files
   RFIHEADER headerRFI; //header for rfi files
   float tone_freq;
+  float lj_voltage0;
+  int lj_diode;
   int counter; //number of PS written to current file
 };
 
 
 void writerInit(WRITER *writer, SETTINGS *set);
 void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled);
+
 void writerWriteRFI(WRITER *writer, int8_t * outlier, int chunk, int channel, float * nSigma);
+void writerWriteLastBuffer(WRITER *writer, int8_t * bufstart, int size);
 void writerCleanUp(WRITER *writer);
+void closeAndRename(WRITER *writer);
 

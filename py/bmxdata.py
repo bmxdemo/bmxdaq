@@ -5,7 +5,7 @@ import  matplotlib.colors as colors
 
 class BMXFile(object):
     freqOffset = 1100
-    def __init__(self,fname):
+    def __init__(self,fname, nsamples=None, force_version=None):
         ## old header!!
         #head_desc=[('nChan','i4'),
         #           ('fftsize','i4'),('fft_avg','i4'),('sample_rate','f4'),
@@ -17,8 +17,11 @@ class BMXFile(object):
         if H['magic'][:7]!=b'>>BMX<<':
             print("Bad magic.",H['magic'])
             sys.exit(1)
-        self.version=H['version']
-        if self.version<=2:
+        if force_version is not None:
+            self.version=force_version
+        else:
+            self.version=H['version']
+        if self.version<=5:
             maxcuts=10
             head_desc=[('nChan','i4'),('sample_rate','f4'),('fft_size','u4'),
                    ('ncuts','i4'),
@@ -42,6 +45,17 @@ class BMXFile(object):
             print("    Cut ",i," ",self.numin[i],'-',self.numax[i],'MHz #P=',self.nP[i])
             self.freq.append(self.freqOffset+self.numin[i]+(np.arange(self.nP[i])+0.5)*(self.numax[i]-self.numin[i])/self.nP[i])
         rec_desc=[]
+        self.haveMJD=False
+        self.haveNulled=False
+        self.haveToneFreq=False
+        self.haveDiode=False
+        self.FilenameUTC=(self.version[0]>=5)
+        if self.version>=3:
+            self.haveMJD=True
+            rec_desc+=[('mjd','f8')]
+        if self.version>=2:
+            rec_desc+=[('num_nulled','i4',H['nChan'])]
+            self.haveNulled=True
         if self.nChan==1:
             for i in range(self.ncuts):
                 rec_desc+=[('chan1_'+str(i),'f4',self.nP[i])]
@@ -51,15 +65,23 @@ class BMXFile(object):
                            ('chan2_'+str(i),'f4',self.nP[i]), 
                            ('chanXR_'+str(i),'f4',self.nP[i]),
                            ('chanXI_'+str(i),'f4',self.nP[i])]
-        if self.version==2:
-            rec_desc+=[('nu_tone','f4',1)]
+        if self.version>=1.5:
+            rec_desc+=[('nu_tone','f4')]
+            self.haveToneFreq=True
+        if self.version>=4:
+            rec_desc+=[('lj_voltage','f4'),('lj_diode','i4')]
+            self.haveDiode=True
+
         rec_dt=np.dtype(rec_desc,align=False)
         self.rec_dt=rec_dt
         self.names=rec_dt.names
-        self.data=np.fromfile(f,rec_dt)
+        if nsamples is None:
+            self.data=np.fromfile(f,rec_dt)
+        else:
+            self.data=np.fromfile(f,rec_dt,count=nsamples)
         self.fhandle=f
         self.nSamples = len(self.data)
-        print ("Loading done.")
+        print ("Loading done, %i samples"%(len(self.data)))
 
     def update(self,replace=False):
         ndata=np.fromfile(self.fhandle,self.rec_dt)
@@ -142,10 +164,10 @@ class BMXFile(object):
             plt.plot(self.freq[cut],y)
             plt.xlabel('freq [MHz] ' + n)
    
-    #waterfall plot of frequencies over time. Can either use log scale, or subtract off mean 
-    def plotWaterfall(self, fmin=None, fmax=None,nsamples=None, cut=0, binSize = 4, subtractMean = False, minmax=None):
+    #waterfall plot of frequencies over time. Can either use log scale, or subtract and divide off the mean 
+    def plotWaterfall(self, fmin=None, fmax=None, nsamples=None, cut=0, binSize = 4, subtractMean = False, minmax=None):
         if nsamples is  None:
-            nsamples = self.nSamples
+            nsamples = self.nSamples  #plot all samples in file
         imin,imax,fmin,fmax=self.f2iminmax(fmin,fmax,cut,binSize)
         
         for n in range(2):
@@ -153,17 +175,23 @@ class BMXFile(object):
            arr = []
            for i in range(nsamples):
                arr.append(self.data[i]['chan' + str(n+1)+'_' + str(cut)][imin:imax])
-               arr[i] = np.reshape(arr[i],(-1, binSize )) #bin frequencies into groups of 4
-               arr[i] = np.mean(arr[i], axis = 1)  #average the 4
+               arr[i] = np.reshape(arr[i],(-1, binSize )) #bin frequencies
+               arr[i] = np.mean(arr[i], axis = 1)  #average the bins
    	   arr=np.array(arr)
            if(subtractMean):
                means = np.mean(arr, axis=0) #mean for each freq bin
    	       for j in range(nsamples):
    	           arr[j,:] -= means
                    arr[j,:] /=means
-               plt.imshow(arr, interpolation="nearest", vmin=-minmax,vmax=+minmax, aspect = "auto", extent=[fmin, fmax, nsamples*.122016, 0])
-           else: 
-                plt.imshow(arr, norm=colors.LogNorm(), interpolation="nearest" , aspect = "auto", extent=[fmin, fmax, nsamples*.122016, 0]) 
+	       if minmax is not None:
+		   vmin = -minmax
+		   vmax = minmax
+	       else:
+	           vmin = None
+	           vmax = None
+               plt.imshow(arr, interpolation="nearest", vmin=vmin,vmax=vmax, aspect = "auto", extent=[fmin, fmax, nsamples*self.deltaT, 0])
+           else:
+                plt.imshow(arr, norm=colors.LogNorm(), interpolation="nearest" , aspect = "auto", extent=[fmin, fmax, nsamples*self.deltaT, 0]) 
            plt.colorbar()
            plt.xlabel('freq [MHz] Channel ' + str(n+1))
            plt.ylabel('time [s]')

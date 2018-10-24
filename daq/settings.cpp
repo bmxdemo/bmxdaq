@@ -37,13 +37,16 @@ void init_settings(SETTINGS *s, char* fname) {
     s->print_every=1;
     sprintf(s->ps_output_pattern,"%%02d%%02d%%02d_%%02d%%02d.data");
     sprintf(s->rfi_output_pattern,"%%02d%%02d%%02d_%%02d%%02d.outliers");
+    sprintf(s->last_buffer_output_pattern, "%%02d%%02d%%02d_%%02d%%02d.lastBuffer");
     s->fg_nfreq=0;
     s->fg_baudrate=9600;
     s->fg_switchevery=10;
     sprintf(s->fg_port,"ttyS0");
+    s->lj_Noff=0;
+    s->lj_Non=0;
     s->log_chunk_size = 20;
     s->n_sigma_null = 0;
-    s->n_sigma_write = 0;
+    s->n_sigma_write = 3;
     s->use_mean_statistic = false;
     s->use_variance_statistic = false;
     s->use_abs_max_statistic = false;
@@ -51,6 +54,7 @@ void init_settings(SETTINGS *s, char* fname) {
     s->nsamples=0;
     s->wave_nbytes=0;
     sprintf(s->wave_fname,"wave.bin");
+    s->print_last_buffer = 0;
      
     if (fname) {
          FILE *fi;
@@ -108,6 +112,8 @@ void init_settings(SETTINGS *s, char* fname) {
 	     strcpy(s->ps_output_pattern,s2);
 	   else if(!strcmp(s1,"rfi_output_pattern="))
 	     strcpy(s->rfi_output_pattern,s2);
+           else if(!strcmp(s1,"last_buffer_output_pattern="))
+             strcpy(s->last_buffer_output_pattern,s2);
 	   else if(!strcmp(s1,"print_meanvar="))
 	     s->print_meanvar=atoi(s2);
 	   else if(!strcmp(s1,"print_maxp="))
@@ -122,10 +128,16 @@ void init_settings(SETTINGS *s, char* fname) {
 	     s->fg_switchevery=atoi(s2);
 	   else if(!strcmp(s1,"fg_port="))
 	     strcpy(s->fg_port,s2);
+	   else if(!strcmp(s1,"lj_Noff="))
+	     s->lj_Noff=atoi(s2);
+	   else if(!strcmp(s1,"lj_Non="))
+	     s->lj_Non=atoi(s2);
 	   else if(!strcmp(s1,"wave_fname="))
 	     strcpy(s->wave_fname,s2);
-	   else if(!strcmp(s1,"wave_nbytes="))
-	     s->wave_nbytes=atoi(s2);
+	   else if(!strcmp(s1,"print_last_buffer="))
+	     s->print_last_buffer=atoi(s2);
+           else if(!strcmp(s1,"wave_nbytes="))
+             s->wave_nbytes=atoi(s2);
 	   else if(!strcmp(s1,"log_chunk_size="))
 	     s->log_chunk_size=atoi(s2);
 	   else if(!strcmp(s1,"n_sigma_null="))

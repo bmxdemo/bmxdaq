@@ -15,8 +15,21 @@
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
+
 #include <algorithm>
 #include <chrono>
+#include <signal.h>
+#include <unistd.h>
+
+/* Ctrl+C hander */
+
+volatile sig_atomic_t stopSignal = 0;
+
+void loop_signal_handler(int sig){ // can be called asynchronously
+  stopSignal=1;
+}
+
+
 /*
 **************************************************************************
 szTypeToName: doing name translation
@@ -66,7 +79,7 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
   printf ("==========================\n");
 
   if (!set->simulate_digitizer) {
-  card->hCard = spcm_hOpen ((char*)"/dev/spcm0");
+  card->hCard = spcm_hOpen ((char*)"/dev/spcm1");
   if (!card->hCard) printErrorDie("Can't open digitizer card.",card,set);
   
   int32       lCardType, lSerialNumber, lFncType;
@@ -117,9 +130,6 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
   } else {
     printf ("**Not using real card, simulating...**\n");
   }
-
-  
-
 
   printf ("Allocating digitizer buffer...\n");
   /// now set the memory
@@ -198,14 +208,18 @@ float deltaT (timespec t1,timespec t2) {
 	  + ( t2.tv_nsec - t1.tv_nsec )/ 1e9;
 }
 
-void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRITER *w, TWRITER ** t,  RFI * rfi) {
-  if(set->wave_nbytes > 0 ) printf("New File: %s\n", set->wave_fname);
+void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJACK *lj,
+		   WRITER *w, TWRITER ** t, RFI *rfi) {
+
+
   printf ("\n\nStarting main loop\n");
   printf ("==========================\n");
   
   uint32      dwError;
   int32       lStatus, lAvailUser, lPCPos, fill;
   int stream; //which stream was used to proccess data
+  int8_t * bufstart;
+
   // start everything
   dwError = set->simulate_digitizer ? ERR_OK :
     spcm_dwSetParam_i32 (dc->hCard, SPC_M2CMD, M2CMD_CARD_START | 
@@ -222,7 +236,8 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
   fill=69;
   float towait=set->fft_size/set->sample_rate;
   long int sample_count=0;
-  while (1) {
+  signal(SIGINT, loop_signal_handler);
+  while (!stopSignal) {
     clock_gettime(CLOCK_REALTIME, &t1);
     float dt=deltaT(tSim,t1);
     if (set->simulate_digitizer) {
@@ -254,7 +269,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 	clock_gettime(CLOCK_REALTIME, &timeNow);
 	double accum = deltaT(timeStart, timeNow);
 
-	int8_t* bufstart=((int8_t*)dc->pnData+lPCPos);
+	bufstart=((int8_t*)dc->pnData+lPCPos);
 	if (set->dont_process) 
 	  printf (" ** no GPU processing");
 	else{
@@ -273,7 +288,10 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
       
 	// drive frequency generator if needed
 	if (set->fg_nfreq) freqGenLoop(fgen, w, t[stream]);
-	// write waveform if requested
+	// drive labjack
+	if (set->lj_Non) LJLoop(lj,w);
+
+  // write waveform if requested
 	struct timespec begin, end;
         clock_gettime(CLOCK_REALTIME, &begin);
 	if (set->wave_nbytes>0) {
@@ -288,9 +306,17 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 	// break if sufficient number of samples
 	if ((++sample_count) == set->nsamples) break;
       }
+  }   
+  
+  printf("\n\n\n\n\n\n\n\n\n");
+  if (stopSignal) printf ("Ctrl-C detected. Stopping.\n");
+  if (sample_count==set->nsamples) printf ("Reached required number of samples.\n");
+  //Write last digitizer bufer to a file 
+  if(set->print_last_buffer){
+  	printf("Printing last digitizer buffer to a file...\n");
+  	writerWriteLastBuffer(w, bufstart,dc->lNotifySize);
   }
-    
-  printf("\n\n\n\n\n\n\n\n\nSending stop command\n");
+  printf ("Stoping digitizer FIFO...\n");
   // send the stop command
   dwError = set->simulate_digitizer ? ERR_OK :
     spcm_dwSetParam_i32 (dc->hCard, SPC_M2CMD, M2CMD_CARD_STOP | 
@@ -300,6 +326,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, WRIT
 
 
 void digiCardCleanUp(DIGICARD *card, SETTINGS *set) {
+  printf ("Closing digitizer... \n");
   digiCardFree(card->pnData);
   if (!set->simulate_digitizer) spcm_vClose (card->hCard);
 }

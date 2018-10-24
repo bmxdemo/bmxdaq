@@ -29,6 +29,8 @@ struct SETTINGS {
   // waveform file and length, if zero, don't save
   long int wave_nbytes;
   char wave_fname[MAXCHAR];
+  //print last digitizer  buffer to file before exiting program
+  int print_last_buffer;
 
   // size of FFT transform
   uint32_t fft_size; // must be power of 2
@@ -43,6 +45,7 @@ struct SETTINGS {
   // output options
   char ps_output_pattern[MAXCHAR];
   char rfi_output_pattern[MAXCHAR];
+  char last_buffer_output_pattern[MAXCHAR];
   int save_every;
   
   // printout options
@@ -62,6 +65,10 @@ struct SETTINGS {
   float fg_ampl[MAXFREQ];
 
 
+  // labjack
+  int lj_Noff; // number of samples with diode off
+  int lj_Non;  // number of samples with diode on;
+
   //RFI rejection
   int log_chunk_size; //log base 2 of chunk size to be used to collect RFI statistics
   float n_sigma_null; //number of standard deviations used to determine outliers to null out. 0 for none
@@ -75,7 +82,7 @@ struct SETTINGS {
 
 // Fixed defines
 
-#define VERSION "0.01"
+#define VERSION "0.5"
 
 
 void init_settings(SETTINGS *settings, char* inifile);
