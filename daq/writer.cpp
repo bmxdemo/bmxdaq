@@ -60,6 +60,13 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   writer->headerPS.nChannels=1+(s->channel_mask==3);
   writer->headerPS.sample_rate=s->sample_rate;
   writer->headerPS.fft_size=s->fft_size;
+  writer->headerPS.ADC_range = s->ADC_range;
+  
+  //initialize statistics array
+  writer->headerPS.statistics[mean] = s->use_mean_statistic? 1: 0;
+  writer->headerPS.statistics[variance] = s->use_variance_statistic? 1: 0;
+  writer->headerPS.statistics[absoluteMax] = s->use_abs_max_statistic? 1: 0;
+
   writer->headerPS.ncuts=s->n_cuts;
   writer->headerRFI.chunkSize = pow(2, s->log_chunk_size);
   writer->headerRFI.nSigma = s->n_sigma_write;
@@ -102,12 +109,12 @@ void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled) {
   writer->counter++;
 }
 
-void writerWriteRFI(WRITER * writer, int8_t * outlier, int chunk, int channel, float nSigma){
+void writerWriteRFI(WRITER * writer, int8_t * outlier, int chunk, int channel, float * nSigma){
   maybeReOpenFile(writer);
   fwrite(&writer->counter, sizeof(int), 1, writer->fRFI);
   fwrite(&chunk, sizeof(int), 1, writer->fRFI);
   fwrite(&channel, sizeof(int), 1, writer->fRFI);
-  fwrite(&nSigma, sizeof(float), 1, writer->fRFI);
+  fwrite(nSigma, sizeof(float), STAT_COUNT_MINUS_ONE +1, writer->fRFI);
   fwrite (outlier, sizeof(int8_t), writer->lenRFI, writer->fRFI);
   fflush(writer->fRFI);
 }
@@ -132,7 +139,3 @@ void writerCleanUp(WRITER *writer) {
   printf ("Closing/renaming output files...\n");
   closeAndRename(writer);
 }
-
-
-
-

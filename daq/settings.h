@@ -29,7 +29,6 @@ struct SETTINGS {
   // waveform file and length, if zero, don't save
   long int wave_nbytes;
   char wave_fname[MAXCHAR];
-  
   //print last digitizer  buffer to file before exiting program
   int print_last_buffer;
 
@@ -40,7 +39,6 @@ struct SETTINGS {
   uint32_t fft_avg[MAXCUTS]; // how many bins to average over
   int buf_mult; // buffer multiplier, we allocate
                 //buf_mult*fft_size for transfer
-  //
   int cuda_streams; // number of cuda streams
   int cuda_threads; // number of cuda threads
 
@@ -53,7 +51,8 @@ struct SETTINGS {
   // printout options
   int print_meanvar;
   int print_maxp;
-  
+  int print_every;
+
   // "derived" quantities for passing
   int pssize[MAXCUTS];
 
@@ -74,6 +73,7 @@ struct SETTINGS {
   int log_chunk_size; //log base 2 of chunk size to be used to collect RFI statistics
   float n_sigma_null; //number of standard deviations used to determine outliers to null out. 0 for none
   float n_sigma_write; //number of standard deviations used to determine outliers to write to file, 0 for none
+  //which statistics to use to detect rfi
   bool use_mean_statistic;
   bool use_variance_statistic;
   bool use_abs_max_statistic;

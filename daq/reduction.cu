@@ -15,19 +15,19 @@ static void HandleError( cudaError_t err,
 
 //Parallel reduction algorithm to calculate the mean of an array of numbers.
 //Multiple adds are performed while loading to shared memory. 
-//OPS_PER_THREAD specifies the number of elements to add while loading. 
-//This reduces the number of blocks needed by a factor of OPS_PER_THREAD.
 //Inputs: 
 //        in: an array of floats. A separate average is computed for each 
 //            gpu block. The number of elements must be a power of 2.
 //        out: an array of floats to place the resulting averages. 
 //             This must be the same size as the number of gpu blocks being used.
-__global__ void mean_reduction (cufftReal * in, cufftReal * out){
+//        opsPerThread: number of elements to add while loading. This reduces
+//             the number of blocks needed by a factor of opsPerThread.
+__global__ void mean_reduction (cufftReal * in, cufftReal * out, int opsPerThread){
         extern __shared__ cufftReal sdata[];
         int tid = threadIdx.x;
-        int i = blockIdx.x * blockDim.x*OPS_PER_THREAD + threadIdx.x;
+        int i = blockIdx.x * blockDim.x*opsPerThread + threadIdx.x;
         sdata[tid] = 0;
-        for(int j=0; j<OPS_PER_THREAD; j++)
+        for(int j=0; j<opsPerThread; j++)
 	    sdata[tid]+=in[i+j*blockDim.x];
 	__syncthreads();
 
@@ -36,25 +36,25 @@ __global__ void mean_reduction (cufftReal * in, cufftReal * out){
                 __syncthreads();
         }   
 	
-	if(tid == 0) out[blockIdx.x] = sdata[0]/(blockDim.x*OPS_PER_THREAD);
+	if(tid == 0) out[blockIdx.x] = sdata[0]/(blockDim.x*opsPerThread);
 }
 
 
 //Parallel reduction algorithm to calculate the mean of squares for an array of numbers. 
 //Multiple squarings and adds are performed while loading to shared memory. 
-//OPS_PER_THREAD specifies the number of squares to add while loading. 
-//This reduces the number of blocks needed by a factor of OPS_PER_THREAD.
 //Inputs: 
 //        in: an array of floats to average the squares of. A separate average 
 //            is computed for each gpu block. The number of elements must be a power of 2.
 //        out: an array of floats to place the resulting averages. This must be 
 //            the same size as the number of gpu blocks being used in the kernel call.
-__global__ void squares_reduction (cufftReal * in, cufftReal * out){
+//        opsPerThread: number of elements to add while loading. This reduces
+//             the number of blocks needed by a factor of opsPerThread.
+__global__ void squares_reduction (cufftReal * in, cufftReal * out, int opsPerThread){
         extern __shared__ cufftReal sdata[];
         int tid = threadIdx.x;
-        int i = blockIdx.x * blockDim.x*OPS_PER_THREAD + threadIdx.x;
+        int i = blockIdx.x * blockDim.x*opsPerThread + threadIdx.x;
         sdata[tid] = 0;
-        for(int j=0; j<OPS_PER_THREAD; j++)
+        for(int j=0; j<opsPerThread; j++)
 	    sdata[tid]+=in[i+j*blockDim.x] * in[i+j*blockDim.x];
         __syncthreads();
         for(int s =blockDim.x/2; s>0; s>>=1){
@@ -62,7 +62,7 @@ __global__ void squares_reduction (cufftReal * in, cufftReal * out){
                 __syncthreads();
         }   
 
-        if(tid == 0) out[blockIdx.x] = sdata[0]/(blockDim.x*OPS_PER_THREAD);
+        if(tid == 0) out[blockIdx.x] = sdata[0]/(blockDim.x*opsPerThread);
 }
 
 //Parallel reduction algorithm, to calculate the absolute max of an array of numbers
@@ -71,12 +71,14 @@ __global__ void squares_reduction (cufftReal * in, cufftReal * out){
 //            The number of elements must be a power of 2.
 //        out: an array of floats to place the resulting maxes. This must be the 
 //            same size as the number of gpu blocks being used in the kernel call.
-__global__ void abs_max_reduction (cufftReal * in, cufftReal * out){
+//        opsPerThread: number of elements to add while loading. This reduces
+//             the number of blocks needed by a factor of opsPerThread.
+__global__ void abs_max_reduction (cufftReal * in, cufftReal * out, int opsPerThread){
         extern __shared__ cufftReal sdata[];
         int tid = threadIdx.x;
-        int i = blockIdx.x * blockDim.x*OPS_PER_THREAD + threadIdx.x;
+        int i = blockIdx.x * blockDim.x*opsPerThread + threadIdx.x;
         sdata[tid] = 0;
-	for(int j =0; j<OPS_PER_THREAD; j++)
+	for(int j =0; j<opsPerThread; j++)
 	    sdata[tid] = (abs(sdata[tid]) > abs(in[i+j*blockDim.x]))? abs(sdata[tid]): abs(in[i+j*blockDim.x]);
         __syncthreads();
 
@@ -102,22 +104,20 @@ __global__ void abs_max_reduction (cufftReal * in, cufftReal * out){
 //        maxThreadsPerBlock: the maximum number of threads allowed per block 
 //               (can be obtained by cudaGetDeviceProperties)
 void getMeans(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int n, int chunkSize, cudaStream_t & cs, int maxThreadsPerBlock){
-    if(chunkSize < OPS_PER_THREAD){
-	printf("chunk size should not be smaller than OPS_PER_THREAD\n");
-	exit(1);
-    }
-    int numThreads = min(maxThreadsPerBlock, chunkSize/OPS_PER_THREAD);
-    int numBlocks = n/(numThreads * OPS_PER_THREAD);
+    int opsPerThread = min(chunkSize, OPS_PER_THREAD);
+    int numThreads = min(maxThreadsPerBlock, chunkSize/opsPerThread);
+    int numBlocks = n/(numThreads * opsPerThread);
+    mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(input, deviceOutput, opsPerThread);
     
-    mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(input, deviceOutput);
-    CHK(cudaGetLastError());
-    int remaining = chunkSize/(numThreads*OPS_PER_THREAD); //number of threads, and number of summations that remain to be done per chunk
+    int remaining = chunkSize/(numThreads*opsPerThread); //number of threads, and number of summations that remain to be done per chunk
     while(remaining > 1){
-	numThreads = min(maxThreadsPerBlock, remaining/OPS_PER_THREAD); 
-	numBlocks = numBlocks/(numThreads*OPS_PER_THREAD);
-	mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(deviceOutput, deviceOutput); //reusing input array for output!
-	remaining/=(numThreads*OPS_PER_THREAD);
+	opsPerThread = min(remaining, opsPerThread);
+	numThreads = min(maxThreadsPerBlock, remaining/opsPerThread); 
+	numBlocks = numBlocks/(numThreads*opsPerThread);
+	mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(deviceOutput, deviceOutput, opsPerThread); //reusing input array for output!
+	remaining/=(numThreads*opsPerThread);
     }
+    CHK(cudaGetLastError());
     size_t memsize = numBlocks*sizeof(cufftReal); 
     CHK(cudaMemcpyAsync(output, deviceOutput, memsize, cudaMemcpyDeviceToHost, cs)); 
 }
@@ -138,23 +138,21 @@ void getMeans(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, in
 //        maxThreadsPerBlock: the maximum number of threads allowed per block 
 //               (can be obtained by cudaGetDeviceProperties)
 void getMeansOfSquares(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int n, int chunkSize, cudaStream_t & cs, int maxThreadsPerBlock){
-    if(chunkSize < OPS_PER_THREAD){
-	printf("chunk size should not be smaller than OPS_PER_THREAD\n");
-	exit(1);
-    }
-    int numThreads = min(maxThreadsPerBlock, chunkSize/OPS_PER_THREAD);
-    int numBlocks = n/(numThreads * OPS_PER_THREAD);
+    int opsPerThread = min(chunkSize, OPS_PER_THREAD);
+    int numThreads = min(maxThreadsPerBlock, chunkSize/opsPerThread);
+    int numBlocks = n/(numThreads * opsPerThread);
     
-    squares_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(input, deviceOutput);
-    CHK(cudaGetLastError());
+    squares_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(input, deviceOutput, opsPerThread);
     
-    int remaining = chunkSize/(numThreads*OPS_PER_THREAD); //number of threads, and number of summations that remain to be done
+    int remaining = chunkSize/(numThreads*opsPerThread); //number of threads, and number of summations that remain to be done
     while(remaining > 1){
-	numThreads = min(maxThreadsPerBlock, remaining/OPS_PER_THREAD);
-	numBlocks = numBlocks/(numThreads*OPS_PER_THREAD);
-	mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(deviceOutput, deviceOutput); 
-	remaining/=(numThreads*OPS_PER_THREAD);
+	opsPerThread = min(remaining, opsPerThread);
+	numThreads = min(maxThreadsPerBlock, remaining/opsPerThread);
+	numBlocks = numBlocks/(numThreads*opsPerThread);
+	mean_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(deviceOutput, deviceOutput, opsPerThread); 
+	remaining/=(numThreads*opsPerThread);
     }
+    CHK(cudaGetLastError());
     size_t memsize = numBlocks*sizeof(cufftReal); 
     CHK(cudaMemcpyAsync(output, deviceOutput, memsize, cudaMemcpyDeviceToHost, cs)); 
 
@@ -175,21 +173,21 @@ void getMeansOfSquares(cufftReal *input, cufftReal * output, cufftReal * deviceO
 //        maxThreadsPerBlock: the maximum number of threads allowed per block 
 //               (can be obtained by cudaGetDeviceProperties)
 void getAbsMax(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, int n, int chunkSize, cudaStream_t & cs, int maxThreadsPerBlock){
-    if(chunkSize < OPS_PER_THREAD){
-	printf("chunk size should not be smaller than OPS_PER_THREAD\n");
-	exit(1);
-    }
-    int numThreads = min(maxThreadsPerBlock, chunkSize/OPS_PER_THREAD);
-    int numBlocks = n/(numThreads * OPS_PER_THREAD);
-    abs_max_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(input, deviceOutput);
-    CHK(cudaGetLastError());
-    int remaining = chunkSize/(numThreads*OPS_PER_THREAD); //number of threads, and number of summations that remain to be done
+    int opsPerThread = min(chunkSize, OPS_PER_THREAD);
+    int numThreads = min(maxThreadsPerBlock, chunkSize/opsPerThread);
+    int numBlocks = n/(numThreads * opsPerThread);
+    
+    abs_max_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(input, deviceOutput, opsPerThread);
+    
+    int remaining = chunkSize/(numThreads*opsPerThread); //number of threads, and number of summations that remain to be done
     while(remaining > 1){
-	numThreads = min(maxThreadsPerBlock, remaining/OPS_PER_THREAD);
-	numBlocks = numBlocks/(numThreads*OPS_PER_THREAD);
-	abs_max_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(deviceOutput, deviceOutput);
-	remaining/=(numThreads*OPS_PER_THREAD);
+	opsPerThread = min(remaining, opsPerThread);
+	numThreads = min(maxThreadsPerBlock, remaining/opsPerThread);
+	numBlocks = numBlocks/(numThreads*opsPerThread);
+	abs_max_reduction<<<numBlocks, numThreads, numThreads*sizeof(cufftReal), cs>>>(deviceOutput, deviceOutput, opsPerThread);
+	remaining/=(numThreads*opsPerThread);
     }
+    CHK(cudaGetLastError());
     size_t memsize = numBlocks*sizeof(cufftReal); 
     CHK(cudaMemcpyAsync(output, deviceOutput, memsize, cudaMemcpyDeviceToHost, cs));
 }
