@@ -3,6 +3,7 @@ import socket,sys,time, datetime
 
 SERVER="localhost"
 PORT=23000
+FILENAME="output.dat"
 
 def client(ip, port, filename):
     f=open(filename,'w')
@@ -31,5 +32,5 @@ def client(ip, port, filename):
 
 
 if __name__ == "__main__":
-    client(SERVER, PORT, 'output.dat')
+    client(SERVER, PORT, FILENAME)
     print ("Exiting client.")
