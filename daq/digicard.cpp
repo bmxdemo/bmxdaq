@@ -15,6 +15,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
+
+#include <algorithm>
+#include <chrono>
 #include <signal.h>
 #include <unistd.h>
 #include <assert.h>
@@ -86,6 +89,7 @@ Setup the digitizer card
 */
 
 void digiCardInit (DIGICARD *card, SETTINGS *set) {
+
   int numCards = 1 + (set->card_mask==3); //how many digitizer cards we are using
   printf ("Allocating digitizer buffer...\n");
   /// now set the memory
@@ -107,25 +111,48 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
     printf ("**Not using real card, simulating...**\n");
     // Filling buffer
     printf ("Filling Fake buffer...\n");
-    for(int n=0; n<numCards; n++){
-      int8_t ch1lu[64], ch2lu[64];
-      for(int i=0; i<64; i++) {
-        ch1lu[i]=-1;//int(20*cos(2*2*M_PI*i/64)+10*sin(2*M_PI*i/64));
-        ch2lu[i]=-1;//31+i;
-      }
-      int i=0;
-      int32_t s=card->lBufferSize;
-      int8_t *data=(int8_t*) card->pnData[n];
-      printf ("buffer size=%i\n",s);
-      for (int32_t k=0; k<s-1; k+=2) {
-        data[k]=ch1lu[i];
-        data[k+1]=ch2lu[i];
-        i+=1;
-        if (i==64) i=0;
-      }
+    int8_t * sh = (int8_t *)malloc(set->fft_size);
+    //int8_t ch1lu[64], ch2lu[64];
+    /*for(int i=0; i<64; i++) {
+      ch1lu[i]=-1;//int(20*cos(2*2*M_PI*i/64)+10*sin(2*M_PI*i/64));
+      ch2lu[i]=-i;//31+i;
+    }*/
+
+    for(int32_t i =0; i < set->fft_size/2; i++){
+	  sh[i] = 0;
+	  sh[set->fft_size/2 + i] = 127; 
     }
-    printf ("Simulated digitizer card and buffer ready.\n");
-    return;
+
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    shuffle (sh, sh + set->fft_size, std::default_random_engine(seed));
+    for( int i =0; i < 20; i++){
+	  printf("%d ", sh[i]);
+    }
+    int i=0;
+    int32_t s=card->lBufferSize;
+    int8_t *data=(int8_t*) card->pnData;
+    printf ("buffer size=%i\n",s);
+    /*for (int32_t k=0; k<s-1; k+=2) {
+      data[k]=ch1lu[i];
+      data[k+1]=ch2lu[i];
+      i+=1;
+      if (i==64) i=0;
+    }*/
+    for(int32_t k =0; k<s-1; k+=2){
+	  data[k] = sh[i];
+	  i+=1;
+	  if (i==set->fft_size) i=0;
+    }
+
+    seed = std::chrono::system_clock::now().time_since_epoch().count();
+    shuffle (sh, sh + set->fft_size, std::default_random_engine(seed));
+    
+
+    for(int32_t k =0; k<s-1; k+=2){
+	  data[k+1] = sh[i];
+	  i+=1;
+	  if (i==set->fft_size) i=0;
+    }
   }
   
   printf ("\n\nInitializing digitizer(s)\n");
@@ -200,15 +227,14 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
   printf ("Digitizer card and buffer ready.\n");
 }
 
-
 void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJACK *lj,
-       WRITER *w, RFI *rfi) {
+		   WRITER *w, TWRITER *t, RFI *rfi) {
+
   printf ("\n\nStarting main loop\n");
   printf ("==========================\n");
   
   int numCards = 1 + (set->card_mask==3); //how many digitizer cards we are using
   printf("Number of digitizer cards: %d\n", numCards);
-
   uint32      dwError[2];
   int32       lStatus[2], lAvailUser[2], lPCPos[2], fill[2];
   int8_t *    bufstart[2];
@@ -249,11 +275,14 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
   float towait=set->fft_size/set->sample_rate;
   long int sample_count=0;
   signal(SIGINT, loop_signal_handler);
+
   bool processed = true; //was the data processed properly on the gpu
+  // terminal writer init
+  terminalWriterInit(t, 25, set->print_every);
   while (!stopSignal) {
     clock_gettime(CLOCK_REALTIME, &t1);
     float dt=deltaT(tSim,t1);
-    tprintfn ("Sample number=%d, Cycle taking %fs, hope for < %fs",sample_count, dt, towait);
+    tprintfn (t,1,"Sample number=%d, Cycle taking %fs, hope for < %fs",sample_count, dt, towait);
     if (set->simulate_digitizer) {
       for(int i=0; i<numCards; i++){
         lPCPos[i] = dc->lNotifySize*sim_ofs;
@@ -271,7 +300,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
       t1=tSim;
       clock_gettime(CLOCK_REALTIME, &tSim);
       dt=deltaT(t1,tSim);
-      tprintfn ("Measured dt: %f ms, rate=%f MHz",dt*1e3, set->fft_size/dt/1e6);
+      tprintfn (t,1 "Measured dt: %f ms, rate=%f MHz",dt*1e3, set->fft_size/dt/1e6);
     }
     else {
       t1=tSim;
@@ -285,16 +314,16 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
         assert(lAvailUser[i] >= dc->lNotifySize);
         clock_gettime(CLOCK_REALTIME, &tSim);
         dt=deltaT(t1,tSim);
-        tprintfn ("Measured dt for card %d: %f ms, rate=%f MHz", dc->serialNumber[i], dt*1e3, set->fft_size/dt/1e6);
+        tprintfn (t,1,"Measured dt for card %d: %f ms, rate=%f MHz", dc->serialNumber[i], dt*1e3, set->fft_size/dt/1e6);
         
       }
     }
 
     clock_gettime(CLOCK_REALTIME, &timeNow);
     double accum = deltaT(timeStart, timeNow);
-    tprintfn("Time: %fs;", accum);
+    tprintfn(t,1,"Time: %fs;", accum);
     for(int i=0; i<numCards; i++){
-        tprintfn("Card %d Status:%i; Pos:%08x; Len:%08x; digitizer buffer fill %i/1000   ", dc->serialNumber[i],
+        tprintfn(t,1,"Card %d Status:%i; Pos:%08x; Len:%08x; digitizer buffer fill %i/1000   ", dc->serialNumber[i],
             lStatus[i], lPCPos[i], lAvailUser[i], fill[i]);
         bufstart[i]=((int8_t*)dc->pnData[i]+lPCPos[i]);
     }
@@ -310,9 +339,9 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
         spcm_dwSetParam_i32 (dc->hCard[i], SPC_DATA_AVAIL_CARD_LEN, dc->lNotifySize);
     
     // drive frequency generator if needed
-    if (set->fg_nfreq) freqGenLoop(fgen, w);
+    if (set->fg_nfreq) freqGenLoop(fgen, w, t);
     // drive labjack
-    if (set->lj_Non) LJLoop(lj,w);
+    if (set->lj_Non) LJLoop(lj,w, t);
     // write waveform if requested
     if (set->wave_nbytes>0) {
       tprintfn ("filename=%s",set->wave_fname);
@@ -327,8 +356,10 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
     if ((++sample_count) == set->nsamples) break;
     if (!processed) break;
     // return terminal cursor
-    treturn();
+    tflush(t);
   }   
+
+  terminalWriterCleanup(t);
   
   printf("\n\n\n\n\n\n\n\n\n");
   if (stopSignal) printf ("Ctrl-C detected. Stopping.\n");

@@ -29,15 +29,14 @@ void freqGenInit (FREQGEN *fg, WRITER* wr, SETTINGS *set) {
     fg->freq[i]=set->fg_freq[i];
     fg->ampl[i]=set->fg_ampl[i];
   }
-  freqGenLoop(fg,wr);
-  treturn();
+  freqGenLoop(fg,wr, NULL);
 }
 
 
 //main worker loop
-void freqGenLoop (FREQGEN *fg, WRITER* wr) {
-  tprintfn("ToneGen: count %i/%i freq #%i %fMHz %fVpp",fg->ccount, 
-	   fg->cswitch, fg->cfreq, fg->freq[fg->cfreq], fg->ampl[fg->cfreq]);
+void freqGenLoop (FREQGEN *fg, WRITER* wr, TWRITER * t) {
+  if(t != NULL) 
+      tprintfn(t, 1, "ToneGen: count %i/%i freq #%i %fMHz %fVpp",fg->ccount, fg->cswitch, fg->cfreq, fg->freq[fg->cfreq], fg->ampl[fg->cfreq]);
   if (fg->ccount==0) {
     char buf[128];
     sprintf(buf,"FREQ%fMHz\n",fg->freq[fg->cfreq]);

@@ -20,13 +20,12 @@ void LJInit (LJACK *lj, WRITER* wr, SETTINGS *set) {
   double value=10.0;  // +- 10 volts range                                                                                                                                        
   err = LJM_eWriteAddress(lj->handle, 40000, LJM_FLOAT32, 10.0);                                                                                                                     
   ErrorCheck(err, "LJM Set voltage");    
-  LJLoop(lj,wr);
-  treturn();
+  LJLoop(lj,wr, NULL);
 }
 
 
 //main worker loop
-void LJLoop (LJACK *lj, WRITER* wr) {
+void LJLoop (LJACK *lj, WRITER* wr, TWRITER* twr) {
   int err=0;
   if (lj->counter==0) {
     //switch off
@@ -46,7 +45,8 @@ void LJLoop (LJACK *lj, WRITER* wr) {
     wr->lj_voltage0=lj->voltage0;
     wr->lj_diode=lj->diode;
   }
-  tprintfn("LabJack: count %i/%i Diode:%i  V0:%g ",lj->counter, 
+  if (twr)
+    tprintfn (twr, 1, "LabJack: count %i/%i Diode:%i  V0:%g ",lj->counter, 
 	   lj->num_tot, lj->diode, lj->voltage0);
 
   lj->counter = (++lj->counter)%(lj->num_tot);

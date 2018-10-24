@@ -74,6 +74,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     printf ("Need FLOATIZE_X even for two channels\n");
     exit(1);
   }
+
   if(!(OPS_PER_THREAD>0) ||  !((OPS_PER_THREAD & (OPS_PER_THREAD-1)) == 0)){
     printf("Need OPS_PER_THREAD to be a power of 2.\n");
     exit(1);
@@ -217,23 +218,26 @@ __global__ void floatize_2chan(int8_t* sample, cufftReal* fsample1, cufftReal* f
 }
 
 //Print the elapsed time between 2 cuda events
-void printDt (cudaEvent_t cstart, cudaEvent_t cstop, float & total) {
+void printDt (cudaEvent_t cstart, cudaEvent_t cstop, float * total, TWRITER * t) {
   float gpu_time;
   CHK(cudaEventElapsedTime(&gpu_time, cstart, cstop));
-  printf (" %3.2fms ", gpu_time);
-  total +=gpu_time;
+  tprintfn (t, 0, " %3.2fms ", gpu_time);
+  *total +=gpu_time;
 }
 
-void printTiming(GPUCARD *gc, int i) {
+void printTiming(GPUCARD *gc, int i, TWRITER * t) {
   float totalTime = 0;
-  printf ("GPU timing (copy/floatize/RFI/fft/post/copyback): ");
-  printDt (gc->eStart[i], gc->eDoneCopy[i], totalTime);
-  printDt (gc->eDoneCopy[i], gc->eDoneFloatize[i], totalTime);
-  printDt (gc->eDoneFloatize[i], gc->eDoneRFI[i], totalTime);
-  printDt (gc->eDoneRFI[i], gc->eDoneFFT[i], totalTime);
-  printDt (gc->eDoneFFT[i], gc->eDonePost[i], totalTime);
-  printDt (gc->eBeginCopyBack[i], gc->eDoneCopyBack[i], totalTime);
-  tprintfn (" total: %3.2f ", totalTime);
+  tprintfn (t, 0, "GPU timing (copy/floatize/RFI...): ");
+  printDt (gc->eStart[i], gc->eDoneCopy[i], &totalTime, t);
+  printDt (gc->eDoneCopy[i], gc->eDoneFloatize[i], &totalTime, t);
+  printDt (gc->eDoneFloatize[i], gc->eDoneRFI[i], &totalTime, t);
+  tprintfn (t,1,"");
+  tprintfn (t, 0, "GPU timing (.../fft/post/copyback): ");
+  printDt (gc->eDoneRFI[i], gc->eDoneFFT[i], &totalTime, t);
+  printDt (gc->eDoneFFT[i], gc->eDonePost[i], &totalTime, t);
+  printDt (gc->eBeginCopyBack[i], gc->eDoneCopyBack[i], &totalTime, t);
+  tprintfn (t,1,"");
+  tprintfn (t, 1, "GPU timing total: %3.2f ", totalTime);
 }
 
 
@@ -243,8 +247,9 @@ void printTiming(GPUCARD *gc, int i) {
 //      buf: data from digitizer
 //      wr: writer to write out power spectra and outliers to files
 //      rfi: structure containing rfi settings and memory for rfi statistics
+
 //  set: settings
-bool gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, RFI * rfi, SETTINGS *set) {
+bool gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * rfi, SETTINGS *set) {
   //streamed version
   bool deleteLinesInConsole = false;
   //Check if other streams are finished and proccess the finished ones in order (i.e. print output to file)
@@ -416,5 +421,5 @@ bool gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, RFI * rfi, SETTINGS
   CHK(cudaGetLastError());
   cudaEventRecord(gc->eDonePost[csi], cs);
     
-  return true;
+  return csi;
 }
