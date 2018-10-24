@@ -329,7 +329,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
     }
     if (set->dont_process) 
       tprintfn (" ** no GPU processing");
-    else if(sample_count > 10 || set->simulate_digitizer){//don't proccess first few cycles if coming from ADC
+    else if(sample_count >= 10 || set->simulate_digitizer){//don't proccess first few cycles if coming from ADC
         processed = gpuProcessBuffer(gc,bufstart,w,rfi, set);
     }
 
@@ -345,7 +345,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
     // write waveform if requested
     if (set->wave_nbytes>0) {
       tprintfn ("filename=%s",set->wave_fname);
-      FILE *fw=fopen(set->wave_fname,"wb");
+      FILE *fw=fopen(set->wave_fname,"ab");
       if (fw!=NULL) {
         for(int i=0; i< numCards; i++)
           fwrite(bufstart[i],sizeof(int8_t),set->wave_nbytes,fw);
