@@ -13,43 +13,41 @@ Reverses cursor to allow continues overwrite over the terminal
 #include "terminal.h"
 
 
-void terminalWriterInit(TWRITER * t, int size, int printEvery){
-        t->begin = (char *)malloc(size * sizeof(char));
-        t->end = t->begin+size;
-        t->current = t->begin;
+void terminalWriterInit(TWRITER * t, int printEvery){
         t->terminal_nlines = 0;
+	t->currentBlock=0;
+	if (printEvery==0) printEvery=1;
 	t->printEvery = printEvery;
+	printf ("-----------------------------------\n");
 }
 
 void tprintfn(TWRITER * t, bool newline, const char* fmt, ...){
-    int remaining = t->end - t->current;
-    if(remaining > 0){ 
-        va_list args;
-        va_start(args,fmt);
-        t->current += vsnprintf(t->current, remaining, fmt, args);
-        if(newline){
-	    remaining = t->end - t->current;
-            if(remaining >1){
-	    	t->current += snprintf(t->current, remaining, "\n");
-	    	t->terminal_nlines++;
-	    }
-        }   
-        va_end(args);
-    }   
-}    
+  if (t->currentBlock==0) {
+    va_list args;
+    va_start(args,fmt);
+    vprintf(fmt,args);
+    if (newline) {
+      t->terminal_nlines++;
+      printf ("\n");
+    }
+    va_end(args);
+  }
+}
 
-void tflush(TWRITER * t, int packetIndex){ 
-        t->current = t->begin;
-        if(packetIndex % t->printEvery == 0){
-	    printf("%s",t->begin);
-            printf("\033[%iA",t->terminal_nlines);
-	}
-        
-	t->terminal_nlines = 0;
+
+void tflush(TWRITER * t){ 
+  if (t->currentBlock==0) {
+    printf("\033[%iA",t->terminal_nlines);
+    t->terminal_nlines = 0;
+  }
+  t->currentBlock++;
+  if (t->currentBlock==t->printEvery)
+    t->currentBlock=0;
 } 
     
-void terminalWriterCleanup(TWRITER * t){ 
-        free(t->begin);
+void terminalWriterCleanup(TWRITER * t)
+{
+  printf ("\n\n\n-----------------------------------\n");
 }
 
 

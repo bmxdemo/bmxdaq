@@ -209,7 +209,7 @@ float deltaT (timespec t1,timespec t2) {
 }
 
 void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJACK *lj,
-		   WRITER *w, TWRITER ** t, RFI *rfi) {
+		   WRITER *w, TWRITER *t, RFI *rfi) {
 
 
   printf ("\n\nStarting main loop\n");
@@ -237,6 +237,10 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
   float towait=set->fft_size/set->sample_rate;
   long int sample_count=0;
   signal(SIGINT, loop_signal_handler);
+
+  // terminal writer init
+  terminalWriterInit(t, set->print_every);
+
   while (!stopSignal) {
     clock_gettime(CLOCK_REALTIME, &t1);
     float dt=deltaT(tSim,t1);
@@ -273,12 +277,12 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
 	if (set->dont_process) 
 	  printf (" ** no GPU processing");
 	else{
-	    stream = gpuProcessBuffer(gc,bufstart,w,t, rfi, set);
-            tprintfn(t[stream], 1, " ");
-	    tprintfn(t[stream], 1, "Cycle statistics");
-	    tprintfn (t[stream], 1, "Cycle taking %fs, hope for < %fs",dt, towait);
-            tprintfn (t[stream], 1, "Measured dt: %f ms, rate=%f MHz",dtDigi*1e3, set->fft_size/dtDigi/1e6);
-	    tprintfn(t[stream], 1, "Time: %fs; Status:%i; Pos:%08x; digitizer buffer fill %i/1000   ", 
+	    stream = gpuProcessBuffer(gc,bufstart, w, t, rfi, set);
+            tprintfn(t, 1, " ");
+	    tprintfn(t, 1, "Cycle statistics, Last Stream: %i    ",stream);
+	    tprintfn (t, 1, "Cycle taking %5.3fs, hope for < %5.3fs",dt, towait);
+            tprintfn (t, 1, "Measured dt: %3.1f ms, rate=%4.1f MHz",dtDigi*1e3, set->fft_size/dtDigi/1e6);
+	    tprintfn(t, 1, "Time: %6.2fs; Status:%i; Pos:%08x; digitizer buffer fill %i/1000   ", 
 	       accum, lStatus, lPCPos,fill);
 	}
 
@@ -287,9 +291,9 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
 	  spcm_dwSetParam_i32 (dc->hCard, SPC_DATA_AVAIL_CARD_LEN, dc->lNotifySize);
       
 	// drive frequency generator if needed
-	if (set->fg_nfreq) freqGenLoop(fgen, w, t[stream]);
+	if (set->fg_nfreq) freqGenLoop(fgen, w, t);
 	// drive labjack
-	if (set->lj_Non) LJLoop(lj,w);
+	if (set->lj_Non) LJLoop(lj,w, t);
 
   // write waveform if requested
 	struct timespec begin, end;
@@ -302,11 +306,14 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
 	  }
 	}
 	clock_gettime(CLOCK_REALTIME, &end);
-	tprintfn(t[stream], 1, "time to print waveform: %f", deltaT(begin, end));
+	//tprintfn(t, 1, "time to print waveform: %f", deltaT(begin, end));
 	// break if sufficient number of samples
 	if ((++sample_count) == set->nsamples) break;
       }
+    tflush(t);
   }   
+
+  terminalWriterCleanup(t);
   
   printf("\n\n\n\n\n\n\n\n\n");
   if (stopSignal) printf ("Ctrl-C detected. Stopping.\n");

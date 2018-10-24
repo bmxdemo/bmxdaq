@@ -39,7 +39,7 @@ int main(int argc,char **argv)
   FREQGEN fgen;                           // Freq generator
   LJACK ljack;                            // Labjack
   RFI rfi;                                //rfi stuff
-  TWRITER ** twriter;			  //terminal writers
+  TWRITER twriter;			  //terminal writers
 
   if(argc>=2) {
     char fname_ini[256];
@@ -56,21 +56,15 @@ int main(int argc,char **argv)
   // digitizer
   digiCardInit(&dcard,&settings);
 
-  twriter = (TWRITER **)malloc(settings.cuda_streams * sizeof(TWRITER *));
-  for(int i =0; i < settings.cuda_streams ;  i++){
-      twriter[i] = (TWRITER *)malloc(sizeof(TWRITER));
-      terminalWriterInit(twriter[i], TERMINAL_BUFFER_SIZE, settings.print_every);
-  }
-
   // GPU
   if (!settings.dont_process) gpuCardInit(&gcard,&settings);
 
   // writer
   writerInit(&writer,&settings);
   rfiInit(&rfi, &settings, &gcard);
-  
+
   //MAIN LOOP
-  digiWorkLoop(&dcard, &gcard, &settings, &fgen, &ljack, &writer, twriter, &rfi);
+  digiWorkLoop(&dcard, &gcard, &settings, &fgen, &ljack, &writer, &twriter, &rfi);
 
   //shutdown
   digiCardCleanUp(&dcard, &settings);

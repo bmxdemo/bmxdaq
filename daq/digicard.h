@@ -39,7 +39,7 @@ void digiCardInit (DIGICARD *card, SETTINGS *set);
 
 //main worker loop
 void  digiWorkLoop(DIGICARD *card, GPUCARD *gcard, SETTINGS *set, FREQGEN *fgen, 
-		   LJACK *lj, WRITER *w, TWRITER ** t, RFI * rfi);
+		   LJACK *lj, WRITER *w, TWRITER *t, RFI * rfi);
 
 //shutdown
 void digiCardCleanUp(DIGICARD *card, SETTINGS *set);

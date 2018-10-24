@@ -218,14 +218,17 @@ void printDt (cudaEvent_t cstart, cudaEvent_t cstop, float * total, TWRITER * t)
 
 void printTiming(GPUCARD *gc, int i, TWRITER * t) {
   float totalTime = 0;
-  tprintfn (t, 0, "GPU timing (copy/floatize/RFI/fft/post/copyback): ");
+  tprintfn (t, 0, "GPU timing (copy/floatize/RFI...): ");
   printDt (gc->eStart[i], gc->eDoneCopy[i], &totalTime, t);
   printDt (gc->eDoneCopy[i], gc->eDoneFloatize[i], &totalTime, t);
   printDt (gc->eDoneFloatize[i], gc->eDoneRFI[i], &totalTime, t);
+  tprintfn (t,1,"");
+  tprintfn (t, 0, "GPU timing (.../fft/post/copyback): ");
   printDt (gc->eDoneRFI[i], gc->eDoneFFT[i], &totalTime, t);
   printDt (gc->eDoneFFT[i], gc->eDonePost[i], &totalTime, t);
   printDt (gc->eBeginCopyBack[i], gc->eDoneCopyBack[i], &totalTime, t);
-  tprintfn (t, 1, " total: %3.2f ", totalTime);
+  tprintfn (t,1,"");
+  tprintfn (t, 1, "GPU timing total: %3.2f ", totalTime);
 }
 
 
@@ -237,7 +240,7 @@ void printTiming(GPUCARD *gc, int i, TWRITER * t) {
 //      rfi: structure containing rfi settings and memory for rfi statistics
 //	set: settings
 //Returns the stream used to proccess buf.
-int gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, TWRITER ** twr, RFI * rfi, SETTINGS *set) {
+int gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, TWRITER *twr, RFI * rfi, SETTINGS *set) {
    //Check if other streams are finished and proccess the finished ones in order (i.e. print output to file)
    while(gc->active_streams > 0){
 	if(cudaEventQuery(gc->eDonePost[gc->fstream])==cudaSuccess){
@@ -247,7 +250,7 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, TWRITER ** twr, RFI *
                 cudaEventRecord(gc->eDoneCopyBack[gc->fstream], gc->streams[gc->fstream]);
                 //cudaThreadSynchronize();
 		cudaEventSynchronize(gc->eDoneCopyBack[gc->fstream]);
-		printTiming(gc,gc->fstream, twr[gc->fstream]);
+		printTiming(gc,gc->fstream, twr);
                 if (set->print_meanvar) {
                   // now find some statistic over subsamples of samples
                   uint32_t bs=gc->bufsize;
@@ -262,7 +265,7 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, TWRITER ** twr, RFI *
                   }
                   m1/=NSub; v1=sqrt(v1/NSub-m1*m1); //mean and variance
                   m2/=NSub; v2=sqrt(v2/NSub-m2*m2);
-                  tprintfn (twr[gc->fstream], 1, "CH1 mean/rms: %f %f   CH2 mean/rms: %f %f   ",m1,v1,m2,v2);
+                  tprintfn (twr, 1, "CH1 mean/rms: %f %f   CH2 mean/rms: %f %f   ",m1,v1,m2,v2);
                 }
                 if (set->print_maxp) {
 	            // find max power in each cutout in each channel.
@@ -280,15 +283,13 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, TWRITER ** twr, RFI *
 			float nustep=(set->nu_max[i]-set->nu_min[i])/(gc->pssize1[i]);
 			float ch1f=(numin+nustep*(0.5+ch1i))/1e6;
 			float ch2f=(numin+nustep*(0.5+ch2i))/1e6;
-			tprintfn (twr[gc->fstream], 1, "Peak pow (cutout %i): CH1 %f at %f MHz;   CH2 %f at %f MHz ",i,log(ch1p),ch1f,log(ch2p),ch2f);
+			tprintfn (twr, 0, "Peak pow (cutout %01d): CH1 %5.2f at %5.2f MHz;",i,log(ch1p),ch1f);
+                        tprintfn (twr, 1,                     "  CH2 %5.2f at %5.2f MHz ",log(ch2p),ch2f);
 	           }
                 }
                 writerWritePS(wr,gc->outps, rfi->numOutliersNulled[gc->fstream]);
-                tflush(twr[gc->fstream], wr->counter);
 		gc->fstream = (++gc->fstream)%(gc->nstreams);
                 gc->active_streams--;
-		
-
  	}
         else 
 		break;
@@ -297,7 +298,7 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, TWRITER ** twr, RFI *
 
     int csi = gc->bstream = (++gc->bstream)%(gc->nstreams); //add new stream
     if(gc->active_streams == gc->nstreams){ //if no empty streams
-    	printf("No free streams.\n");
+    	tprintfn(twr,1,"No free streams.");
         if(gc->nstreams > 1) //first few packets come in close together (<122 ms), so for 1 stream, we need to queue them, and not just quit the program
 ;//		exit(1);
     }
@@ -323,9 +324,9 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t *buf, WRITER *wr, TWRITER ** twr, RFI *
     //RFI rejection 
     if(gc->nchan == 2 && rfi->statFlags != 0 && (rfi->nSigmaNull > 0 || rfi->nSigmaWrite > 0)){
 
-	  collectRFIStatistics(rfi, gc, csi);
-    nullRFI(rfi, gc, csi, wr, twr[csi]);
-	  writeRFI(rfi, gc, csi, wr, buf);
+    collectRFIStatistics(rfi, gc, csi);
+    nullRFI(rfi, gc, csi, wr, twr);
+    writeRFI(rfi, gc, csi, wr, buf);
     }
     cudaEventRecord(gc->eDoneRFI[csi],gc->streams[csi]);
 
