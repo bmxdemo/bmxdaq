@@ -239,7 +239,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
   signal(SIGINT, loop_signal_handler);
 
   // terminal writer init
-  terminalWriterInit(t, set->print_every);
+  terminalWriterInit(t, 25, set->print_every);
 
   while (!stopSignal) {
     clock_gettime(CLOCK_REALTIME, &t1);
@@ -277,13 +277,15 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
 	if (set->dont_process) 
 	  printf (" ** no GPU processing");
 	else{
+	  tprintfn (t,1,"--- GPU status ---");
 	    stream = gpuProcessBuffer(gc,bufstart, w, t, rfi, set);
-            tprintfn(t, 1, " ");
-	    tprintfn(t, 1, "Cycle statistics, Last Stream: %i    ",stream);
+	    tprintfn(t, 1, "last Stream: %i    ",stream);
+	    tprintfn (t,1,"");
+	    tprintfn(t,1, "--- Digitizer status ---");
 	    tprintfn (t, 1, "Cycle taking %5.3fs, hope for < %5.3fs",dt, towait);
             tprintfn (t, 1, "Measured dt: %3.1f ms, rate=%4.1f MHz",dtDigi*1e3, set->fft_size/dtDigi/1e6);
-	    tprintfn(t, 1, "Time: %6.2fs; Status:%i; Pos:%08x; digitizer buffer fill %i/1000   ", 
-	       accum, lStatus, lPCPos,fill);
+	    tprintfn(t, 1, "Sample Count: %i Time: %6.2fs; Status:%i; Pos:%08x; digitizer buffer fill %i/1000   ", 
+		     sample_count, accum, lStatus, lPCPos,fill);
 	}
 
 	// tell driver we're done

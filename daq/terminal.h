@@ -4,11 +4,12 @@
 
 struct TWRITER{
     int terminal_nlines;
+    int num_lines;
     int printEvery;
     int currentBlock;
 };
 
-void terminalWriterInit(TWRITER * t, int printEvery);
+void terminalWriterInit(TWRITER * t, int num_lines, int printEvery);
 
 //add formatted string to terminal buffer
 void tprintfn (TWRITER * t, bool newline,  const char * fmt, ...);
