@@ -252,6 +252,9 @@ void printTiming(GPUCARD *gc, int i, TWRITER * t) {
 int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * rfi, SETTINGS *set) {
   //streamed version
   //Check if other streams are finished and proccess the finished ones in order (i.e. print output to file)
+
+  int nCards=(set->card_mask==3) + 1;
+
   while(gc->active_streams > 0){
     if(cudaEventQuery(gc->eDonePost[gc->fstream])==cudaSuccess){
 
@@ -269,24 +272,37 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * 
         uint32_t step=gc->bufsize/(32768);
         float NSub=bs/step; // number of subsamples to take
         float m1=0.,m2=0.,v1=0.,v2=0.;
+        float m3=0.,m4=0.,v3=0.,v4=0.;
         for (int i=0; i<bs; i+=step) { // take them in steps of step
           float n=buf[0][i];
           m1+=n; v1+=n*n;
           n=buf[0][i+1];
           m2+=n; v2+=n*n;
+	  if (nCards==2) {
+	    n=buf[1][i];	
+	    m3+=n; v3+=n*n;
+            n=buf[1][i+1];
+            m4+=n; v4+=n*n;
+
+	  }
         }
         m1/=NSub; v1=sqrt(v1/NSub-m1*m1); //mean and variance
         m2/=NSub; v2=sqrt(v2/NSub-m2*m2);
         tprintfn (twr,1,"CH1 mean/rms: %f %f   CH2 mean/rms: %f %f   ",m1,v1,m2,v2);
+	if (nCards==2) {
+	  m3/=NSub; v3=sqrt(v3/NSub-m3*m3); //mean and variance
+	  m4/=NSub; v4=sqrt(v4/NSub-m4*m4);
+	  tprintfn (twr,1,"CH3 mean/rms: %f %f   CH4 mean/rms: %f %f   ",m3,v3,m4,v4);
+	}
       }
 
       if (set->print_maxp) {
         // find max power in each cutout in each channel.
         int of1=0; // CH1 auto
         for (int i=0; i<gc->ncuts; i++) {
-          float ch1p=0, ch2p=0;
-          int ch1i=0, ch2i=0;
-          int of2=of1+gc->pssize1[i]; //CH2 auto
+          float ch1p=0, ch2p=0, ch3p=0, ch4p=0;
+          int ch1i=0, ch2i=0, ch3i=0, ch4i=0;
+          int of2=of1+gc->pssize1[i]; //CH2 auto /// AS: fix this
           for (int j=0; j<gc->pssize1[i];j++) {
             if (gc->outps[of1+j] > ch1p) {ch1p=gc->outps[of1+j]; ch1i=j;}
             if (gc->outps[of2+j] > ch2p) {ch2p=gc->outps[of2+j]; ch2i=j;}
@@ -307,18 +323,19 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * 
     }
     else 
       break;      
-  }
+  }  
+
   int csi = gc->bstream = (++gc->bstream)%(gc->nstreams); //add new stream
   if(gc->active_streams == gc->nstreams){ //if no empty streams
-    printf("No free streams. \n");
-    //return 0;
+    	printf("No free streams.\n");
+        if(gc->nstreams > 1) //first few packets come in close together (<122 ms), so for 1 stream, we need to queue them, and not just quit the program
+;//		exit(1);
   }
 
   gc->active_streams++;
   cudaStream_t cs= gc->streams[gc->bstream];
   cudaEventRecord(gc->eStart[csi], cs);
   
-  int nCards=(set->card_mask==3) + 1;
 
   //memory copy
   for(int i=0; i<nCards; i++)
@@ -413,5 +430,5 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * 
   CHK(cudaGetLastError());
   cudaEventRecord(gc->eDonePost[csi], cs);
     
-  return csi;
+  return true;
 }
