@@ -115,12 +115,13 @@ void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled, bool isR
 }
 
 
-void writerWriteRFI(WRITER * writer, int8_t * outlier, int chunk, int channel, float nSigma){
+void writerWriteRFI(WRITER * writer, int8_t * outlier, int chunk, int channel, float *nSigma){
   maybeReOpenFile(writer, true);
   fwrite(&writer->counter, sizeof(int), 1, writer->fRFI);
   fwrite(&chunk, sizeof(int), 1, writer->fRFI);
   fwrite(&channel, sizeof(int), 1, writer->fRFI);
   fwrite(nSigma, sizeof(float), STAT_COUNT_MINUS_ONE +1, writer->fRFI);
+
   fwrite (outlier, sizeof(int8_t), writer->lenRFI, writer->fRFI);
   fflush(writer->fRFI);
 }

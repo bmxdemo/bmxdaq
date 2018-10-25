@@ -58,8 +58,6 @@ int main(int argc,char **argv)
 
   // GPU
   if (!settings.dont_process) gpuCardInit(&gcard,&settings);
-  // writer
-  writerInit(&writer,&settings);
   // RFI
   rfiInit(&rfi, &settings, &gcard);
   // writer

@@ -58,7 +58,7 @@ struct WRITER {
 
 void writerInit(WRITER *writer, SETTINGS *set, bool isRFIOn);
 void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled, bool isRFIOn);
-void writerWriteRFI(WRITER *writer, int8_t * outlier, int chunk, int channel, float nSigma);
+void writerWriteRFI(WRITER *writer, int8_t * outlier, int chunk, int channel, float* nSigma);
 void writerWriteLastBuffer(WRITER *writer, int8_t ** bufstart, int numCards, int size);
 void writerCleanUp(WRITER *writer, bool isRFIOn);
 
