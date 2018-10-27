@@ -62,6 +62,7 @@ void writerInit(WRITER *writer, SETTINGS *s, bool isRFIOn) {
   strcpy(writer->fnameRFI,s->rfi_output_pattern);
   strcpy(writer->fnameLastBuffer, s->last_buffer_output_pattern);
   writer->save_every=s->save_every;
+  writer->headerPS.cardMask=s->card_mask;
   writer->headerPS.nChannels=1+(s->channel_mask==3);
   writer->headerPS.sample_rate=s->sample_rate;
   writer->headerPS.fft_size=s->fft_size;

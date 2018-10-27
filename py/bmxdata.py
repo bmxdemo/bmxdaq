@@ -27,6 +27,13 @@ class BMXFile(object):
                    ('ncuts','i4'),
                    ('numin','10f4'),('numax','10f4'),('fft_avg','10u4'),
                    ('pssize','10i4')]
+        if self.version<=6:
+            maxcuts=10
+            head_desc=[('cardMask','i4'),('nChan','i4'),('sample_rate','f4'),('fft_size','u4'),
+                   ('ncuts','i4'),
+                   ('numin','10f4'),('numax','10f4'),('fft_avg','10u4'),
+                   ('pssize','10i4')]
+            
         else:
             print ("Unknown version",H['version'])
             sys.exit(1)
@@ -50,21 +57,28 @@ class BMXFile(object):
         self.haveToneFreq=False
         self.haveDiode=False
         self.FilenameUTC=(self.version[0]>=5)
+
         if self.version>=3:
             self.haveMJD=True
             rec_desc+=[('mjd','f8')]
         if self.version>=2:
             rec_desc+=[('num_nulled','i4',H['nChan'])]
             self.haveNulled=True
-        if self.nChan==1:
-            for i in range(self.ncuts):
-                rec_desc+=[('chan1_'+str(i),'f4',self.nP[i])]
+
+        self.nCards=(1+H['cardMask']==3) if (self.version[0]>=6) else 1;
+        if (self.nCards==1): 
+            if self.nChan==1:
+                for i in range(self.ncuts):
+                    rec_desc+=[('chan1_'+str(i),'f4',self.nP[i])]
+            else:
+                for i in range(self.ncuts):
+                    rec_desc+=[('chan1_'+str(i),'f4',self.nP[i]),
+                               ('chan2_'+str(i),'f4',self.nP[i]), 
+                               ('chanXR_'+str(i),'f4',self.nP[i]),
+                               ('chanXI_'+str(i),'f4',self.nP[i])]
         else:
-            for i in range(self.ncuts):
-                rec_desc+=[('chan1_'+str(i),'f4',self.nP[i]),
-                           ('chan2_'+str(i),'f4',self.nP[i]), 
-                           ('chanXR_'+str(i),'f4',self.nP[i]),
-                           ('chanXI_'+str(i),'f4',self.nP[i])]
+            stop();## fix this
+
         if self.version>=1.5:
             rec_desc+=[('nu_tone','f4')]
             self.haveToneFreq=True

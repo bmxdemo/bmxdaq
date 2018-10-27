@@ -299,13 +299,22 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * 
       if (set->print_maxp) {
         // find max power in each cutout in each channel.
         int of1=0; // CH1 auto
+
         for (int i=0; i<gc->ncuts; i++) {
+	    int of2=of1+gc->pssize1[i]; //CH2 auto 
+	    int of3=of1+2*gc->pssize1[i]; // CH3 auto
+	    int of4=of1+3*gc->pssize1[i]; // CH4 auto
+
           float ch1p=0, ch2p=0, ch3p=0, ch4p=0;
           int ch1i=0, ch2i=0, ch3i=0, ch4i=0;
-          int of2=of1+gc->pssize1[i]; //CH2 auto /// AS: fix this
+
           for (int j=0; j<gc->pssize1[i];j++) {
             if (gc->outps[of1+j] > ch1p) {ch1p=gc->outps[of1+j]; ch1i=j;}
             if (gc->outps[of2+j] > ch2p) {ch2p=gc->outps[of2+j]; ch2i=j;}
+	    if (nCards==2) {
+	      if (gc->outps[of3+j] > ch3p) {ch3p=gc->outps[of3+j]; ch3i=j;}
+	      if (gc->outps[of4+j] > ch4p) {ch4p=gc->outps[of4+j]; ch4i=j;}
+	    }
           }
           of1+=gc->pssize[i];  // next cutout 
           float numin=set->nu_min[i];
@@ -314,6 +323,12 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * 
           float ch2f=(numin+nustep*(0.5+ch2i))/1e6;
           tprintfn (twr,1,"Peak pow (cutout %i): CH1 %f at %f MHz;   CH2 %f at %f MHz  ",
               i,log(ch1p),ch1f,log(ch2p),ch2f);
+	  if (nCards==2) {
+	    float ch3f=(numin+nustep*(0.5+ch3i))/1e6;
+	    float ch4f=(numin+nustep*(0.5+ch4i))/1e6;
+	    tprintfn (twr,1,"Peak pow (cutout %i): CH3 %f at %f MHz;   CH4 %f at %f MHz  ",
+		      i,log(ch3p),ch3f,log(ch4p),ch4f);
+	  }
         }
       }
 

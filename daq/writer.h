@@ -19,6 +19,7 @@
 struct BMXHEADER {
   const char magic[8]=">>BMX<<"; // magic header char to recogize files *BMX*
   int version=HEADERVERSION;
+  int cardMask;
   int nChannels;
   float sample_rate;
   uint32_t fft_size; 

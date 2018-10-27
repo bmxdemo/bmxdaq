@@ -50,6 +50,12 @@ int main(int argc,char **argv)
 
   // intialize
   print_settings(&settings);
+  if (settings.channel_mask!=3) {
+    printf ("Sorry, the code is only really working for 2 channels.\n");
+    return 1;
+  }
+
+
   // first ephemeral things
   if (settings.fg_nfreq) freqGenInit(&fgen, &writer, &settings);
   if (settings.lj_Non) LJInit(&ljack, &writer, &settings);
