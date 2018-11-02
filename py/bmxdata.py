@@ -1,7 +1,9 @@
+from __future__ import print_function, division 
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
 import  matplotlib.colors as colors
+
 
 class BMXFile(object):
     freqOffset = 1100
@@ -20,17 +22,18 @@ class BMXFile(object):
         if force_version is not None:
             self.version=force_version
         else:
-            self.version=H['version']
+            self.version=H['version'][0]
+        print ("Loading version:",self.version)
         if self.version<=5:
             maxcuts=10
             head_desc=[('nChan','i4'),('sample_rate','f4'),('fft_size','u4'),
                    ('ncuts','i4'),
                    ('numin','10f4'),('numax','10f4'),('fft_avg','10u4'),
                    ('pssize','10i4')]
-        if self.version<=6:
+        elif self.version<=6:
             maxcuts=10
-            head_desc=[('cardMask','i4'),('nChan','i4'),('sample_rate','f4'),('fft_size','u4'),
-                   ('ncuts','i4'),
+            head_desc=[('cardMask','i4'),('nChan','i4'),('sample_rate','f4'),
+                       ('fft_size','u4'),('ncuts','i4'),
                    ('numin','10f4'),('numax','10f4'),('fft_avg','10u4'),
                    ('pssize','10i4')]
             
@@ -38,8 +41,11 @@ class BMXFile(object):
             print ("Unknown version",H['version'])
             sys.exit(1)
         H=np.fromfile(f,head_desc,count=1)
-        self.ncuts=H['ncuts'][0]
+        print(H)
+        self.cardMask=H['cardMask']
         self.nChan=H['nChan'][0]
+        self.ncuts=H['ncuts'][0]
+        print ("CardMask: %i, Channels: %i,  Cuts: %i"%(self.cardMask, self.nChan, self.ncuts))
         self.fft_size=H['fft_size'][0]
         self.sample_rate=H['sample_rate']/1e6
         self.deltaT = 1./self.sample_rate*self.fft_size/1e6
@@ -56,7 +62,7 @@ class BMXFile(object):
         self.haveNulled=False
         self.haveToneFreq=False
         self.haveDiode=False
-        self.FilenameUTC=(self.version[0]>=5)
+        self.FilenameUTC=(self.version>=5)
 
         if self.version>=3:
             self.haveMJD=True
@@ -65,7 +71,7 @@ class BMXFile(object):
             rec_desc+=[('num_nulled','i4',H['nChan'])]
             self.haveNulled=True
 
-        self.nCards=(1+H['cardMask']==3) if (self.version[0]>=6) else 1;
+        self.nCards=(1+H['cardMask']==3) if (self.version>=6) else 1;
         if (self.nCards==1): 
             if self.nChan==1:
                 for i in range(self.ncuts):
@@ -74,10 +80,20 @@ class BMXFile(object):
                 for i in range(self.ncuts):
                     rec_desc+=[('chan1_'+str(i),'f4',self.nP[i]),
                                ('chan2_'+str(i),'f4',self.nP[i]), 
-                               ('chanXR_'+str(i),'f4',self.nP[i]),
-                               ('chanXI_'+str(i),'f4',self.nP[i])]
+                               ('chan12R_'+str(i),'f4',self.nP[i]),
+                               ('chan12I_'+str(i),'f4',self.nP[i])]
         else:
-            stop();## fix this
+            if self.nChan==1:
+                print ("This is not possible")
+                throw
+            else:
+                for i in range(self.ncuts):
+                    for ch in range(1,5):
+                        rec_desc+=[('chan%i_%i'%(ch,i),'f4',self.nP[i])]
+                    for ch1 in range(1,5):
+                        for ch2 in range(ch1+1,5):
+                               rec_desc+=[('chan%i%iR_%i'%(ch1,ch2,i),'f4',self.nP[i]),
+                                          ('chan%i%iI_%i'%(ch1,ch2,i),'f4',self.nP[i])]
 
         if self.version>=1.5:
             rec_desc+=[('nu_tone','f4')]
@@ -191,21 +207,21 @@ class BMXFile(object):
                arr.append(self.data[i]['chan' + str(n+1)+'_' + str(cut)][imin:imax])
                arr[i] = np.reshape(arr[i],(-1, binSize )) #bin frequencies
                arr[i] = np.mean(arr[i], axis = 1)  #average the bins
-   	   arr=np.array(arr)
+           arr=np.array(arr)
            if(subtractMean):
                means = np.mean(arr, axis=0) #mean for each freq bin
-   	       for j in range(nsamples):
-   	           arr[j,:] -= means
+               for j in range(nsamples):
+                   arr[j,:] -= means
                    arr[j,:] /=means
-	       if minmax is not None:
-		   vmin = -minmax
-		   vmax = minmax
-	       else:
-	           vmin = None
-	           vmax = None
+               if minmax is not None:
+                   vmin = -minmax
+                   vmax = minmax
+               else:
+                   vmin = None
+                   vmax = None
                plt.imshow(arr, interpolation="nearest", vmin=vmin,vmax=vmax, aspect = "auto", extent=[fmin, fmax, nsamples*self.deltaT, 0])
            else:
-                plt.imshow(arr, norm=colors.LogNorm(), interpolation="nearest" , aspect = "auto", extent=[fmin, fmax, nsamples*self.deltaT, 0]) 
+               plt.imshow(arr, norm=colors.LogNorm(), interpolation="nearest" , aspect = "auto", extent=[fmin, fmax, nsamples*self.deltaT, 0]) 
            plt.colorbar()
            plt.xlabel('freq [MHz] Channel ' + str(n+1))
            plt.ylabel('time [s]')
@@ -220,24 +236,23 @@ class BMXFile(object):
         if nsamples is  None:
             nsamples = self.nSamples
         reducedArr = []  #for reduced array after binning
-	for n in range(2):
+        for n in range(2):
            arr = []
            for i in range(nsamples):
                arr.append(self.data[i]['chan' + str(n+1)+'_' + str(cut)])
-           
 	       #bin along x axis (frequency bins)
                if binSize[0] > 1:
-               	  arr[i] = np.reshape(arr[i],(-1, binSize[0])) 
+                  arr[i] = np.reshape(arr[i],(-1, binSize[0])) 
                   arr[i] = np.mean(arr[i], axis = 1)  
            
            arr = np.array(arr) 
 
            #bin along y axis (time bins)
-	   if binSize[1] > 1:
-	       reducedArr.append([])
-	       for i in range(int(len(arr)/binSize[1])):
-	        	reducedArr[n].append(arr[binSize[1]*i:binSize[1]*(i+1)].mean(axis=0))
-	   else:
+           if binSize[1] > 1:
+               reducedArr.append([])
+               for i in range(int(len(arr)/binSize[1])):
+                        reducedArr[n].append(arr[binSize[1]*i:binSize[1]*(i+1)].mean(axis=0))
+           else:
                reducedArr = arr
 
         return (reducedArr)

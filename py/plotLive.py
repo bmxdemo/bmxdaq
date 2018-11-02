@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from __future__ import print_function, division
 import bmxdata as bmx
 import numpy as np
 import matplotlib.pyplot as plt
@@ -58,7 +59,7 @@ def initData(o,args):
     else:
         fname=max(glob.iglob('data/*.data.new'), key=os.path.getctime)
 
-    print "Reading ",fname
+    print("Reading ",fname)
     d=bmx.BMXFile(fname)
     return fname,d
 
@@ -66,10 +67,10 @@ def initData(o,args):
 def animate(i):
     global fname,d
     nr=d.update(replace=not o.psavg)
-    print nr
-    print "New records:",nr
+    print(nr)
+    print("New records:",nr)
     if d.haveMJD:
-        print "Last MJD:",d.data['mjd'][-1]
+        print("Last MJD:",d.data['mjd'][-1])
     
     if (nr>0):
         ax[0][0].clear()
@@ -87,10 +88,10 @@ def animate(i):
             ax[1][0].set_ylim(0,o.ymax)
     else:
         if (len(args)==0):
-            print "Looking for new file..."
+            print("Looking for new file...")
             fnamet=max(glob.iglob('data/*.data.new'), key=os.path.getctime)
             if fnamet!=fname:
-                 print "Picked up ",fnamet
+                 print("Picked up ",fnamet)
                  time.sleep(2) ## wait for the file to start for real
                  fname=fnamet
                  d=bmx.BMXFile(fname)

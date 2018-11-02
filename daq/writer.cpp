@@ -66,12 +66,12 @@ void writerInit(WRITER *writer, SETTINGS *s, bool isRFIOn) {
   writer->headerPS.nChannels=1+(s->channel_mask==3);
   writer->headerPS.sample_rate=s->sample_rate;
   writer->headerPS.fft_size=s->fft_size;
-  writer->headerPS.ADC_range = s->ADC_range;
-  
+
+  //writer->headerPS.ADC_range = s->ADC_range;
   //initialize statistics array
-  writer->headerPS.statistics[mean] = s->use_mean_statistic? 1: 0;
-  writer->headerPS.statistics[variance] = s->use_variance_statistic? 1: 0;
-  writer->headerPS.statistics[absoluteMax] = s->use_abs_max_statistic? 1: 0;
+  //writer->headerPS.statistics[mean] = s->use_mean_statistic? 1: 0;
+  //writer->headerPS.statistics[variance] = s->use_variance_statistic? 1: 0;
+  //writer->headerPS.statistics[absoluteMax] = s->use_abs_max_statistic? 1: 0;
 
   writer->headerPS.ncuts=s->n_cuts;
   writer->headerRFI.chunkSize = pow(2, s->log_chunk_size);

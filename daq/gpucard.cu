@@ -426,14 +426,12 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * 
       
       //cross spectra
       for(int j = 0; j<nCards*2; j++)
-        for(int k = j; k < nCards*2 ; k++){
+        for(int k = j+1; k < nCards*2 ; k++){
          //NEED TO CHECK THAT PARAMETERS ARE ALL CORRECT FOR TWO CARDS AND FOR ONE CARD....
-          if(j!=k){
-            ps_X_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][j*(gc->fftsize/2+1)], &gc->cfft[csi][k*(gc->fftsize/2+1)], 
-              &(gc->coutps[csi][psofs]), &(gc->coutps[csi][psofs+gc->pssize1[i]]),
-              gc->ndxofs[i], gc->fftavg[i], crossCorrection);
-            psofs+=2*gc->pssize1[i];
-          }
+	  ps_X_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][j*(gc->fftsize/2+1)], &gc->cfft[csi][k*(gc->fftsize/2+1)], 
+	    &(gc->coutps[csi][psofs]), &(gc->coutps[csi][psofs+gc->pssize1[i]]),
+            gc->ndxofs[i], gc->fftavg[i], crossCorrection);
+          psofs+=2*gc->pssize1[i];
         }
     }
   }

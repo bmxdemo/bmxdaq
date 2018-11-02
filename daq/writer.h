@@ -23,8 +23,6 @@ struct BMXHEADER {
   int nChannels;
   float sample_rate;
   uint32_t fft_size; 
-  int32_t ADC_range;
-  bool  statistics[STAT_COUNT_MINUS_ONE + 1]; //array indicating which statistics are being used
   int ncuts;
   float nu_min[MAXCUTS], nu_max[MAXCUTS];
   uint32_t fft_avg[MAXCUTS];
