@@ -1,4 +1,4 @@
-/************e***********************
+/***********************************
 ***********************************
 THIS IS A COMPLETE PLACEHOLDER!
 ***********************************
@@ -49,8 +49,9 @@ struct GPUCARD {
   GPUDATA * data; //pointer to data buffers for each cuda stream
   float *outps;
   int nchan; // nchannels
-  uint32_t fftsize; // fft size
+  uint32_t fftsize; // fft size for one channel
   uint32_t bufsize; // buffer size in bytes
+  uint32_t transform_size; // transform size for one channel
   int ncuts; // number of ps cuts
   int fftavg[MAXCUTS];
   int pssize1[MAXCUTS]; // size of one power spectrum (in indices)

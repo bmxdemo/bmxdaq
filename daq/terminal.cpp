@@ -11,16 +11,17 @@ Reverses cursor to allow continues overwrite over the terminal
 #include <stdlib.h>
 #include <stdarg.h>
 #include "terminal.h"
+#include "settings.h"
 
-
-void terminalWriterInit(TWRITER * t, int num_lines, int printEvery){
+void terminalWriterInit(TWRITER * t, SETTINGS *s){
         t->terminal_nlines = 0;
 	t->currentBlock=0;
-	t->num_lines=num_lines;
-	if (printEvery==0) printEvery=1;
-	t->printEvery = printEvery;
-	for (int i=0; i<=num_lines; i++) printf("\n\033[K");
-	printf("\033[%iA",num_lines);
+	t->num_lines=25;
+	t->printEvery=s->print_every;
+	if (t->printEvery==0) t->printEvery=1;
+	t->debug=s->debug;
+	for (int i=0; i<=t->num_lines; i++) printf("\n\033[K");
+	printf("\033[%iA",t->num_lines);
 
 }
 
@@ -42,9 +43,11 @@ void tprintfn(TWRITER * t, bool newline, const char* fmt, ...){
 
 void tflush(TWRITER * t){ 
   if (t->currentBlock==0) {
-    while (t->terminal_nlines<t->num_lines) tprintfn(t,1,"");
-    printf("\033[%iA",t->num_lines);
-    t->terminal_nlines = 0;
+    if (!t->debug) {
+      while (t->terminal_nlines<t->num_lines) tprintfn(t,1,"");
+      printf("\033[%iA",t->num_lines);
+    } else printf ("--- *** --- \n");
+      t->terminal_nlines = 0;
   }
   t->currentBlock++;
   if (t->currentBlock==t->printEvery)

@@ -5,108 +5,126 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import sys, glob, os, time
-from optparse import OptionParser
+from argparse import ArgumentParser
 
 
 def main():
     ## need those globals for animate callback
-    global o, args, ax, fig, fname, d
-    o,args=getOpts()
-    ax,fig=initFig(o,args)
-    fname,d=initData(o,args)
+    o=getOpts()
+    ax,fig=initFig(o)
+    fname,d=initData(o)
+    state=[o,fname,d,fig,ax]
     # start animation
-    ani = animation.FuncAnimation(fig, animate, interval=o.interval)
+    ani = animation.FuncAnimation(fig, animate, interval=o.interval, fargs=[state])
     plt.show()
 
 def getOpts():
 
-    parser = OptionParser()
-    parser.add_option("--wf", dest="wf", action="store_true",
-                      help="Plot waveform. It will assume it lives in data/wave.bin")
-    parser.add_option("--interval", dest="interval", default=1000,
-                      help="plotting interval", type='int')
-    parser.add_option("--ymax", dest="ymax", default=0.0,
-                      help="ymax", type='float')
+    parser = ArgumentParser(description="Live plotting of BMX daq data")
+    parser.add_argument('filename', type=str, nargs="?",
+                    help='Filename to use, otherwise first .new file in data')
+    parser.add_argument("-f", "--fields", dest="fields", type=str,default="chan1_0,chan2_0,chan3_0,chan4_0",
+                      help="Which fields to plot, comma separated. Valid options are formed like: chan1_0 (for channel 1, cut0)"+
+                         "chan13R_0 (for channel 13 real, cut 0), chan24I_1 (for channel 24 imag, cut1), " +
+                         "wform:data/mywave.dat:1 (for channel 1 waveform from wave.dat, can also do "+
+                         "wform::1 to assume data/wave.bin). "+
+                         "Default: chan1_0,chan2_0,chan3_0,chan4_0")
+    parser.add_argument("--interval", dest="interval", default=1000,
+                      help="Plotting interval", type=int)
+    parser.add_argument("--nx", dest="nx", help="Number of panels in x, if not set automatic.")
+    parser.add_argument("--ymax", dest="ymax", default=0.0,
+                      help="ymax", type=float)
+    parser.add_argument("--psavg", dest="psavg", action="store_true",
+                      help="Average power spectra")
+    parser.add_argument("--linear", dest="log", action="store_false",
+                      help="Use linear y scale (default is log)")
+    o=parser.parse_args()
+    if o.fields=='all':
+        panels=['chan%i_0'%i for i in range(1,5)]
+        for i in range(1,5):
+            for j in range(i+1,5):
+                for c in ['R','I']:
+                    panels.append('chan%i%i%s_0'%(i,j,c))
+    else:    
+        panels=o.fields.split(",")
+    panels=[s.strip() for s in panels]
+    nx=o.nx if o.nx is not None else int(np.sqrt(len(panels)))
+    ny=int(len(panels)/nx)
+    if (nx*ny<len(panels)):
+        nx+=1
+    o.panels=panels
+    o.nx=nx
+    o.ny=ny
+    #print(o)
+    return o
 
-    parser.add_option("--psavg", dest="psavg", action="store_true",
-                      help="average ps")
-    parser.add_option("--log", dest="log", action="store_true",
-                      help="plot log")
-    return parser.parse_args()
 
 
-def initFig(o,args):
+def initFig(o):
 
     fig = plt.figure()
-    ny=2
-    nx=1
-    if (o.wf>0):
-        nx+=1
-
-    cc=0
-    ax=[]
-    for iy in range(ny):
-        ax.append([])
-        for ix in range(nx):
-            nax=fig.add_subplot(nx,ny,cc+1)
-            ax[-1].append(nax)
-            cc+=1
+    ax=[fig.add_subplot(o.nx,o.ny,cc+1) for cc,_ in enumerate(o.panels)]
     return ax,fig
 
-def initData(o,args):
-    if len(args)>0:
-        fname=args[0]
-    else:
-        fname=max(glob.iglob('data/*.data.new'), key=os.path.getctime)
-
+def initData(o):
+    fname=o.filename
+    if o.filename is None:
+        globs=list(glob.iglob('data/*.data.new'))
+        if len(globs)>0:
+            fname=max(globs, key=os.path.getctime)
+        else:
+            print ("No filename specified and nothing in data/*.data.new. Stoping.")
+            sys.exit(1)
     print("Reading ",fname)
     d=bmx.BMXFile(fname)
     return fname,d
 
 
-def animate(i):
-    global fname,d
+def animate(i,state):
+    o,fname,d,fig,ax=state
     nr=d.update(replace=not o.psavg)
     print(nr)
     print("New records:",nr)
-    if d.haveMJD:
-        print("Last MJD:",d.data['mjd'][-1])
     
+    if (nr==0) and (o.filename is None):
+        print("Looking for new file...")
+        fnamet=max(glob.iglob('data/*.data.new'), key=os.path.getctime)
+        if fnamet!=fname:
+             print("Picked up ",fnamet)
+             time.sleep(2) ## wait for the file to start for real
+             fname=fnamet
+             d=bmx.BMXFile(fname)
+             state[1]=fname
+             state[2]=d
+
     if (nr>0):
-        ax[0][0].clear()
-        ax[1][0].clear()
-        ax[0][0].plot(d.freq[0],d.data['chan1_0'].mean(axis=0))
-        ax[1][0].plot(d.freq[0],d.data['chan2_0'].mean(axis=0))
+        if d.haveMJD:
+            print("Last MJD:",d.data['mjd'][-1])
 
-        if o.log:
-            ax[0][0].semilogy()
-            ax[1][0].semilogy()
-        if (o.ymax>0):
-            ymin,ymax=ax[0][0].get_ylim()
-            ax[0][0].set_ylim(ymin,o.ymax)
-            ymin,ymax=ax[1][0].get_ylim()
-            ax[1][0].set_ylim(0,o.ymax)
-    else:
-        if (len(args)==0):
-            print("Looking for new file...")
-            fnamet=max(glob.iglob('data/*.data.new'), key=os.path.getctime)
-            if fnamet!=fname:
-                 print("Picked up ",fnamet)
-                 time.sleep(2) ## wait for the file to start for real
-                 fname=fnamet
-                 d=bmx.BMXFile(fname)
+        for cc,(name,ax) in enumerate(zip(o.panels,ax)):
+            ax.clear()
+            if 'chan'==name[:4]:
+                cut=int(name.split('_')[-1])
+                if (name in d.names):
+                    ax.plot(d.freq[cut],d.data[name].mean(axis=0))
 
-
-
-    if (o.wf>0):
-        wfile = open("data/wave.bin")
-        de=[('ch1','i1'),('ch2','i1')]
-        da=np.fromfile(wfile,de)
-        xx=np.arange(len(da))
-        ax[0][1].clear()
-        ax[1][1].clear()
-        ax[0][1].plot(xx,da['ch1'])
-        ax[1][1].plot(xx,da['ch2'])
+                    if o.log and not (('R' in name) or ('I' in name)):
+                        ax.semilogy()
+                    if (o.ymax>0):
+                        ymin,ymax=ax.get_ylim()
+                        ax.set_ylim(ymin,o.ymax)
+                ax.text(.5,.9,name,
+                        horizontalalignment='center',
+                        transform=ax.transAxes)
+            elif 'wform'==name[:5]:
+                _,wfname,chan=name.split(':')
+                if wfname=="":
+                    wfname="data/wave.bin"
+                wfile = open(wfname)
+                de=[('1','i1'),('2','i1')]
+                da=np.fromfile(wfile,de)
+                xx=np.arange(len(da))
+                plot(xx,da[chan])
 
 
 if __name__=="__main__":

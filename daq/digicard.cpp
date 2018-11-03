@@ -238,7 +238,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
   uint32      dwError[2];
   int32       lStatus[2], lAvailUser[2], lPCPos[2], fill[2];
   int8_t *    bufstart[2];
-  
+  int gpuFails=0;
   // start everything
   if(!set->simulate_digitizer){
     std::thread th[2];
@@ -278,11 +278,11 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
 
   bool processed = true; //was the data processed properly on the gpu
   // terminal writer init
-  terminalWriterInit(t, 25, set->print_every);
+  terminalWriterInit(t, set);
   while (!stopSignal) {
     clock_gettime(CLOCK_REALTIME, &t1);
     float dt=deltaT(tSim,t1);
-    tprintfn (t,1,"Sample number=%d, Cycle taking %fs, hope for < %fs",sample_count, dt, towait);
+    tprintfn (t,1,"Sample number=%d, gpu_fail=%d, Cycle taking %fs, hope for < %fs",sample_count,gpuFails, dt, towait);
     if (set->simulate_digitizer) {
       for(int i=0; i<numCards; i++){
         lPCPos[i] = dc->lNotifySize*sim_ofs;
@@ -331,6 +331,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
       tprintfn (t,1," ** no GPU processing");
     else if(sample_count >= 10 || set->simulate_digitizer){//don't proccess first few cycles if coming from ADC
       processed = gpuProcessBuffer(gc,bufstart,w,t,rfi, set);
+      if (!processed) gpuFails++;
     }
 
     // tell driver we're done
@@ -354,7 +355,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
     }
     // break if sufficient number of samples
     if ((++sample_count) == set->nsamples) break;
-    if (!processed) break;
+    //if (!processed) break;
     // return terminal cursor
     tflush(t);
   }   

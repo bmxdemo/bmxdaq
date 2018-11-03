@@ -3,6 +3,7 @@
 #include "time.h"
 #include "stdlib.h"
 #include <math.h>
+#include <assert.h>
 
 void closeAndRename(WRITER *writer, bool isRFIOn) {
 	fclose(writer->fPS);
@@ -82,7 +83,8 @@ void writerInit(WRITER *writer, SETTINGS *s, bool isRFIOn) {
     writer->headerPS.nu_max[i]=s->nu_max[i];
     writer->headerPS.fft_avg[i]=s->fft_avg[i];
     writer->headerPS.pssize[i]=s->pssize[i];
-    writer->lenPS+=s->pssize[i]*(1+3*(s->channel_mask==3));
+    assert(s->channel_mask==3);
+    writer->lenPS+=s->pssize[i]*(4+12*(s->card_mask==3));
 
   }
   writer->lenRFI = pow(2,s->log_chunk_size);

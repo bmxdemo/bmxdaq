@@ -88,7 +88,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   int nCards=(set->card_mask==3) + 1;
   gc->fftsize=set->fft_size;
   uint32_t bufsize=gc->bufsize=set->fft_size*nchan;
-  uint32_t transform_size=(set->fft_size/2+1)*nchan;
+  uint32_t transform_size=gc->transform_size=(set->fft_size/2+1);
   float nunyq=set->sample_rate/2;
   float dnu=nunyq/(set->fft_size/2+1);
   gc->tot_pssize=0;
@@ -119,10 +119,15 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     set->nu_min[i]=numin;
     set->nu_max[i]=numax;
     set->pssize[i]=gc->pssize1[i];
-    if (nchan==2)
-      gc->pssize[i]=gc->pssize1[i]*4*nCards; // for two channels and two crosses
-    else
-      gc->pssize[i]=gc->pssize1[i]; // just one power spectrum
+    if (nchan==2){ 
+      if (nCards==1)
+	gc->pssize[i]=gc->pssize1[i]*4; // for two channels and two crosses
+	else
+	gc->pssize[i]=gc->pssize1[i]*16; // for 4 channels and 6*2 crosses
+    } else {
+      gc->pssize[i]=gc->pssize1[i]*nCards; // just one power spectrum
+    }
+
     gc->tot_pssize+=gc->pssize[i];
     printf ("   Actual freq range: %f - %f MHz (edges!)\n",numin/1e6, numax/1e6);
     printf ("   # PS offset, #PS bins: %i %i\n",gc->ndxofs[i],gc->pssize1[i]);
@@ -139,13 +144,13 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     for(int j=0; j<nCards; j++)
       CHK(cudaMalloc(&(gc->cbuf[i][j]),bufsize));
     CHK(cudaMalloc(&gc->cfbuf[i], bufsize*nCards*sizeof(cufftReal)));
-    CHK(cudaMalloc(&gc->cfft[i],transform_size*nCards*sizeof(cufftComplex)));
+    CHK(cudaMalloc(&gc->cfft[i],transform_size*nchan*nCards*sizeof(cufftComplex)));
     CHK(cudaMalloc(&gc->coutps[i],gc->tot_pssize*sizeof(float)));
   }
 
   printf ("Setting up CUFFT\n");
   int status=cufftPlanMany(&gc->plan, 1, (int*)&(set->fft_size), NULL, 0, 0, 
-        NULL, transform_size,1, CUFFT_R2C, nchan);
+        NULL, 2*transform_size,1, CUFFT_R2C, nchan);
 
   if (status!=CUFFT_SUCCESS) {
     printf ("Plan failed:");
@@ -188,7 +193,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   }
  
   gc->fstream = 0; //oldest running stream
-  gc->bstream = -1; //newest stream
+  gc->bstream = -1; //newest stream (will become 0 when we actually start with first real stream)
   gc->active_streams = 0; //number of streams currently running
   
   printf ("GPU ready.\n");
@@ -241,6 +246,76 @@ void printTiming(GPUCARD *gc, int i, TWRITER * t) {
 }
 
 
+void printLiveStat(SETTINGS *set, GPUCARD *gc, int8_t **buf, TWRITER *twr) {
+  int nCards=(set->card_mask==3) + 1;
+
+  if (set->print_meanvar) {
+    // now find some statistic over subsamples of samples
+    uint32_t bs=gc->bufsize;
+    uint32_t step=gc->bufsize/(32768);
+    float NSub=bs/step; // number of subsamples to take
+    float m1=0.,m2=0.,v1=0.,v2=0.;
+    float m3=0.,m4=0.,v3=0.,v4=0.;
+    for (int i=0; i<bs; i+=step) { // take them in steps of step
+      float n=buf[0][i];
+      m1+=n; v1+=n*n;
+      n=buf[0][i+1];
+      m2+=n; v2+=n*n;
+      if (nCards==2) {
+	n=buf[1][i];        
+	m3+=n; v3+=n*n;
+	n=buf[1][i+1];
+	m4+=n; v4+=n*n;
+
+      }
+    }
+    m1/=NSub; v1=sqrt(v1/NSub-m1*m1); //mean and variance
+    m2/=NSub; v2=sqrt(v2/NSub-m2*m2);
+    tprintfn (twr,1,"CH1 mean/rms: %f %f   CH2 mean/rms: %f %f   ",m1,v1,m2,v2);
+    if (nCards==2) {
+      m3/=NSub; v3=sqrt(v3/NSub-m3*m3); //mean and variance
+      m4/=NSub; v4=sqrt(v4/NSub-m4*m4);
+      tprintfn (twr,1,"CH3 mean/rms: %f %f   CH4 mean/rms: %f %f   ",m3,v3,m4,v4);
+    }
+  }
+  if (set->print_maxp) {
+    // find max power in each cutout in each channel.
+    int of1=0; // CH1 auto
+
+    for (int i=0; i<gc->ncuts; i++) {
+      int of2=of1+gc->pssize1[i]; //CH2 auto 
+      int of3=of1+2*gc->pssize1[i]; // CH3 auto
+      int of4=of1+3*gc->pssize1[i]; // CH4 auto
+
+      float ch1p=0, ch2p=0, ch3p=0, ch4p=0;
+      int ch1i=0, ch2i=0, ch3i=0, ch4i=0;
+
+      for (int j=0; j<gc->pssize1[i];j++) {
+	if (gc->outps[of1+j] > ch1p) {ch1p=gc->outps[of1+j]; ch1i=j;}
+	if (gc->outps[of2+j] > ch2p) {ch2p=gc->outps[of2+j]; ch2i=j;}
+	if (nCards==2) {
+	  if (gc->outps[of3+j] > ch3p) {ch3p=gc->outps[of3+j]; ch3i=j;}
+	  if (gc->outps[of4+j] > ch4p) {ch4p=gc->outps[of4+j]; ch4i=j;}
+	}
+      }
+      of1+=gc->pssize[i];  // next cutout 
+      float numin=set->nu_min[i];
+      float nustep=(set->nu_max[i]-set->nu_min[i])/(gc->pssize1[i]);
+      float ch1f=(numin+nustep*(0.5+ch1i))/1e6;
+      float ch2f=(numin+nustep*(0.5+ch2i))/1e6;
+      tprintfn (twr,1,"Peak pow (cutout %i): CH1 %f at %f MHz;   CH2 %f at %f MHz  ",
+		i,log(ch1p),ch1f,log(ch2p),ch2f);
+      if (nCards==2) {
+	float ch3f=(numin+nustep*(0.5+ch3i))/1e6;
+	float ch4f=(numin+nustep*(0.5+ch4i))/1e6;
+	tprintfn (twr,1,"Peak pow (cutout %i): CH3 %f at %f MHz;   CH4 %f at %f MHz  ",
+		  i,log(ch3p),ch3f,log(ch4p),ch4f);
+      }
+    }
+  }
+
+}
+
 //Process one data packet from the digitizer
 //Input:
 //  gc: graphics card
@@ -256,6 +331,11 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * 
   int nCards=(set->card_mask==3) + 1;
 
   while(gc->active_streams > 0){
+    // printf ("S:%i ", cudaEventQuery(gc->eStart[gc->fstream])==cudaSuccess);
+    // printf ("%i ", cudaEventQuery(gc->eDoneCopy[gc->fstream])==cudaSuccess);
+    // printf ("%i ", cudaEventQuery(gc->eDoneFloatize[gc->fstream])==cudaSuccess);
+    // printf ("%i ", cudaEventQuery(gc->eDoneFFT[gc->fstream])==cudaSuccess);
+    // printf ("%i [%i]\n ", cudaEventQuery(gc->eDonePost[gc->fstream])==cudaSuccess, gc->fstream);
     if(cudaEventQuery(gc->eDonePost[gc->fstream])==cudaSuccess){
 
       //print time and write to file
@@ -266,72 +346,7 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * 
       //cudaThreadSynchronize();
       cudaEventSynchronize(gc->eDoneCopyBack[gc->fstream]);
       printTiming(gc,gc->fstream,twr);
-      if (set->print_meanvar) {
-        // now find some statistic over subsamples of samples
-        uint32_t bs=gc->bufsize;
-        uint32_t step=gc->bufsize/(32768);
-        float NSub=bs/step; // number of subsamples to take
-        float m1=0.,m2=0.,v1=0.,v2=0.;
-        float m3=0.,m4=0.,v3=0.,v4=0.;
-        for (int i=0; i<bs; i+=step) { // take them in steps of step
-          float n=buf[0][i];
-          m1+=n; v1+=n*n;
-          n=buf[0][i+1];
-          m2+=n; v2+=n*n;
-	  if (nCards==2) {
-	    n=buf[1][i];	
-	    m3+=n; v3+=n*n;
-            n=buf[1][i+1];
-            m4+=n; v4+=n*n;
-
-	  }
-        }
-        m1/=NSub; v1=sqrt(v1/NSub-m1*m1); //mean and variance
-        m2/=NSub; v2=sqrt(v2/NSub-m2*m2);
-        tprintfn (twr,1,"CH1 mean/rms: %f %f   CH2 mean/rms: %f %f   ",m1,v1,m2,v2);
-	if (nCards==2) {
-	  m3/=NSub; v3=sqrt(v3/NSub-m3*m3); //mean and variance
-	  m4/=NSub; v4=sqrt(v4/NSub-m4*m4);
-	  tprintfn (twr,1,"CH3 mean/rms: %f %f   CH4 mean/rms: %f %f   ",m3,v3,m4,v4);
-	}
-      }
-
-      if (set->print_maxp) {
-        // find max power in each cutout in each channel.
-        int of1=0; // CH1 auto
-
-        for (int i=0; i<gc->ncuts; i++) {
-	    int of2=of1+gc->pssize1[i]; //CH2 auto 
-	    int of3=of1+2*gc->pssize1[i]; // CH3 auto
-	    int of4=of1+3*gc->pssize1[i]; // CH4 auto
-
-          float ch1p=0, ch2p=0, ch3p=0, ch4p=0;
-          int ch1i=0, ch2i=0, ch3i=0, ch4i=0;
-
-          for (int j=0; j<gc->pssize1[i];j++) {
-            if (gc->outps[of1+j] > ch1p) {ch1p=gc->outps[of1+j]; ch1i=j;}
-            if (gc->outps[of2+j] > ch2p) {ch2p=gc->outps[of2+j]; ch2i=j;}
-	    if (nCards==2) {
-	      if (gc->outps[of3+j] > ch3p) {ch3p=gc->outps[of3+j]; ch3i=j;}
-	      if (gc->outps[of4+j] > ch4p) {ch4p=gc->outps[of4+j]; ch4i=j;}
-	    }
-          }
-          of1+=gc->pssize[i];  // next cutout 
-          float numin=set->nu_min[i];
-          float nustep=(set->nu_max[i]-set->nu_min[i])/(gc->pssize1[i]);
-          float ch1f=(numin+nustep*(0.5+ch1i))/1e6;
-          float ch2f=(numin+nustep*(0.5+ch2i))/1e6;
-          tprintfn (twr,1,"Peak pow (cutout %i): CH1 %f at %f MHz;   CH2 %f at %f MHz  ",
-              i,log(ch1p),ch1f,log(ch2p),ch2f);
-	  if (nCards==2) {
-	    float ch3f=(numin+nustep*(0.5+ch3i))/1e6;
-	    float ch4f=(numin+nustep*(0.5+ch4i))/1e6;
-	    tprintfn (twr,1,"Peak pow (cutout %i): CH3 %f at %f MHz;   CH4 %f at %f MHz  ",
-		      i,log(ch3p),ch3f,log(ch4p),ch4f);
-	  }
-        }
-      }
-
+      printLiveStat(set,gc,buf,twr);
       writerWritePS(wr,gc->outps, rfi->numOutliersNulled[gc->fstream], rfi->isRFIOn);
       gc->fstream = (++gc->fstream)%(gc->nstreams);
       gc->active_streams--;
@@ -340,14 +355,12 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * 
       break;      
   }  
 
-  int csi = gc->bstream = (++gc->bstream)%(gc->nstreams); //add new stream
   if(gc->active_streams == gc->nstreams){ //if no empty streams
-    	printf("No free streams.\n");
-        if(gc->nstreams > 1) //first few packets come in close together (<122 ms), so for 1 stream, we need to queue them, and not just quit the program
-;//		exit(1);
+       	return false;
   }
-
   gc->active_streams++;
+  int csi = gc->bstream = (++gc->bstream)%(gc->nstreams); //add new stream
+
   cudaStream_t cs= gc->streams[gc->bstream];
   cudaEventRecord(gc->eStart[csi], cs);
   
@@ -383,7 +396,7 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * 
     exit(1);
   }
   for(int i=0; i<nCards;i++){
-    status=cufftExecR2C(gc->plan, &(gc->cfbuf[csi][i*gc->fftsize]), &(gc->cfft[csi][i*gc->fftsize]));
+    status=cufftExecR2C(gc->plan, &(gc->cfbuf[csi][gc->bufsize*i]), &(gc->cfft[csi][2*i*gc->transform_size]));
     if (status!=CUFFT_SUCCESS) {
       printf("CUFFT FAILED\n");
       exit(1);
@@ -413,22 +426,22 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * 
     
     int psofs=0;
     for (int i=0; i<gc->ncuts; i++) {
-
+   
       for(int j=0; j<nCards; j++){
-        ps_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][2*j*(gc->fftsize/2+1)], 
+        ps_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][2*j*gc->transform_size], 
             &(gc->coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i], ch1Correction);
         psofs+=gc->pssize1[i];
         
-        ps_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][(2*j+1)*(gc->fftsize/2+1)], 
+        ps_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][(2*j+1)*gc->transform_size], 
             &(gc->coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i], ch2Correction);
         psofs+=gc->pssize1[i];
       }
-      
       //cross spectra
       for(int j = 0; j<nCards*2; j++)
         for(int k = j+1; k < nCards*2 ; k++){
          //NEED TO CHECK THAT PARAMETERS ARE ALL CORRECT FOR TWO CARDS AND FOR ONE CARD....
-	  ps_X_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][j*(gc->fftsize/2+1)], &gc->cfft[csi][k*(gc->fftsize/2+1)], 
+	  ps_X_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][j*gc->transform_size], 
+							&gc->cfft[csi][k*gc->transform_size], 
 	    &(gc->coutps[csi][psofs]), &(gc->coutps[csi][psofs+gc->pssize1[i]]),
             gc->ndxofs[i], gc->fftavg[i], crossCorrection);
           psofs+=2*gc->pssize1[i];
@@ -442,6 +455,6 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * 
  
   CHK(cudaGetLastError());
   cudaEventRecord(gc->eDonePost[csi], cs);
-    
+      
   return true;
 }

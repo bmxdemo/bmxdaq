@@ -8,6 +8,8 @@
 
 // modifiable settings
 struct SETTINGS {
+  // debug?
+  int debug;
   // basic settings
   uint64_t card_mask; //bit mask representing which cards are to be used
   // digi card settings
@@ -82,7 +84,7 @@ struct SETTINGS {
 
 // Fixed defines
 
-#define VERSION "0.5"
+#define VERSION "1.0_multi"
 
 
 void init_settings(SETTINGS *settings, char* inifile);
