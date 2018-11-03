@@ -26,8 +26,8 @@ def getOpts():
     parser.add_argument("-f", "--fields", dest="fields", type=str,default="chan1_0,chan2_0,chan3_0,chan4_0",
                       help="Which fields to plot, comma separated. Valid options are formed like: chan1_0 (for channel 1, cut0)"+
                          "chan13R_0 (for channel 13 real, cut 0), chan24I_1 (for channel 24 imag, cut1), " +
-                         "wform:data/mywave.dat:1 (for channel 1 waveform from wave.dat, can also do "+
-                         "wform::1 to assume data/wave.bin). "+
+                         "wform:data/mywave.dat:x3 (for channel 3 waveform from wave.dat, can also do "+
+                         "wform::x3 to assume data/wave.bin;  'x' in front of channel # signifies 2 card mode). "+
                          "Default: chan1_0,chan2_0,chan3_0,chan4_0")
     parser.add_argument("--interval", dest="interval", default=1000,
                       help="Plotting interval", type=int)
@@ -125,8 +125,20 @@ def animate(i,state):
                 wfile = open(wfname)
                 de=[('1','i1'),('2','i1')]
                 da=np.fromfile(wfile,de)
-                xx=np.arange(len(da))
-                plot(xx,da[chan])
+                N=len(da)
+                print(N,da['1'].shape)
+                if (chan=='x1'):
+                    y=da['1'][:N//2]
+                elif (chan=='x2'):
+                    y=da['2'][:N//2]
+                elif (chan=='x3'):
+                    y=da['1'][N//2:]
+                elif (chan=='x4'):
+                    y=da['2'][N//2:]
+                else:
+                    y=da[chan]
+                xx=np.arange(len(y))
+                ax.plot(xx,y)
 
 
 if __name__=="__main__":
