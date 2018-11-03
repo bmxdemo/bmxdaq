@@ -329,7 +329,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
     }
     if (set->dont_process) 
       tprintfn (t,1," ** no GPU processing");
-    else if(sample_count >= 10 || set->simulate_digitizer){//don't proccess first few cycles if coming from ADC
+    else if( (sample_count >= 2) || set->simulate_digitizer){//don't proccess first few cycles if coming from ADC
       processed = gpuProcessBuffer(gc,bufstart,w,t,rfi, set);
       if (!processed) gpuFails++;
     }
