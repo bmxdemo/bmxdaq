@@ -106,9 +106,11 @@ def animate(i,state):
             if 'chan'==name[:4]:
                 cut=int(name.split('_')[-1])
                 if (name in d.names):
-                    ax.plot(d.freq[cut],d.data[name].mean(axis=0))
+                    ax.plot(d.freq[cut],d.data[name].mean(axis=0),'b-')
 
-                    if o.log and not (('R' in name) or ('I' in name)):
+                    if o.log:
+                        if ("R" in name) or ("I" in name):
+                            ax.plot(d.freq[cut],-(d.data[name].mean(axis=0)),'r--')
                         ax.semilogy()
                     if (o.ymax>0):
                         ymin,ymax=ax.get_ylim()
