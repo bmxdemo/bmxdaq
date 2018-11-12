@@ -1,6 +1,7 @@
 #pragma once
 
 #include "settings.h"
+#include "ringbuffer.h"
 #include "gpucard.h"
 #include "freqgen.h"
 #include "ljack.h"
@@ -30,6 +31,7 @@ struct DIGICARD {
   int32       serialNumber[2];
   int16**     pnData;
   int         two_channel;
+  int         num_cards;
   int32       lNotifySize;
   int32       lBufferSize;
 };
@@ -39,7 +41,7 @@ struct DIGICARD {
 void digiCardInit (DIGICARD *card, SETTINGS *set);
 
 //main worker loop
-void  digiWorkLoop(DIGICARD *card, GPUCARD *gcard, SETTINGS *set, FREQGEN *fgen, 
+void  digiWorkLoop(DIGICARD *card, RINGBUFFER *rb, GPUCARD *gcard, SETTINGS *set, FREQGEN *fgen, 
 		   LJACK *lj, WRITER *w, TWRITER *t, RFI * rfi);
 
 //shutdown

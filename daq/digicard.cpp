@@ -1,6 +1,7 @@
 #include "settings.h"
 #include "digicard.h"
 #include "digicardalloc.h"
+#include "ringbuffer.h"
 #include "gpucard.h"
 #include "terminal.h"
 #include "freqgen.h"
@@ -90,16 +91,16 @@ Setup the digitizer card
 
 void digiCardInit (DIGICARD *card, SETTINGS *set) {
 
-  int numCards = 1 + (set->card_mask==3); //how many digitizer cards we are using
   printf ("Allocating digitizer buffer...\n");
   /// now set the memory
   card->two_channel = (set->channel_mask==3);
+  card->num_cards = 1 + (set->card_mask==3);
   card->lNotifySize = set->fft_size*(1+card->two_channel);
   card->lBufferSize = card->lNotifySize*set->buf_mult;
     
   /// alocate buffer
   card->pnData=(int16**)malloc(2*sizeof(int16*));
-  for(int i=0; i<numCards; i++){
+  for(int i=0; i<card->num_cards; i++){
     digiCardAlloc(card->pnData[i], card->lBufferSize);
     if (!card->pnData[i]){
       printf ("memory allocation failed\n");
@@ -175,7 +176,7 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
       exit(1);
   }
   
-  for(int i =0; i < numCards; i++){
+  for(int i =0; i < card->num_cards; i++){
     if (!card->hCard[i]) printErrorDie("Can't open digitizer card", card, i, set);
     int32 lCardType, lFncType;
     // read type, function and sn and check for A/D card
@@ -227,14 +228,13 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
   printf ("Digitizer card and buffer ready.\n");
 }
 
-void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJACK *lj,
-		   WRITER *w, TWRITER *t, RFI *rfi) {
+void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set, 
+                   FREQGEN *fgen, LJACK *lj, WRITER *w, TWRITER *t, RFI *rfi) {
 
   printf ("\n\nStarting main loop\n");
   printf ("==========================\n");
   
-  int numCards = 1 + (set->card_mask==3); //how many digitizer cards we are using
-  printf("Number of digitizer cards: %d\n", numCards);
+  printf("Number of digitizer cards: %d\n", dc->num_cards);
   uint32      dwError[2];
   int32       lStatus[2], lAvailUser[2], lPCPos[2], fill[2];
   int8_t *    bufstart[2];
@@ -243,25 +243,25 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
   if(!set->simulate_digitizer){
     std::thread th[2];
     //start DAQ
-    for(int i=0; i<numCards; i++)
+    for(int i=0; i<dc->num_cards; i++)
       th[i] = std::thread(startDAQ, std::ref(dwError[i]), std::ref(dc->hCard[i]));
-    for(int i=0; i<numCards; i++)
+    for(int i=0; i<dc->num_cards; i++)
       th[i].join();
-    for(int i=0; i<numCards; i++)
+    for(int i=0; i<dc->num_cards; i++)
       if (dwError[i] != ERR_OK) printErrorDie("Cannot start FIFO\n",dc, i, set);
     //enable trigger
-    for(int i=0; i<numCards; i++)
+    for(int i=0; i<dc->num_cards; i++)
       th[i] = std::thread(startTrigger, std::ref(dwError[i]), std::ref(dc->hCard[i]));
-    for(int i=0; i<numCards; i++)
+    for(int i=0; i<dc->num_cards; i++)
       th[i].join();
-    for(int i=0; i<numCards; i++)
+    for(int i=0; i<dc->num_cards; i++)
       if (dwError[i] != ERR_OK) printErrorDie("Cannot enable trigger\n",dc, i, set);
     //start DMA
-    for(int i=0; i<numCards; i++)
+    for(int i=0; i<dc->num_cards; i++)
       th[i] = std::thread(startDMA, std::ref(dwError[i]), std::ref(dc->hCard[i]));
-    for(int i=0; i<numCards; i++)
+    for(int i=0; i<dc->num_cards; i++)
       th[i].join();
-    for(int i=0; i<numCards; i++)
+    for(int i=0; i<dc->num_cards; i++)
       if (dwError[i] != ERR_OK) printErrorDie("Cannot start DMA\n",dc, i, set);
   }
   else
@@ -284,7 +284,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
     float dt=deltaT(tSim,t1);
     tprintfn (t,1,"Sample number=%d, gpu_fail=%d, Cycle taking %fs, hope for < %fs",sample_count,gpuFails, dt, towait);
     if (set->simulate_digitizer) {
-      for(int i=0; i<numCards; i++){
+      for(int i=0; i<dc->num_cards; i++){
         lPCPos[i] = dc->lNotifySize*sim_ofs;
         sim_ofs = (sim_ofs+1)%set->buf_mult;
         lAvailUser[i]=dc->lNotifySize;
@@ -304,13 +304,15 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
     }
     else {
       t1=tSim;
-      for (int i = 0; i < numCards; i++){
+      for (int i = 0; i < dc->num_cards; i++){
         dwError[i] = spcm_dwSetParam_i32 (dc->hCard[i], SPC_M2CMD, M2CMD_DATA_WAITDMA);
         if (dwError[i] != ERR_OK) printErrorDie ("DMA wait fail\n",dc, i, set);
         spcm_dwGetParam_i32 (dc->hCard[i], SPC_M2STATUS,             &lStatus[i]);
         spcm_dwGetParam_i32 (dc->hCard[i], SPC_DATA_AVAIL_USER_LEN,  &lAvailUser[i]);
         spcm_dwGetParam_i32 (dc->hCard[i], SPC_DATA_AVAIL_USER_POS,  &lPCPos[i]);
         spcm_dwGetParam_i32 (dc->hCard[i], SPC_FILLSIZEPROMILLE,  &fill[i]);
+        bufstart[i]=((int8_t*)dc->pnData[i]+lPCPos[i]);
+	fillRingBuffer(rb,i,bufstart[i]);
         assert(lAvailUser[i] >= dc->lNotifySize);
         clock_gettime(CLOCK_REALTIME, &tSim);
         dt=deltaT(t1,tSim);
@@ -322,11 +324,11 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
     clock_gettime(CLOCK_REALTIME, &timeNow);
     double accum = deltaT(timeStart, timeNow);
     tprintfn(t,1,"Time: %fs;", accum);
-    for(int i=0; i<numCards; i++){
+    for(int i=0; i<dc->num_cards; i++){
         tprintfn(t,1,"Card %d Status:%i; Pos:%08x; Len:%08x; digitizer buffer fill %i/1000   ", dc->serialNumber[i],
             lStatus[i], lPCPos[i], lAvailUser[i], fill[i]);
-        bufstart[i]=((int8_t*)dc->pnData[i]+lPCPos[i]);
     }
+    printInfoRingBuffer(rb,t);
     if (set->dont_process) 
       tprintfn (t,1," ** no GPU processing");
     else if( (sample_count >= 2) || set->simulate_digitizer){//don't proccess first few cycles if coming from ADC
@@ -336,7 +338,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
 
     // tell driver we're done
     if (!set->simulate_digitizer)
-      for(int i = 0; i < numCards; i++)
+      for(int i = 0; i < dc->num_cards; i++)
         spcm_dwSetParam_i32 (dc->hCard[i], SPC_DATA_AVAIL_CARD_LEN, dc->lNotifySize);
     
     // drive frequency generator if needed
@@ -348,7 +350,7 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
       tprintfn (t,1,"Waveform file: %s",set->wave_fname);
       FILE *fw=fopen(set->wave_fname,"wb");
       if (fw!=NULL) {
-        for(int i=0; i< numCards; i++)
+        for(int i=0; i< dc->num_cards; i++)
           fwrite(bufstart[i],sizeof(int8_t),set->wave_nbytes,fw);
         fclose(fw);
       }
@@ -366,15 +368,10 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
   if (stopSignal) printf ("Ctrl-C detected. Stopping.\n");
     else if (sample_count==set->nsamples) {printf ("Reached required number of samples.\n");}
     else if (!processed) {printf ("GPU processing returned error.\n");}
-  //Write last digitizer bufer to a file 
-  if(set->print_last_buffer){
-    printf("Printing last digitizer buffer to a file...\n");
-    writerWriteLastBuffer(w, bufstart, numCards, dc->lNotifySize);
-  }
 
   printf ("Stoping digitizer FIFO...\n");
   // send the stop command
-  for(int i=0; i < numCards; i++){
+  for(int i=0; i < dc->num_cards; i++){
     dwError[i] = set->simulate_digitizer ? ERR_OK :
         spcm_dwSetParam_i32 (dc->hCard[i], SPC_M2CMD, M2CMD_CARD_STOP | 
        M2CMD_DATA_STOPDMA);
@@ -383,12 +380,11 @@ void  digiWorkLoop(DIGICARD *dc, GPUCARD *gc, SETTINGS *set, FREQGEN *fgen, LJAC
 }
 
 
-void digiCardCleanUp(DIGICARD *card, SETTINGS *set) {
+void digiCardCleanUp(DIGICARD *dc, SETTINGS *set) {
   printf ("Closing digitizer... \n");
-  int numCards = 1 + (set->card_mask==3); //how many digitizer cards we are using
-  for(int i =0; i < numCards; i++)
-    digiCardFree(card->pnData[i]);
+  for(int i =0; i < dc->num_cards; i++)
+    digiCardFree(dc->pnData[i]);
   if (!set->simulate_digitizer)
-    for(int i =0; i < numCards; i++)
-      spcm_vClose (card->hCard[i]);
+    for(int i =0; i < dc->num_cards; i++)
+      spcm_vClose (dc->hCard[i]);
 }

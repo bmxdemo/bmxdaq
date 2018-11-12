@@ -31,8 +31,6 @@ struct SETTINGS {
   // waveform file and length, if zero, don't save
   long int wave_nbytes;
   char wave_fname[MAXCHAR];
-  //print last digitizer  buffer to file before exiting program
-  int print_last_buffer;
 
   // size of FFT transform
   uint32_t fft_size; // must be power of 2
@@ -43,11 +41,14 @@ struct SETTINGS {
                 //buf_mult*fft_size for transfer
   int cuda_streams; // number of cuda streams
   int cuda_threads; // number of cuda threads
+  
+  // ring buffer
+  int ringbuffer_size;
 
   // output options
   char ps_output_pattern[MAXCHAR];
   char rfi_output_pattern[MAXCHAR];
-  char last_buffer_output_pattern[MAXCHAR];
+  char ringbuffer_output_pattern[MAXCHAR];
   int save_every;
   
   // printout options

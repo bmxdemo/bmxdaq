@@ -38,9 +38,10 @@ void init_settings(SETTINGS *s, char* fname) {
     s->print_meanvar=1;
     s->print_maxp=0;
     s->print_every=1;
+    s->ringbuffer_size=8;
     sprintf(s->ps_output_pattern,"%%02d%%02d%%02d_%%02d%%02d.data");
     sprintf(s->rfi_output_pattern,"%%02d%%02d%%02d_%%02d%%02d.outliers");
-    sprintf(s->last_buffer_output_pattern, "%%02d%%02d%%02d_%%02d%%02d.lastBuffer");
+    sprintf(s->ringbuffer_output_pattern, "%%02d%%02d%%02d_%%02d%%02d%%02d.ring");
     s->fg_nfreq=0;
     s->fg_baudrate=9600;
     s->fg_switchevery=10;
@@ -57,7 +58,6 @@ void init_settings(SETTINGS *s, char* fname) {
     s->nsamples=0;
     s->wave_nbytes=0;
     sprintf(s->wave_fname,"wave.bin");
-    s->print_last_buffer = 0;
      
     if (fname) {
          FILE *fi;
@@ -119,8 +119,10 @@ void init_settings(SETTINGS *s, char* fname) {
 	     strcpy(s->ps_output_pattern,s2);
 	   else if(!strcmp(s1,"rfi_output_pattern="))
 	     strcpy(s->rfi_output_pattern,s2);
-           else if(!strcmp(s1,"last_buffer_output_pattern="))
-             strcpy(s->last_buffer_output_pattern,s2);
+           else if(!strcmp(s1,"ringbuffer_output_pattern="))
+             strcpy(s->ringbuffer_output_pattern,s2);
+           else if(!strcmp(s1,"ringbuffer_size="))
+             s->ringbuffer_size=atoi(s2);
 	   else if(!strcmp(s1,"print_meanvar="))
 	     s->print_meanvar=atoi(s2);
 	   else if(!strcmp(s1,"print_maxp="))
@@ -140,15 +142,13 @@ void init_settings(SETTINGS *s, char* fname) {
 	   else if(!strcmp(s1,"lj_Non="))
 	     s->lj_Non=atoi(s2);
 	   else if(!strcmp(s1,"wave_fname=")){
-       time_t rawtime;
-       time ( &rawtime );
-       struct tm *ti = localtime ( &rawtime );
-       strcpy(s->wave_fname,s2);
-         sprintf(s->wave_fname,s->wave_fname, ti->tm_year - 100 , ti->tm_mon + 1,
-           ti->tm_mday, ti->tm_hour, ti->tm_min);
-     }
-	   else if(!strcmp(s1,"print_last_buffer="))
-	     s->print_last_buffer=atoi(s2);
+	     time_t rawtime;
+	     time ( &rawtime );
+	     struct tm *ti = localtime ( &rawtime );
+	     strcpy(s->wave_fname,s2);
+	     sprintf(s->wave_fname,s->wave_fname, ti->tm_year - 100 , ti->tm_mon + 1,
+		     ti->tm_mday, ti->tm_hour, ti->tm_min);
+	   }
            else if(!strcmp(s1,"wave_nbytes="))
              s->wave_nbytes=atoi(s2);
 	   else if(!strcmp(s1,"log_chunk_size="))

@@ -11,6 +11,7 @@ Anze Slosar, anze@bnl.gob
 
 #include "settings.h"
 #include "digicard.h"
+#include "ringbuffer.h"
 #include "gpucard.h"
 #include "freqgen.h"
 #include "terminal.h"
@@ -35,6 +36,7 @@ int main(int argc,char **argv)
   SETTINGS settings;                      // settings
   WRITER writer;                          // writer module
   DIGICARD dcard;                         // digitizer CARD
+  RINGBUFFER rbuffer;                          // ring buffer
   GPUCARD gcard;                          // GPU card
   FREQGEN fgen;                           // Freq generator
   LJACK ljack;                            // Labjack
@@ -55,29 +57,30 @@ int main(int argc,char **argv)
     return 1;
   }
 
-
   // first ephemeral things
   if (settings.fg_nfreq) freqGenInit(&fgen, &writer, &settings);
   if (settings.lj_Non) LJInit(&ljack, &writer, &settings);
-  // digitizer
-  digiCardInit(&dcard,&settings);
-
   // GPU
   if (!settings.dont_process) gpuCardInit(&gcard,&settings);
   // RFI
   rfiInit(&rfi, &settings, &gcard);
   // writer
   writerInit(&writer,&settings, rfi.isRFIOn);
+  // digitizer
+  digiCardInit(&dcard,&settings);
+  // ringBuffer 
+  ringbufferInit(&rbuffer, &settings, &dcard);
 
   //MAIN LOOP
-  digiWorkLoop(&dcard, &gcard, &settings, &fgen, &ljack, &writer, &twriter, &rfi);
+  digiWorkLoop(&dcard, &rbuffer, &gcard, &settings, &fgen, &ljack, &writer, &twriter, &rfi);
 
   //shutdown
   digiCardCleanUp(&dcard, &settings);
+  ringbufferCleanUp(&rbuffer);
   writerCleanUp(&writer, rfi.isRFIOn);
   if (settings.fg_nfreq) freqGenCleanUp(&fgen);
   if (settings.lj_Non) LJCleanUp(&ljack);
-
+  
   printf ("Done.\n");
   return 0;
 }
