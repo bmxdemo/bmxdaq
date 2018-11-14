@@ -26,9 +26,11 @@
 /* Ctrl+C hander */
 
 volatile sig_atomic_t stopSignal = 0;
+volatile sig_atomic_t dumpSignal = 0;
 
 void loop_signal_handler(int sig){ // can be called asynchronously
-  stopSignal=1;
+  if (sig==SIGINT)  stopSignal=1;
+  if (sig==SIGUSR1) dumpSignal=1;
 }
 
 
@@ -237,7 +239,7 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
   printf("Number of digitizer cards: %d\n", dc->num_cards);
   uint32      dwError[2];
   int32       lStatus[2], lAvailUser[2], lPCPos[2], fill[2];
-  int8_t *    bufstart[2];
+  int8_t*    bufstart[2];
   int gpuFails=0;
   // start everything
   if(!set->simulate_digitizer){
@@ -275,6 +277,7 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
   float towait=set->fft_size/set->sample_rate;
   long int sample_count=0;
   signal(SIGINT, loop_signal_handler);
+  signal(SIGUSR1, loop_signal_handler);
 
   bool processed = true; //was the data processed properly on the gpu
   // terminal writer init
@@ -312,7 +315,6 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
         spcm_dwGetParam_i32 (dc->hCard[i], SPC_DATA_AVAIL_USER_POS,  &lPCPos[i]);
         spcm_dwGetParam_i32 (dc->hCard[i], SPC_FILLSIZEPROMILLE,  &fill[i]);
         bufstart[i]=((int8_t*)dc->pnData[i]+lPCPos[i]);
-	fillRingBuffer(rb,i,bufstart[i]);
         assert(lAvailUser[i] >= dc->lNotifySize);
         clock_gettime(CLOCK_REALTIME, &tSim);
         dt=deltaT(t1,tSim);
@@ -320,7 +322,11 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
         
       }
     }
-
+    if (dumpSignal) {
+      dumpRingBuffer(rb);
+      dumpSignal=0;
+    }
+    fillRingBuffer(rb,bufstart);
     clock_gettime(CLOCK_REALTIME, &timeNow);
     double accum = deltaT(timeStart, timeNow);
     tprintfn(t,1,"Time: %fs;", accum);
