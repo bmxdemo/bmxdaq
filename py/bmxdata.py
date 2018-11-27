@@ -1,9 +1,11 @@
+
 from __future__ import print_function, division 
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
 import  matplotlib.colors as colors
-
+from numpy.fft import rfft, irfft, ifft
+from scipy.optimize import leastsq
 
 class BMXFile(object):
     freqOffset = 1100
@@ -279,3 +281,83 @@ class BMXFile(object):
                 mxf-=self.freq[chan].mean()
         return mxf,mx
             
+
+
+class BMXRingbuffer (object):
+    def __init__ (self,fname,force_version=None):
+        prehead_desc=[('magic','S8'),('version','i4')]
+        f=open(fname);
+        H=np.fromfile(f,prehead_desc,count=1)
+        if H['magic'][:7]!=b'>>RBF<<':
+            print("Bad magic.",H['magic'])
+            sys.exit(1)
+        if force_version is not None:
+            self.version=force_version
+        else:
+            self.version=H['version'][0]
+        print ("Loading version:",self.version)
+        head_desc=[('ncards','i4'),('size','i8')]
+        H=np.fromfile(f,head_desc,count=1)
+        self.ncards=H['ncards'][0]
+        self.size=H['size'][0]//2 ## two channels
+        print ("Ncards: %i Size: %i"%(self.ncards,self.size))
+        data=np.fromfile(f,np.dtype([('ch1','i1'),('ch2','i1')],align=False))
+        assert(len(data)==self.size*self.ncards)
+        self.datad0c1=data['ch1'][:self.size]
+        self.datad0c2=data['ch2'][:self.size]
+        if (self.ncards>1):
+            self.datad1c1=data['ch1'][self.size:]
+            self.datad1c2=data['ch2'][self.size:]
+            self.data=[self.datad0c1,self.datad0c2,self.datad1c1,self.datad1c2]
+        else:
+            self.data=[self.datad0c1,self.datad0c2]
+        del data
+        
+    def getXis(self, start=0, end=2**28, maxlen=None,pad=False):
+        #print ("FFTing...")
+        size=end-start
+        wspace=np.zeros(size*(1+int(pad)),np.float32)
+        ffts=[]
+        for i,d in enumerate(self.data):
+            wspace[:size]=d[start:end].astype(np.float32)
+            ffts.append(rfft(wspace))
+        #print ("Calculating Xis")
+        xi=[]
+        for i,f1 in enumerate(ffts):
+            for j,f2 in enumerate(ffts):
+                if (j>i):
+                    pass
+                else:
+                    corr=irfft(f1*np.conj(f2))
+                    xi.append((i,j,corr))
+        return xi
+    
+    def getOffsets(self, start=0, end=2**28):
+        self.data[0]=self.data[1][30:]
+        self.data[2]=self.data[1][15:]
+        self.data[3]=self.data[1][5:]
+        xi=self.getXis(start=start, end=end,pad=False)
+        s=len(xi[0][2])
+        s2=s//2
+        maxc=[]
+        for i,j,corr in xi:
+            o=corr.argmax()
+            if (o>s2):
+                o-=s
+            maxc.append([i,j,o])
+        print (maxc)
+        def mfun(ofs):
+            return np.array([ofs[j]-ofs[i]-o for i,j,o in maxc])
+        res,ie=leastsq(mfun, np.zeros(2*self.ncards))
+        chi2=mfun(res)
+        res-=res[1]
+        print (res,chi2.sum())
+
+
+
+
+            
+                
+        
+        
+        
