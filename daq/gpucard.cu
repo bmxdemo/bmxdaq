@@ -340,7 +340,7 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, SETTIN
       cudaEventSynchronize(gc->eDoneCopyBack[gc->fstream]);
       printTiming(gc,gc->fstream,twr);
       printLiveStat(set,gc,buf,twr);
-      writerWritePS(wr,gc->outps);
+      writerAccumulatePS(wr,gc->outps,twr);
       gc->fstream = (++gc->fstream)%(gc->nstreams);
       gc->active_streams--;
     }

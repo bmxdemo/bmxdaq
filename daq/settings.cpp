@@ -35,7 +35,8 @@ void init_settings(SETTINGS *s, const char* fname, int daqNum) {
     s->cuda_threads=1024;
     s->simulate_digitizer=1;
     s->dont_process=0;
-    s->save_every=60;
+    s->new_file_every=60;
+    s->average_recs=128;
     s->print_meanvar=1;
     s->print_maxp=0;
     s->print_every=1;
@@ -108,8 +109,10 @@ void init_settings(SETTINGS *s, const char* fname, int daqNum) {
 	     s->dont_process=atoi(s2);
 	   else if(!strcmp(s1,"n_cuts="))
 	     s->n_cuts=atoi(s2);
-	   else if(!strcmp(s1,"save_every="))
-	     s->save_every=atoi(s2);
+	   else if(!strcmp(s1,"new_file_every="))
+	     s->new_file_every=atoi(s2);
+	   else if(!strcmp(s1,"average_recs="))
+	     s->average_recs=atoi(s2);
 	   else if(!strcmp(s1,"root_output_pattern="))
 	     strcpy(root_output_pattern,s2);
            else if(!strcmp(s1,"ringbuffer_output_pattern="))

@@ -52,7 +52,9 @@ struct SETTINGS {
   char ps_output_pattern[MAXCHAR];
   char rfi_output_pattern[MAXCHAR];
   char ringbuffer_output_pattern[MAXCHAR];
-  int save_every;
+  int new_file_every;
+  int average_recs; // how many records to average
+
   
   // printout options
   int print_meanvar;

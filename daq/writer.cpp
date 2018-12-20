@@ -19,7 +19,7 @@ void maybeReOpenFile(WRITER *writer, bool first=false) {
   time ( &rawtime );
   struct tm *ti = gmtime ( &rawtime );
   
-  if (first || ((ti->tm_min%writer->save_every==0) && writer->reopen)) {
+  if (first || ((ti->tm_min%writer->new_file_every==0) && writer->reopen)) {
     if (!first) closeAndRename(writer);
 
     writer->counter =0; //reset sample counter to 0
@@ -51,7 +51,7 @@ void maybeReOpenFile(WRITER *writer, bool first=false) {
     writer->reopen=false;
   }
 
-  if (ti->tm_min%writer->save_every==1)  writer->reopen=true;
+  if (ti->tm_min%writer->new_file_every==1)  writer->reopen=true;
   
 }
 
@@ -59,7 +59,7 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   printf ("==========================\n");
   strcpy(writer->fnamePS,s->ps_output_pattern);
   strcpy(writer->fnameRFI,s->rfi_output_pattern);
-  writer->save_every=s->save_every;
+  writer->new_file_every=s->new_file_every;
   writer->headerPS.cardMask=s->card_mask;
   writer->headerPS.nChannels=1+(s->channel_mask==3);
   writer->headerPS.sample_rate=s->sample_rate;
@@ -82,6 +82,9 @@ void writerInit(WRITER *writer, SETTINGS *s) {
     writer->lenPS+=s->pssize[i]*(4+12*(s->card_mask==3));
 
   }
+  writer->average_recs=s->average_recs;
+  writer->crec=0;
+  writer->fbad=0.0;
   writer->counter = 0;
   writer->tone_freq = 0;
   writer->lj_voltage0 = 0;
@@ -89,6 +92,11 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   printf ("Record size: %i\n", writer->lenPS);
   printf ("Version: %i\n", writer->headerPS.version);
 
+  writer->psbuf = (float*)malloc(sizeof(float)*writer->lenPS * writer->average_recs);
+  writer->cleanps = (float*)malloc(sizeof(float)*writer->lenPS);
+  writer->badps = (float*) malloc(sizeof(float)*writer->lenPS);
+  writer->numbad = (int*) malloc(sizeof(int)*writer->lenPS);
+  writer->rfi_sigma=s->n_sigma_null;
   maybeReOpenFile(writer, true);
 }
 
@@ -97,6 +105,35 @@ double getMJDNow()
   long int t=time(NULL);
   return (double)(t) / 86400.0  + 40587.0;
 }
+
+
+
+void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr) {
+  if (writer->average_recs<=1) {
+    writerWritePS(writer,ps);
+    return;
+  }
+  size_t N=writer->lenPS;
+  int M=writer->average_recs;
+  size_t j=writer->crec;
+  for (size_t i=0;i<N;i++,j+=N) {
+    writer->psbuf[j]=ps[i];
+  }
+  writer->crec++;
+  if (writer->crec==M) {
+    writer->crec=0;
+
+    for (size_t i=0;i<N;i++) 
+      rfimean(&(writer->psbuf[i*M]),M,writer->rfi_sigma, &(writer->cleanps[i]), &(writer->badps[i]), &(writer->numbad[i]));
+    writerWritePS(writer,writer->cleanps);
+    int totbad=0;
+    for (size_t i=0;i<N;i++) totbad+=writer->numbad[i];
+    writer->fbad=float(totbad)/(N*M);
+  }
+  tprintfn(twr,1,"Writer Accumulator: %03d     Bad in last save: %4.3f ", writer->crec, writer->fbad*100);
+}
+
+
 
 void writerWritePS (WRITER *writer, float* ps) {
   maybeReOpenFile(writer);
