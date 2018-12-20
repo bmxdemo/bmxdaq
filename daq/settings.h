@@ -10,6 +10,9 @@
 struct SETTINGS {
   // debug?
   int debug;
+  // daq num. 1 is captain, 2 is sailor
+  int daqNum;
+  
   // basic settings
   uint64_t card_mask; //bit mask representing which cards are to be used
   // digi card settings
@@ -73,14 +76,7 @@ struct SETTINGS {
   int lj_Non;  // number of samples with diode on;
 
   //RFI rejection
-  int log_chunk_size; //log base 2 of chunk size to be used to collect RFI statistics
   float n_sigma_null; //number of standard deviations used to determine outliers to null out. 0 for none
-  float n_sigma_write; //number of standard deviations used to determine outliers to write to file, 0 for none
-  //which statistics to use to detect rfi
-  bool use_mean_statistic;
-  bool use_variance_statistic;
-  bool use_abs_max_statistic;
-
 };
 
 // Fixed defines
@@ -88,5 +84,5 @@ struct SETTINGS {
 #define VERSION "1.0_multi"
 
 
-void init_settings(SETTINGS *settings, char* inifile);
+void init_settings(SETTINGS *settings, const char* inifile, int daqNum);
 void print_settings(SETTINGS *s);

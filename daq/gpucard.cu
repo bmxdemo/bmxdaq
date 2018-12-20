@@ -9,7 +9,6 @@ CUDA PART
 #undef CUDA_COMPILE
 #include "terminal.h"
 #include "reduction.h"
-#include "rfi.h"
 #include <memory.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -176,7 +175,6 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   gc->eDoneFFT=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
   gc->eDonePost=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
   gc->eDoneCopyBack=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
-  gc->eDoneRFI=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
   gc->eBeginCopyBack=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
   for (int i=0;i<gc->nstreams;i++) {
     //create stream
@@ -188,7 +186,6 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     CHK(cudaEventCreate(&gc->eDoneFFT[i]));
     CHK(cudaEventCreate(&gc->eDonePost[i]));
     CHK(cudaEventCreate(&gc->eDoneCopyBack[i]));
-    CHK(cudaEventCreate(&gc->eDoneRFI[i]));
     CHK(cudaEventCreate(&gc->eBeginCopyBack[i]));
   }
  
@@ -232,13 +229,11 @@ void printDt (cudaEvent_t cstart, cudaEvent_t cstop, float * total, TWRITER * t)
 
 void printTiming(GPUCARD *gc, int i, TWRITER * t) {
   float totalTime = 0;
-  tprintfn (t, 0, "GPU timing (copy/floatize/RFI...): ");
+  tprintfn (t, 0, "GPU timing (copy/floatize/...): ");
   printDt (gc->eStart[i], gc->eDoneCopy[i], &totalTime, t);
   printDt (gc->eDoneCopy[i], gc->eDoneFloatize[i], &totalTime, t);
-  printDt (gc->eDoneFloatize[i], gc->eDoneRFI[i], &totalTime, t);
   tprintfn (t,1,"");
   tprintfn (t, 0, "GPU timing (.../fft/post/copyback): ");
-  printDt (gc->eDoneRFI[i], gc->eDoneFFT[i], &totalTime, t);
   printDt (gc->eDoneFFT[i], gc->eDonePost[i], &totalTime, t);
   printDt (gc->eBeginCopyBack[i], gc->eDoneCopyBack[i], &totalTime, t);
   tprintfn (t,1,"");
@@ -321,10 +316,9 @@ void printLiveStat(SETTINGS *set, GPUCARD *gc, int8_t **buf, TWRITER *twr) {
 //  gc: graphics card
 //      buf: data from digitizer
 //      wr: writer to write out power spectra and outliers to files
-//      rfi: structure containing rfi settings and memory for rfi statistics
 
 //  set: settings
-int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * rfi, SETTINGS *set) {
+int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, SETTINGS *set) {
   //streamed version
   //Check if other streams are finished and proccess the finished ones in order (i.e. print output to file)
 
@@ -347,7 +341,7 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * 
       cudaEventSynchronize(gc->eDoneCopyBack[gc->fstream]);
       printTiming(gc,gc->fstream,twr);
       printLiveStat(set,gc,buf,twr);
-      writerWritePS(wr,gc->outps, rfi->numOutliersNulled[gc->fstream], rfi->isRFIOn);
+      writerWritePS(wr,gc->outps);
       gc->fstream = (++gc->fstream)%(gc->nstreams);
       gc->active_streams--;
     }
@@ -381,14 +375,6 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * 
         (gc->cbuf[csi][i],&(gc->cfbuf[csi][gc->fftsize*2*i]),&(gc->cfbuf[csi][gc->fftsize*(2*i+1)]));
   cudaEventRecord(gc->eDoneFloatize[csi], cs);
   
-  //RFI rejection 
-  if(rfi->isRFIOn){
-    collectRFIStatistics(rfi, gc, csi);
-    nullRFI(rfi, gc, csi, wr,twr);
-    writeRFI(rfi, gc, csi, wr, buf[0]);
-  }
-  cudaEventRecord(gc->eDoneRFI[csi],gc->streams[csi]);
-
   //perform fft
   int status = cufftSetStream(gc->plan, cs);
   if(status !=CUFFT_SUCCESS) {
@@ -409,31 +395,24 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * 
     int psofs=0;
     for (int i=0; i<gc->ncuts; i++) {
       ps_reduce<<<gc->pssize[i], 1024, 0, cs>>> (gc->cfft[csi], &(gc->coutps[csi][psofs]), 
-          gc->ndxofs[i], gc->fftavg[i], 1);
+          gc->ndxofs[i], gc->fftavg[i]);
       psofs+=gc->pssize[i];
     }
   } 
   else if(gc->nchan==2){
     // note we need to take into account the tricky N/2+1 FFT size while we do N/2 binning
     // pssize+2 = transformsize+1
-    
-    //calculate power spectra corrections due to nulling out chunks flagged as RFI
-    int numChunks = gc->bufsize/rfi->chunkSize;
-    float ch1Correction = numChunks*1.0/(numChunks - rfi->numOutliersNulled[csi][0]);  
-    float ch2Correction = numChunks*1.0/(numChunks - rfi->numOutliersNulled[csi][1]);  
-    //correction for cross spectrum
-    float crossCorrection = numChunks*1.0/(numChunks - rfi->outliersOR[csi]); 
-    
+        
     int psofs=0;
     for (int i=0; i<gc->ncuts; i++) {
    
       for(int j=0; j<nCards; j++){
         ps_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][2*j*gc->transform_size], 
-            &(gc->coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i], ch1Correction);
+            &(gc->coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i]);
         psofs+=gc->pssize1[i];
         
         ps_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][(2*j+1)*gc->transform_size], 
-            &(gc->coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i], ch2Correction);
+            &(gc->coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i]);
         psofs+=gc->pssize1[i];
       }
       //cross spectra
@@ -443,7 +422,7 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, RFI * 
 	  ps_X_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][j*gc->transform_size], 
 							&gc->cfft[csi][k*gc->transform_size], 
 	    &(gc->coutps[csi][psofs]), &(gc->coutps[csi][psofs+gc->pssize1[i]]),
-            gc->ndxofs[i], gc->fftavg[i], crossCorrection);
+            gc->ndxofs[i], gc->fftavg[i]);
           psofs+=2*gc->pssize1[i];
         }
     }

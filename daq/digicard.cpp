@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include <thread>
+#include <random>
 /* Ctrl+C hander */
 
 volatile sig_atomic_t stopSignal = 0;
@@ -231,7 +232,7 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
 }
 
 void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set, 
-                   FREQGEN *fgen, LJACK *lj, WRITER *w, TWRITER *t, RFI *rfi) {
+                   FREQGEN *fgen, LJACK *lj, WRITER *w, TWRITER *t) {
 
   printf ("\n\nStarting main loop\n");
   printf ("==========================\n");
@@ -338,7 +339,7 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
     if (set->dont_process) 
       tprintfn (t,1," ** no GPU processing");
     else if( (sample_count >= 2) || set->simulate_digitizer){//don't proccess first few cycles if coming from ADC
-      processed = gpuProcessBuffer(gc,bufstart,w,t,rfi, set);
+      processed = gpuProcessBuffer(gc,bufstart,w,t, set);
       if (!processed) gpuFails++;
     }
 

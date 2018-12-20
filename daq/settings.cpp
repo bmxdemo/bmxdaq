@@ -15,8 +15,9 @@ int my_linecount(FILE *f)
   return i0;
 }
 
-void init_settings(SETTINGS *s, char* fname) { 
+void init_settings(SETTINGS *s, const char* fname, int daqNum) { 
     s->debug=0;
+    s->daqNum=daqNum;
     s->card_mask = 3; //use both cards
     s->sample_rate=1.25e9;
     s->spc_sample_rate=1250*1000000;
@@ -39,8 +40,8 @@ void init_settings(SETTINGS *s, char* fname) {
     s->print_maxp=0;
     s->print_every=1;
     s->ringbuffer_size=8;
-    sprintf(s->ps_output_pattern,"%%02d%%02d%%02d_%%02d%%02d.data");
-    sprintf(s->rfi_output_pattern,"%%02d%%02d%%02d_%%02d%%02d.outliers");
+    char root_output_pattern[MAXCHAR];
+    sprintf(root_output_pattern,"%%02d%%02d%%02d_%%02d%%02d"); 
     sprintf(s->ringbuffer_output_pattern, "%%02d%%02d%%02d_%%02d%%02d%%02d.ring");
     s->fg_nfreq=0;
     s->fg_baudrate=9600;
@@ -48,13 +49,7 @@ void init_settings(SETTINGS *s, char* fname) {
     sprintf(s->fg_port,"ttyS0");
     s->lj_Noff=0;
     s->lj_Non=0;
-    s->log_chunk_size = 20;
-    s->n_sigma_null = 0;
-    s->n_sigma_write = 3;
-    s->use_mean_statistic = false;
-    s->use_variance_statistic = false;
-    s->use_abs_max_statistic = false;
-    
+    s->n_sigma_null = 5;
     s->nsamples=0;
     s->wave_nbytes=0;
     sprintf(s->wave_fname,"wave.bin");
@@ -151,18 +146,8 @@ void init_settings(SETTINGS *s, char* fname) {
 	   }
            else if(!strcmp(s1,"wave_nbytes="))
              s->wave_nbytes=atoi(s2);
-	   else if(!strcmp(s1,"log_chunk_size="))
-	     s->log_chunk_size=atoi(s2);
 	   else if(!strcmp(s1,"n_sigma_null="))
 	     s->n_sigma_null=atoi(s2);
-	   else if(!strcmp(s1,"n_sigma_write="))
-	     s->n_sigma_write=atoi(s2);
-	   else if(!strcmp(s1,"use_mean_statistic="))
-	     s->use_mean_statistic=atoi(s2);
-	   else if(!strcmp(s1,"use_variance_statistic="))
-	     s->use_variance_statistic=atoi(s2);
-	   else if(!strcmp(s1,"use_abs_max_statistic="))
-	     s->use_abs_max_statistic=atoi(s2);
 	   else if(!strcmp(s1,"nsamples="))
 	     s->nsamples=atoi(s2);
 	   else found=false;
@@ -219,6 +204,10 @@ void init_settings(SETTINGS *s, char* fname) {
 	 fclose(fi);
      }
 
+    sprintf(s->ps_output_pattern,"%s_D%i.data",root_output_pattern,daqNum);
+    sprintf(s->rfi_output_pattern,"%s_D%i.rfi",root_output_pattern,daqNum);
+    sprintf(s->rfi_output_pattern,"%%02d%%02d%%02d_%%02d%%02d.outliers");
+    
 }
 
 void print_settings(SETTINGS *s) {

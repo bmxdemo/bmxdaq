@@ -40,15 +40,13 @@ int main(int argc,char **argv)
   GPUCARD gcard;                          // GPU card
   FREQGEN fgen;                           // Freq generator
   LJACK ljack;                            // Labjack
-  RFI rfi;                                //rfi stuff
   TWRITER twriter;			  //terminal writers
 
   if(argc>=2) {
     char fname_ini[256];
-    sprintf(fname_ini,"%s",argv[1]);
-    init_settings(&settings,fname_ini);
+    init_settings(&settings,argv[1],1);
   } else
-    init_settings(&settings,NULL);
+    init_settings(&settings,NULL,1);
 
   // intialize
   print_settings(&settings);
@@ -62,22 +60,20 @@ int main(int argc,char **argv)
   if (settings.lj_Non) LJInit(&ljack, &writer, &settings);
   // GPU
   if (!settings.dont_process) gpuCardInit(&gcard,&settings);
-  // RFI
-  rfiInit(&rfi, &settings, &gcard);
   // writer
-  writerInit(&writer,&settings, rfi.isRFIOn);
+  writerInit(&writer,&settings);
   // digitizer
   digiCardInit(&dcard,&settings);
   // ringBuffer 
   ringbufferInit(&rbuffer, &settings, &dcard);
 
   //MAIN LOOP
-  digiWorkLoop(&dcard, &rbuffer, &gcard, &settings, &fgen, &ljack, &writer, &twriter, &rfi);
+  digiWorkLoop(&dcard, &rbuffer, &gcard, &settings, &fgen, &ljack, &writer, &twriter);
 
   //shutdown
   digiCardCleanUp(&dcard, &settings);
   ringbufferCleanUp(&rbuffer);
-  writerCleanUp(&writer, rfi.isRFIOn);
+  writerCleanUp(&writer);
   if (settings.fg_nfreq) freqGenCleanUp(&fgen);
   if (settings.lj_Non) LJCleanUp(&ljack);
   

@@ -34,9 +34,6 @@ THIS IS A COMPLETE PLACEHOLDER!
 
 #endif
 
-struct RFI; //forward declaration
-
-
 struct GPUDATA { //object holding all the data buffers needed for one cuda stream
 };
 
@@ -64,11 +61,11 @@ struct GPUCARD {
   CUDA_STREAM_T *streams; // streams
   int fstream, bstream; // front stream (oldest running), back stream (newest runnig);
   int active_streams; // really needed just at the beginning (when 0)
-  CUDA_EVENT_T *eStart, *eDoneCopy, *eDoneFloatize, *eDoneRFI,  *eDoneFFT, *eDonePost, *eBeginCopyBack, *eDoneCopyBack; //events
+  CUDA_EVENT_T *eStart, *eDoneCopy, *eDoneFloatize,  *eDoneFFT, *eDonePost, *eBeginCopyBack, *eDoneCopyBack; //events
 };
 
 
 extern "C" {
   void gpuCardInit (GPUCARD *gcard, SETTINGS *set);
-  int  gpuProcessBuffer(GPUCARD *gcard, int8_t ** buf, WRITER *w, TWRITER *t,  RFI * rfi, SETTINGS *set);
+  int  gpuProcessBuffer(GPUCARD *gcard, int8_t ** buf, WRITER *w, TWRITER *t, SETTINGS *set);
 }

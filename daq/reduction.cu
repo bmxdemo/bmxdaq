@@ -195,11 +195,8 @@ void getAbsMax(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, i
 
 //Reduction algorithm to calculate power spectrum. Take bsize complex numbers 
 //starting at ffts[istart+bsize*blocknumber] and their copies in NCHUNS, and add the squares
-//Input:
-//      correction: corrects for the chunks that were nulled out because RFI. 
-//                  It equals numChunks/(numChunks - numChunksNulled), where numChunksNulled is 
-// the number of chunks nulled in this specific channel.
-__global__ void ps_reduce(cufftComplex *ffts, float* output_ps, size_t istart, size_t avgsize, float correction) {
+
+__global__ void ps_reduce(cufftComplex *ffts, float* output_ps, size_t istart, size_t avgsize) {
   int tid=threadIdx.x; // thread
   int bl=blockIdx.x; // block, ps bin #
   int nth=blockDim.x; //nthreads
@@ -222,16 +219,13 @@ __global__ void ps_reduce(cufftComplex *ffts, float* output_ps, size_t istart, s
     }
     csum/=2;
   }
-  if (tid==0) output_ps[bl]=work[0]*correction; //correcting for RFI
+  if (tid==0) output_ps[bl]=work[0];
 }
 
 
 //Reduction algorithm, to calculate cross power spectrum
-//Input:
-//      correction: corrects for the chunks that were nulled out because RFI. 
-//                  It equals numChunks/(numChunks - numChunksNulledCh1ORCH2)
 __global__ void ps_X_reduce(cufftComplex *fftsA, cufftComplex *fftsB, 
-			    float* output_ps_real, float* output_ps_imag, size_t istart, size_t avgsize, float correction) {
+			    float* output_ps_real, float* output_ps_imag, size_t istart, size_t avgsize) {
   int tid=threadIdx.x; // thread
   int bl=blockIdx.x; // block, ps bin #
   int nth=blockDim.x; //nthreads
@@ -259,7 +253,7 @@ __global__ void ps_X_reduce(cufftComplex *fftsA, cufftComplex *fftsB,
     csum/=2;
   }
   if (tid==0) {
-    output_ps_real[bl]=workR[0]*correction;
-    output_ps_imag[bl]=workI[0]*correction;
+    output_ps_real[bl]=workR[0];
+    output_ps_imag[bl]=workI[0];
   }
 } 

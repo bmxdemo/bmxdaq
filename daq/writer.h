@@ -1,6 +1,5 @@
 #pragma once
 #include "settings.h"
-#include "rfi.h"
 #include "stdio.h"
 #include <stdint.h>
 // character lengths
@@ -38,8 +37,9 @@ struct RFIHEADER {
 struct WRITER {
   char fnamePS[MAXFNLEN], fnameRFI[MAXFNLEN]; //file names, from settings
   char afnamePS[MAXFNLEN], afnameRFI[MAXFNLEN];  //current file names
-  char tafnamePS[MAXFNLEN], tafnameRFI[MAXFNLEN];  //temporary current file names 
-                                                   //(with ".new")
+  char tafnamePS[MAXFNLEN], tafnameRFI[MAXFNLEN];  //temporary current file names //(with ".new")
+  bool rfiOn;
+  
   uint32_t lenPS; // full length of PS info
   uint32_t lenRFI; //length of outlier chunk
   int save_every; // how many minutes we save.
@@ -55,11 +55,11 @@ struct WRITER {
 
 
 
-void writerInit(WRITER *writer, SETTINGS *set, bool isRFIOn);
-void writerWritePS (WRITER *writer, float* ps, int * numOutliersNulled, bool isRFIOn);
-void writerWriteRFI(WRITER *writer, int8_t * outlier, int chunk, int channel, float* nSigma);
+void writerInit(WRITER *writer, SETTINGS *set);
+void writerWritePS (WRITER *writer, float* ps);
+//void writerWriteRFI(WRITER *writer, int8_t * outlier, int chunk, int channel, float* nSigma);
 //void writerWriteLastBuffer(WRITER *writer, int8_t ** bufstart, int numCards, int size);
-void writerCleanUp(WRITER *writer, bool isRFIOn);
+void writerCleanUp(WRITER *writer);
 
 void closeAndRename(WRITER *writer);
 
