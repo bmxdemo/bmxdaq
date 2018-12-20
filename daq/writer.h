@@ -3,6 +3,7 @@
 #include "settings.h"
 #include "stdio.h"
 #include <stdint.h>
+#include <thread>
 
 
 // character lengths
@@ -49,7 +50,9 @@ struct WRITER {
   int average_recs; // how many records to average over
   int rfi_sigma;
   int crec;
-  float *psbuf, *cleanps, *badps;
+  bool totick;
+  std::thread savethread;
+  float *psbuftick, *psbuftock, *cleanps, *badps;
   int *numbad;
   float fbad; //fraction bad last time
   

@@ -133,10 +133,10 @@ void printInfoRingBuffer(RINGBUFFER *rb, TWRITER *tw) {
   if (rb->dumping) tprintfn (tw,1, "Dumping %s ... %i%% ",rb->filename, rb->dumpercent);
   else {
     if (rb->ncards==2) 
-      tprintfn (tw,0," Card 1: %i   Card 2:  %i ",rb->cur_chunk[0], rb->cur_chunk[1]);
+      tprintfn (tw,0," Card 1: %03d   Card 2:  %03d ",rb->cur_chunk[0], rb->cur_chunk[1]);
     else
-      tprintfn (tw,0," Card 1: %i ",rb->cur_chunk[0]);
-    tprintfn (tw,1,"Fill: %i %%",int((rb->num_chunks-rb->fillremain)*100/rb->num_chunks));
+      tprintfn (tw,0," Card 1: %02d ",rb->cur_chunk[0]);
+    tprintfn (tw,1,"Fill: %03d %%",int((rb->num_chunks-rb->fillremain)*100/rb->num_chunks));
   }
 }
 

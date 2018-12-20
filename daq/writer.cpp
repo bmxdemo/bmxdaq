@@ -1,6 +1,7 @@
 #include "writer.h"
 #include "string.h"
 #include "time.h"
+#include <unistd.h>
 #include "stdlib.h"
 #include <math.h>
 #include <assert.h>
@@ -72,7 +73,7 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   //writer->headerPS.statistics[absoluteMax] = s->use_abs_max_statistic? 1: 0;
 
   writer->headerPS.ncuts=s->n_cuts;
-  writer->lenPS=0.0;
+  writer->lenPS=0;
   for (int i=0; i<s->n_cuts; i++) {
     writer->headerPS.nu_min[i]=s->nu_min[i];
     writer->headerPS.nu_max[i]=s->nu_max[i];
@@ -92,7 +93,9 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   printf ("Record size: %i\n", writer->lenPS);
   printf ("Version: %i\n", writer->headerPS.version);
 
-  writer->psbuf = (float*)malloc(sizeof(float)*writer->lenPS * writer->average_recs);
+  writer->psbuftick = (float*)malloc(sizeof(float)*writer->lenPS * writer->average_recs);
+  writer->psbuftock = (float*)malloc(sizeof(float)*writer->lenPS * writer->average_recs);
+  writer->totick=true;
   writer->cleanps = (float*)malloc(sizeof(float)*writer->lenPS);
   writer->badps = (float*) malloc(sizeof(float)*writer->lenPS);
   writer->numbad = (int*) malloc(sizeof(int)*writer->lenPS);
@@ -108,6 +111,22 @@ double getMJDNow()
 
 
 
+void processThread (WRITER& wrr) {
+  size_t N=wrr.lenPS;
+  int M=wrr.average_recs;
+
+  // note we process THE OTHER ONE
+  float* ptr = wrr.totick ? wrr.psbuftock : wrr.psbuftick;
+  for (size_t i=0;i<N;i++) {
+    rfimean(&(ptr[i*M]),M,wrr.rfi_sigma, &(wrr.cleanps[i]), &(wrr.badps[i]), &(wrr.numbad[i]));
+  }
+  writerWritePS(&wrr,wrr.cleanps);
+  int totbad=0;
+  for (size_t i=0;i<N;i++) totbad+=wrr.numbad[i];
+  wrr.fbad=float(totbad)/(N*M);
+}
+
+
 void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr) {
   if (writer->average_recs<=1) {
     writerWritePS(writer,ps);
@@ -116,22 +135,26 @@ void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr) {
   size_t N=writer->lenPS;
   int M=writer->average_recs;
   size_t j=writer->crec;
-  for (size_t i=0;i<N;i++,j+=N) {
-    writer->psbuf[j]=ps[i];
+  float* ptr = writer->totick ? writer->psbuftick : writer->psbuftock;
+  for (size_t i=0;i<N;i++,j+=M) {
+    ptr[j]=ps[i];
   }
+
   writer->crec++;
+  if (writer->savethread.joinable()) writer->savethread.join();
   if (writer->crec==M) {
     writer->crec=0;
-
-    for (size_t i=0;i<N;i++) 
-      rfimean(&(writer->psbuf[i*M]),M,writer->rfi_sigma, &(writer->cleanps[i]), &(writer->badps[i]), &(writer->numbad[i]));
-    writerWritePS(writer,writer->cleanps);
-    int totbad=0;
-    for (size_t i=0;i<N;i++) totbad+=writer->numbad[i];
-    writer->fbad=float(totbad)/(N*M);
+    writer->totick = not writer->totick;
+    writer->savethread = std::thread(processThread,std::ref(*writer));
+    writer->savethread.detach();
   }
-  tprintfn(twr,1,"Writer Accumulator: %03d     Bad in last save: %4.3f ", writer->crec, writer->fbad*100);
+  
+  tprintfn(twr,1,"Writer Accumulator: %03d   Writing:%01d Tick/Tock:%01d  Bad in last save: %4.3f ", 
+	   writer->crec, writer->savethread.joinable(),writer->totick, writer->fbad*100);
 }
+
+
+
 
 
 
