@@ -110,10 +110,8 @@ void init_settings(SETTINGS *s, const char* fname, int daqNum) {
 	     s->n_cuts=atoi(s2);
 	   else if(!strcmp(s1,"save_every="))
 	     s->save_every=atoi(s2);
-	   else if(!strcmp(s1,"ps_output_pattern="))
-	     strcpy(s->ps_output_pattern,s2);
-	   else if(!strcmp(s1,"rfi_output_pattern="))
-	     strcpy(s->rfi_output_pattern,s2);
+	   else if(!strcmp(s1,"root_output_pattern="))
+	     strcpy(root_output_pattern,s2);
            else if(!strcmp(s1,"ringbuffer_output_pattern="))
              strcpy(s->ringbuffer_output_pattern,s2);
            else if(!strcmp(s1,"ringbuffer_size="))

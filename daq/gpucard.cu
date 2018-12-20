@@ -229,11 +229,10 @@ void printDt (cudaEvent_t cstart, cudaEvent_t cstop, float * total, TWRITER * t)
 
 void printTiming(GPUCARD *gc, int i, TWRITER * t) {
   float totalTime = 0;
-  tprintfn (t, 0, "GPU timing (copy/floatize/...): ");
+  tprintfn (t, 0, "GPU timing (copy/floatize/fft/post/copyback): ");
   printDt (gc->eStart[i], gc->eDoneCopy[i], &totalTime, t);
   printDt (gc->eDoneCopy[i], gc->eDoneFloatize[i], &totalTime, t);
-  tprintfn (t,1,"");
-  tprintfn (t, 0, "GPU timing (.../fft/post/copyback): ");
+  printDt (gc->eDoneFloatize[i], gc->eDoneFFT[i], &totalTime, t);
   printDt (gc->eDoneFFT[i], gc->eDonePost[i], &totalTime, t);
   printDt (gc->eBeginCopyBack[i], gc->eDoneCopyBack[i], &totalTime, t);
   tprintfn (t,1,"");
