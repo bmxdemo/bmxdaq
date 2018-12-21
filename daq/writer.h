@@ -50,7 +50,7 @@ struct WRITER {
   int average_recs; // how many records to average over
   int rfi_sigma;
   int crec;
-  bool totick;
+  bool totick, writing;
   std::thread savethread;
   float *psbuftick, *psbuftock, *cleanps, *badps;
   int *numbad;

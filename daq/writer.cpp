@@ -84,6 +84,7 @@ void writerInit(WRITER *writer, SETTINGS *s) {
 
   }
   writer->average_recs=s->average_recs;
+  writer->writing=false;
   writer->crec=0;
   writer->fbad=0.0;
   writer->counter = 0;
@@ -114,7 +115,7 @@ double getMJDNow()
 void processThread (WRITER& wrr) {
   size_t N=wrr.lenPS;
   int M=wrr.average_recs;
-
+  wrr.writing=true;
   // note we process THE OTHER ONE
   float* ptr = wrr.totick ? wrr.psbuftock : wrr.psbuftick;
   for (size_t i=0;i<N;i++) {
@@ -124,6 +125,7 @@ void processThread (WRITER& wrr) {
   int totbad=0;
   for (size_t i=0;i<N;i++) totbad+=wrr.numbad[i];
   wrr.fbad=float(totbad)/(N*M);
+  wrr.writing=false;
 }
 
 
@@ -141,16 +143,15 @@ void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr) {
   }
 
   writer->crec++;
-  if (writer->savethread.joinable()) writer->savethread.join();
   if (writer->crec==M) {
+    if (writer->savethread.joinable()) writer->savethread.join();
     writer->crec=0;
     writer->totick = not writer->totick;
     writer->savethread = std::thread(processThread,std::ref(*writer));
-    writer->savethread.detach();
   }
   
   tprintfn(twr,1,"Writer Accumulator: %03d   Writing:%01d Tick/Tock:%01d  Bad in last save: %4.3f ", 
-	   writer->crec, writer->savethread.joinable(),writer->totick, writer->fbad*100);
+	   writer->crec, writer->writing,writer->totick, writer->fbad*100);
 }
 
 
@@ -203,6 +204,7 @@ void writerWritePS (WRITER *writer, float* ps) {
 // }
 
 void writerCleanUp(WRITER *writer) {
+  if (writer->savethread.joinable()) writer->savethread.join();
   printf ("Closing/renaming output files...\n");
   closeAndRename(writer);
 }
