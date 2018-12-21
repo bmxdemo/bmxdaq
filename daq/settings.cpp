@@ -217,8 +217,8 @@ void init_settings(SETTINGS *s, const char* fname) {
     char hostname[256];
     gethostname(hostname,255);
     int daqNum;
-    if (strcmp(hostname,captain_hostname)) daqNum=1;
-    else if (strcmp(hostname,sailor_hostname)) daqNum=2;
+    if (strcmp(hostname,captain_hostname)==0) daqNum=1;
+    else if (strcmp(hostname,sailor_hostname)==0) daqNum=2;
     else {
       printf ("Hostname: %s\n", hostname);
       printf ("Neither captain nor sailor.\n Aborting.\n");
