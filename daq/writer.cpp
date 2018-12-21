@@ -150,7 +150,7 @@ void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr) {
     writer->savethread = std::thread(processThread,std::ref(*writer));
   }
   
-  tprintfn(twr,1,"Writer Accumulator: %03d   Writing:%01d Tick/Tock:%01d  Bad in last save: %4.3f ", 
+  tprintfn(twr,1,"Writer Accumulator: %03d   Writing:%01d Tick/Tock:%01d  Reject in last save: %4.3f%%", 
 	   writer->crec, writer->writing,writer->totick, writer->fbad*100);
 }
 
