@@ -17,15 +17,8 @@ void ringbufferInit(RINGBUFFER *rb, SETTINGS *set, DIGICARD *dc){
   time_t rawtime;
   time ( &rawtime );
   struct tm *ti = gmtime ( &rawtime );
-  printf ("here2 %s\n",rb->fname_pattern);
   snprintf(rb->filename, MAXFNLEN,rb->fname_pattern, ti->tm_year - 100 , ti->tm_mon + 1, 
 	  ti->tm_mday, ti->tm_hour, ti->tm_min, ti->tm_sec);
-  printf ("here3 %s\n", rb->filename);
-
-
-
-
-
 
 
   if (set->ringbuffer_size>MAXCHUNKS) {
