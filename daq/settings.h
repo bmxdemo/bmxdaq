@@ -86,5 +86,5 @@ struct SETTINGS {
 #define VERSION "1.0_multi"
 
 
-void init_settings(SETTINGS *settings, const char* inifile, int daqNum);
+void init_settings(SETTINGS *settings, const char* inifile);
 void print_settings(SETTINGS *s);

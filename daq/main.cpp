@@ -44,9 +44,9 @@ int main(int argc,char **argv)
 
   if(argc>=2) {
     char fname_ini[256];
-    init_settings(&settings,argv[1],1);
+    init_settings(&settings,argv[1]);
   } else
-    init_settings(&settings,NULL,1);
+    init_settings(&settings,NULL);
 
   // intialize
   print_settings(&settings);

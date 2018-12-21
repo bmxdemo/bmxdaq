@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <unistd.h>
 #include "time.h"
 
 int my_linecount(FILE *f)
@@ -15,9 +16,8 @@ int my_linecount(FILE *f)
   return i0;
 }
 
-void init_settings(SETTINGS *s, const char* fname, int daqNum) { 
+void init_settings(SETTINGS *s, const char* fname) { 
     s->debug=0;
-    s->daqNum=daqNum;
     s->card_mask = 3; //use both cards
     s->sample_rate=1.25e9;
     s->spc_sample_rate=1250*1000000;
@@ -42,7 +42,12 @@ void init_settings(SETTINGS *s, const char* fname, int daqNum) {
     s->print_every=1;
     s->ringbuffer_size=8;
     char root_output_pattern[MAXCHAR];
+    char captain_hostname[256];
+    char sailor_hostname[256];
     sprintf(root_output_pattern,"%%02d%%02d%%02d_%%02d%%02d"); 
+    sprintf(captain_hostname,"palantir2"); 
+    sprintf(sailor_hostname,"palantir3"); 
+
     sprintf(s->ringbuffer_output_pattern, "%%02d%%02d%%02d_%%02d%%02d%%02d.ring");
     s->fg_nfreq=0;
     s->fg_baudrate=9600;
@@ -115,6 +120,10 @@ void init_settings(SETTINGS *s, const char* fname, int daqNum) {
 	     s->average_recs=atoi(s2);
 	   else if(!strcmp(s1,"root_output_pattern="))
 	     strcpy(root_output_pattern,s2);
+	   else if(!strcmp(s1,"captain_hostname="))
+	     strcpy(captain_hostname,s2);
+	   else if(!strcmp(s1,"sailor_hostname="))
+	     strcpy(sailor_hostname,s2);
            else if(!strcmp(s1,"ringbuffer_output_pattern="))
              strcpy(s->ringbuffer_output_pattern,s2);
            else if(!strcmp(s1,"ringbuffer_size="))
@@ -205,6 +214,18 @@ void init_settings(SETTINGS *s, const char* fname, int daqNum) {
 	 fclose(fi);
      }
 
+    char hostname[256];
+    gethostname(hostname,255);
+    int daqNum;
+    if (strcmp(hostname,captain_hostname)) daqNum=1;
+    else if (strcmp(hostname,sailor_hostname)) daqNum=2;
+    else {
+      printf ("Hostname: %s\n", hostname);
+      printf ("Neither captain nor sailor.\n Aborting.\n");
+      exit(1);
+    }
+    
+    s->daqNum=daqNum;
     sprintf(s->ps_output_pattern,"%s_D%i.data",root_output_pattern,daqNum);
     sprintf(s->rfi_output_pattern,"%s_D%i.rfi",root_output_pattern,daqNum);
     sprintf(s->rfi_output_pattern,"%%02d%%02d%%02d_%%02d%%02d.outliers");
@@ -214,6 +235,8 @@ void init_settings(SETTINGS *s, const char* fname, int daqNum) {
 void print_settings(SETTINGS *s) {
   printf ("\n******************************************************************\n\n");
   printf ("BMX DAQ, version %s \n\n",VERSION);
+  printf ("Role: ");
+  if (s->daqNum==1) printf ("Captain\n"); else printf ("Sailor\n");
   printf ("Sampling rate: %5.3g GS\n", s->sample_rate/1e9);
   printf ("FFT buffer size: %i\n", s->fft_size);
   printf ("Notify size: %iMB\n", s->fft_size*(1+(s->channel_mask==3))/(1024*1024));
