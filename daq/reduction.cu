@@ -195,7 +195,6 @@ void getAbsMax(cufftReal *input, cufftReal * output, cufftReal * deviceOutput, i
 
 //Reduction algorithm to calculate power spectrum. Take bsize complex numbers 
 //starting at ffts[istart+bsize*blocknumber] and their copies in NCHUNS, and add the squares
-
 __global__ void ps_reduce(cufftComplex *ffts, float* output_ps, size_t istart, size_t avgsize) {
   int tid=threadIdx.x; // thread
   int bl=blockIdx.x; // block, ps bin #
@@ -221,7 +220,6 @@ __global__ void ps_reduce(cufftComplex *ffts, float* output_ps, size_t istart, s
   }
   if (tid==0) output_ps[bl]=work[0];
 }
-
 
 //Reduction algorithm, to calculate cross power spectrum
 __global__ void ps_X_reduce(cufftComplex *fftsA, cufftComplex *fftsB, 
@@ -257,3 +255,50 @@ __global__ void ps_X_reduce(cufftComplex *fftsA, cufftComplex *fftsB,
     output_ps_imag[bl]=workI[0];
   }
 } 
+
+
+
+
+
+// Overwrite CH1 FFT with (CH1+CH2)*CONJ((CH3+CH4))
+__global__ void C12_Cross(cufftComplex *ffts1, cufftComplex *ffts2, cufftComplex *ffts3, cufftComplex *ffts4) {
+  int i = (blockDim.x * blockIdx.x + threadIdx.x);
+  float ch12r=ffts1[i].x+ffts2[i].x;
+  float ch12i=ffts1[i].y+ffts2[i].y;
+  float ch34r=ffts3[i].x+ffts4[i].x;
+  float ch34i=ffts3[i].y+ffts4[i].y;
+  float XR=(ch12r*ch34r)+(ch12i*ch34i);
+  float XI=(ch12r*ch34i)-(ch12i*ch34r);
+  ffts1[i].x=XR;
+  ffts1[i].x=XI;
+}
+
+
+// find a global maximum and store it into device variable
+__global__ void C12_FindMax(cufftReal *data, int totsize, int stream_number) {
+  int tid=threadIdx.x; // thread
+  //int bl=blockIdx.x; // block, ps bin # // assumed zero here
+  int nth=blockDim.x; //nthreads
+  __shared__ float work[1024];
+  //global pos
+  size_t pos=tid;
+  work[tid]=0;
+  while (pos<totsize) {
+    work[tid]=data[pos]>work[tid]? data[pos] : work[tid];
+    pos+=nth;
+  }
+  // now do the tree reduce.
+  int csum=nth/2;
+  while (csum>0) {
+    __syncthreads();
+    if (tid<csum) {
+      work[tid]+=work[tid+csum]>work[tid] ? work[tid+csum]: work[tid];
+    }
+    csum/=2;
+  }
+  if (tid==0) cu_measured_delay[stream_number]=work[0];
+}
+
+
+
+

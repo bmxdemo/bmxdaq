@@ -48,6 +48,12 @@ struct SETTINGS {
   // ring buffer
   int ringbuffer_size;
 
+  // delay calibration
+
+  long int delay1, delay2; // digital deltays for card 1,2
+  int measure_delay; // measure delays between cards 1 and 2
+  
+
   // output options
   char ps_output_pattern[MAXCHAR];
   char rfi_output_pattern[MAXCHAR];
@@ -55,7 +61,6 @@ struct SETTINGS {
   int new_file_every;
   int average_recs; // how many records to average
 
-  
   // printout options
   int print_meanvar;
   int print_maxp;

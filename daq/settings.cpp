@@ -58,6 +58,10 @@ void init_settings(SETTINGS *s, const char* fname) {
     s->n_sigma_null = 5;
     s->nsamples=0;
     s->wave_nbytes=0;
+    s->delay1=0;
+    s->delay2=0;
+    s->measure_delay=0;
+    
     sprintf(s->wave_fname,"wave.bin");
      
     if (fname) {
@@ -142,6 +146,8 @@ void init_settings(SETTINGS *s, const char* fname) {
 	     s->fg_switchevery=atoi(s2);
 	   else if(!strcmp(s1,"fg_port="))
 	     strcpy(s->fg_port,s2);
+	   else if(!strcmp(s1,"measure_delay="))
+	     s->measure_delay=atoi(s2);
 	   else if(!strcmp(s1,"lj_Noff="))
 	     s->lj_Noff=atoi(s2);
 	   else if(!strcmp(s1,"lj_Non="))

@@ -148,8 +148,9 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   }
 
   printf ("Setting up CUFFT\n");
-  int status=cufftPlanMany(&gc->plan, 1, (int*)&(set->fft_size), NULL, 0, 0, 
-        NULL, 2*transform_size,1, CUFFT_R2C, nchan);
+  //  int status=cufftPlanMany(&gc->plan, 1, (int*)&(set->fft_size), NULL, 0, 0, 
+  //    NULL, 2*transform_size,1, CUFFT_R2C, nchan);
+  int status=cufftPlan1d(&gc->plan, set->fft_size, CUFFT_R2C, nchan);
 
   if (status!=CUFFT_SUCCESS) {
     printf ("Plan failed:");
@@ -161,6 +162,22 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     printf("\n");
     exit(1);
   }
+
+  status=cufftPlan1d(&gc->iplan, set->fft_size, CUFFT_C2R, 1); // inverse transform always for one channel only
+
+  if (status!=CUFFT_SUCCESS) {
+    printf ("Plan failed:");
+    if (status==CUFFT_ALLOC_FAILED) printf("CUFFT_ALLOC_FAILED");
+    if (status==CUFFT_INVALID_VALUE) printf ("CUFFT_INVALID_VALUE");
+    if (status==CUFFT_INTERNAL_ERROR) printf ("CUFFT_INTERNAL_ERROR");
+    if (status==CUFFT_SETUP_FAILED) printf ("CUFFT_SETUP_FAILED");
+    if (status==CUFFT_INVALID_SIZE) printf ("CUFFT_INVALID_SIZE");
+    printf("\n");
+    exit(1);
+  }
+
+
+  
   printf ("Setting up CUDA streams & events\n");
   gc->nstreams = set->cuda_streams;
   gc->threads=set->cuda_threads;
@@ -174,6 +191,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   gc->eDoneFloatize=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
   gc->eDoneFFT=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
   gc->eDonePost=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
+  gc->eDoneCalib=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
   gc->eDoneCopyBack=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
   gc->eBeginCopyBack=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
   for (int i=0;i<gc->nstreams;i++) {
@@ -185,6 +203,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     CHK(cudaEventCreate(&gc->eDoneFloatize[i]));
     CHK(cudaEventCreate(&gc->eDoneFFT[i]));
     CHK(cudaEventCreate(&gc->eDonePost[i]));
+    CHK(cudaEventCreate(&gc->eDoneCalib[i]));
     CHK(cudaEventCreate(&gc->eDoneCopyBack[i]));
     CHK(cudaEventCreate(&gc->eBeginCopyBack[i]));
   }
@@ -229,11 +248,12 @@ void printDt (cudaEvent_t cstart, cudaEvent_t cstop, float * total, TWRITER * t)
 
 void printTiming(GPUCARD *gc, int i, TWRITER * t) {
   float totalTime = 0;
-  tprintfn (t, 0, "GPU timing (copy/floatize/fft/post/copyback): ");
+  tprintfn (t, 0, "GPU timing (copy/floatize/fft/post/calib/copyback): ");
   printDt (gc->eStart[i], gc->eDoneCopy[i], &totalTime, t);
   printDt (gc->eDoneCopy[i], gc->eDoneFloatize[i], &totalTime, t);
   printDt (gc->eDoneFloatize[i], gc->eDoneFFT[i], &totalTime, t);
   printDt (gc->eDoneFFT[i], gc->eDonePost[i], &totalTime, t);
+  printDt (gc->eDonePost[i], gc->eDoneCalib[i], &totalTime, t);
   printDt (gc->eBeginCopyBack[i], gc->eDoneCopyBack[i], &totalTime, t);
   tprintfn (t,1,"");
   tprintfn (t, 1, "GPU timing total: %3.2f ", totalTime);
@@ -308,6 +328,13 @@ void printLiveStat(SETTINGS *set, GPUCARD *gc, int8_t **buf, TWRITER *twr) {
     }
   }
 
+  if (set->measure_delay) {
+    float delayms=gc->last_measured_delay/(set->sample_rate*1e6)*1e-3;
+    tprintfn (twr,1, "Measured delay: %i samples = %3.3f ms. Applied delay: %i %i ",
+	      gc->last_measured_delay, delayms, set->delay1, set->delay2);
+
+  }
+
 }
 
 //Process one data packet from the digitizer
@@ -329,7 +356,7 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, SETTIN
     // printf ("%i ", cudaEventQuery(gc->eDoneFloatize[gc->fstream])==cudaSuccess);
     // printf ("%i ", cudaEventQuery(gc->eDoneFFT[gc->fstream])==cudaSuccess);
     // printf ("%i [%i]\n ", cudaEventQuery(gc->eDonePost[gc->fstream])==cudaSuccess, gc->fstream);
-    if(cudaEventQuery(gc->eDonePost[gc->fstream])==cudaSuccess){
+    if(cudaEventQuery(gc->eDoneCalib[gc->fstream])==cudaSuccess){
 
       //print time and write to file
       cudaEventRecord(gc->eBeginCopyBack[gc->fstream], gc->streams[gc->fstream]);
@@ -338,6 +365,7 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, SETTIN
       cudaEventRecord(gc->eDoneCopyBack[gc->fstream], gc->streams[gc->fstream]);
       //cudaThreadSynchronize();
       cudaEventSynchronize(gc->eDoneCopyBack[gc->fstream]);
+      gc->last_measured_delay=gc->measured_delay[gc->fstream];
       printTiming(gc,gc->fstream,twr);
       printLiveStat(set,gc,buf,twr);
       writerAccumulatePS(wr,gc->outps,twr);
@@ -377,7 +405,7 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, SETTIN
   //perform fft
   int status = cufftSetStream(gc->plan, cs);
   if(status !=CUFFT_SUCCESS) {
-    printf("CUFFTSETSTREAM failed\n");
+    printf("CUFFSTETSTREAM failed\n");
     exit(1);
   }
   for(int i=0; i<nCards;i++){
@@ -433,6 +461,34 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, SETTIN
  
   CHK(cudaGetLastError());
   cudaEventRecord(gc->eDonePost[csi], cs);
-      
+
+  if (set->measure_delay) {
+
+    int blocksPerGrid = gc->transform_size / threadsPerBlock;
+    C12_Cross <<<blocksPerGrid, threadsPerBlock, 0, cs >>> (&(gc->cfft[csi][0]), &(gc->cfft[csi][gc->transform_size]),
+			    &(gc->cfft[csi][2*gc->transform_size]), &(gc->cfft[csi][3*gc->transform_size]));
+    
+    int status = cufftSetStream(gc->iplan, cs);
+    if(status !=CUFFT_SUCCESS) {
+      printf("CUFFTSETSTREAM failed\n");
+      exit(1);
+    }
+    status=cufftExecC2R(gc->plan, &(gc->cfft[csi][0]), &(gc->cfbuf[csi][0]) );
+    if (status!=CUFFT_SUCCESS) {
+      printf("CUFFT FAILED\n");
+      exit(1);
+    } 
+
+    C12_FindMax<<<1,1024,0,cs>>> (&(gc->cfbuf[csi][0]),gc->fftsize,csi);
+    
+    cudaMemcpyFromSymbol(&(gc->measured_delay[csi]), "cu_measured_delay", sizeof(int), csi, cudaMemcpyDeviceToHost);
+  } 
+  // this is outside, side this is what means this stream is done.
+
+  cudaEventRecord(gc->eDoneCalib[csi], cs);
+  
+
+
+  
   return true;
 }
