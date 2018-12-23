@@ -41,19 +41,19 @@ void printDeviceProperties(cudaDeviceProp * prop, int dev){
   printf("\nGPU properties \n====================\n");
   printf("Version number:                %d.%d\n",  prop->major, prop->minor);
   printf("Name:                          %s\n",  prop->name);
-  printf("Total global memory:           %u\n",  prop->totalGlobalMem);
-  printf("Total shared memory per block: %u\n",  prop->sharedMemPerBlock);
+  printf("Total global memory:           %lu\n",  prop->totalGlobalMem);
+  printf("Total shared memory per block: %lu\n",  prop->sharedMemPerBlock);
   printf("Total registers per block:     %d\n",  prop->regsPerBlock);
   printf("Warp size:                     %d\n",  prop->warpSize);
-  printf("Maximum memory pitch:          %u\n",  prop->memPitch);
+  printf("Maximum memory pitch:          %lu\n",  prop->memPitch);
   printf("Maximum threads per block:     %d\n",  prop->maxThreadsPerBlock);
   for (int i = 0; i < 3; ++i)
   printf("Maximum dimension %d of block:  %d\n", i, prop->maxThreadsDim[i]);
   for (int i = 0; i < 3; ++i)
   printf("Maximum dimension %d of grid:   %d\n", i, prop->maxGridSize[i]);
   printf("Clock rate:                    %d\n",  prop->clockRate);
-  printf("Total constant memory:         %u\n",  prop->totalConstMem);
-  printf("Texture alignment:             %u\n",  prop->textureAlignment);
+  printf("Total constant memory:         %lu\n",  prop->totalConstMem);
+  printf("Texture alignment:             %lu\n",  prop->textureAlignment);
   printf("Concurrent copy and execution: %s\n",  (prop->deviceOverlap ? "Yes" : "No"));
   printf("Number of multiprocessors:     %d\n",  prop->multiProcessorCount);
   printf("Kernel execution timeout:      %s\n\n",  (prop->kernelExecTimeoutEnabled ? "Yes" : "No"));

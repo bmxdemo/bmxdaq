@@ -4,7 +4,7 @@
 #
 GCC=g++
 NVCC=nvcc
-GCCOPT=-Ofast -Wno-format-security -O3 -std=c++11 -Wno-write-strings
+GCCOPT=-Ofast -Wno-format-security -O3 -std=c++11 -Wno-write-strings -Wno-format-overflow -Wno-format
 CUDAOPT=-O3 -std=c++11
 FFTWLINK=-lfftw3f
 #SPCM DIR (to be set in settings.mak)
