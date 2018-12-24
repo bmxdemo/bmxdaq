@@ -145,6 +145,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     CHK(cudaMalloc(&gc->cfbuf[i], bufsize*nCards*sizeof(cufftReal)));
     CHK(cudaMalloc(&gc->cfft[i],transform_size*nchan*nCards*sizeof(cufftComplex)));
     CHK(cudaMalloc(&gc->coutps[i],gc->tot_pssize*sizeof(float)));
+    CHK(cudaMalloc(&gc->cmeasured_delay,nStreams*sizeof(int)));
   }
 
   printf ("Setting up CUFFT\n");
@@ -250,13 +251,14 @@ void printTiming(GPUCARD *gc, int i, TWRITER * t) {
   float totalTime = 0;
   tprintfn (t, 0, "GPU timing (copy/floatize/fft/post/calib/copyback): ");
   printDt (gc->eStart[i], gc->eDoneCopy[i], &totalTime, t);
+  totalTime=0;
   printDt (gc->eDoneCopy[i], gc->eDoneFloatize[i], &totalTime, t);
   printDt (gc->eDoneFloatize[i], gc->eDoneFFT[i], &totalTime, t);
   printDt (gc->eDoneFFT[i], gc->eDonePost[i], &totalTime, t);
   printDt (gc->eDonePost[i], gc->eDoneCalib[i], &totalTime, t);
   printDt (gc->eBeginCopyBack[i], gc->eDoneCopyBack[i], &totalTime, t);
   tprintfn (t,1,"");
-  tprintfn (t, 1, "GPU timing total: %3.2f ", totalTime);
+  tprintfn (t, 1, "GPU timing cumpute total: %3.2f ", totalTime);
 }
 
 
@@ -329,8 +331,8 @@ void printLiveStat(SETTINGS *set, GPUCARD *gc, int8_t **buf, TWRITER *twr) {
   }
 
   if (set->measure_delay) {
-    float delayms=gc->last_measured_delay/(set->sample_rate*1e6)*1e-3;
-    tprintfn (twr,1, "Measured delay: %i samples = %3.3f ms. Applied delay: %i %i ",
+    float delayms=float(gc->last_measured_delay)*1.0/(set->sample_rate)*1e3;
+    tprintfn (twr,1, "Measured delay: %i samples = %f ms. Applied delay: %i %i ",
 	      gc->last_measured_delay, delayms, set->delay1, set->delay2);
 
   }
@@ -362,10 +364,10 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, SETTIN
       cudaEventRecord(gc->eBeginCopyBack[gc->fstream], gc->streams[gc->fstream]);
       CHK(cudaMemcpyAsync(gc->outps,gc->coutps[gc->fstream], 
           gc->tot_pssize*sizeof(float), cudaMemcpyDeviceToHost, gc->streams[gc->fstream]));
+      CHK(cudaMemcpyAsync(&gc->last_measured_delay,&(gc->cmeasured_delay[gc->fstream]),
+          sizeof(int), cudaMemcpyDeviceToHost, gc->streams[gc->fstream]));
       cudaEventRecord(gc->eDoneCopyBack[gc->fstream], gc->streams[gc->fstream]);
-      //cudaThreadSynchronize();
       cudaEventSynchronize(gc->eDoneCopyBack[gc->fstream]);
-      gc->last_measured_delay=gc->measured_delay[gc->fstream];
       printTiming(gc,gc->fstream,twr);
       printLiveStat(set,gc,buf,twr);
       writerAccumulatePS(wr,gc->outps,twr);
@@ -417,49 +419,54 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, SETTIN
   } 
   cudaEventRecord(gc->eDoneFFT[csi], cs);
   
-  //compute spectra
-  if (gc->nchan==1) {
-    int psofs=0;
-    for (int i=0; i<gc->ncuts; i++) {
-      ps_reduce<<<gc->pssize[i], 1024, 0, cs>>> (gc->cfft[csi], &(gc->coutps[csi][psofs]), 
-          gc->ndxofs[i], gc->fftavg[i]);
-      psofs+=gc->pssize[i];
-    }
-  } 
-  else if(gc->nchan==2){
-    // note we need to take into account the tricky N/2+1 FFT size while we do N/2 binning
-    // pssize+2 = transformsize+1
-        
-    int psofs=0;
-    for (int i=0; i<gc->ncuts; i++) {
-   
-      for(int j=0; j<nCards; j++){
-        ps_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][2*j*gc->transform_size], 
-            &(gc->coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i]);
-        psofs+=gc->pssize1[i];
-        
-        ps_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][(2*j+1)*gc->transform_size], 
-            &(gc->coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i]);
-        psofs+=gc->pssize1[i];
+  if (!set->measure_delay) {
+
+    //compute spectra
+    if (gc->nchan==1) {
+      int psofs=0;
+      for (int i=0; i<gc->ncuts; i++) {
+	ps_reduce<<<gc->pssize[i], 1024, 0, cs>>> (gc->cfft[csi], &(gc->coutps[csi][psofs]), 
+						   gc->ndxofs[i], gc->fftavg[i]);
+	psofs+=gc->pssize[i];
       }
-      //cross spectra
-      for(int j = 0; j<nCards*2; j++)
-        for(int k = j+1; k < nCards*2 ; k++){
-         //NEED TO CHECK THAT PARAMETERS ARE ALL CORRECT FOR TWO CARDS AND FOR ONE CARD....
-	  ps_X_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][j*gc->transform_size], 
-							&gc->cfft[csi][k*gc->transform_size], 
-	    &(gc->coutps[csi][psofs]), &(gc->coutps[csi][psofs+gc->pssize1[i]]),
-            gc->ndxofs[i], gc->fftavg[i]);
-          psofs+=2*gc->pssize1[i];
-        }
+    } 
+    else if(gc->nchan==2){
+      // note we need to take into account the tricky N/2+1 FFT size while we do N/2 binning
+      // pssize+2 = transformsize+1
+        
+      int psofs=0;
+      for (int i=0; i<gc->ncuts; i++) {
+   
+	for(int j=0; j<nCards; j++){
+	  ps_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][2*j*gc->transform_size], 
+						      &(gc->coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i]);
+	  psofs+=gc->pssize1[i];
+        
+	  ps_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][(2*j+1)*gc->transform_size], 
+						      &(gc->coutps[csi][psofs]), gc->ndxofs[i], gc->fftavg[i]);
+	  psofs+=gc->pssize1[i];
+	}
+	//cross spectra
+	for(int j = 0; j<nCards*2; j++)
+	  for(int k = j+1; k < nCards*2 ; k++){
+	    //NEED TO CHECK THAT PARAMETERS ARE ALL CORRECT FOR TWO CARDS AND FOR ONE CARD....
+	    ps_X_reduce<<<gc->pssize1[i], 1024, 0, cs>>> (&gc->cfft[csi][j*gc->transform_size], 
+							  &gc->cfft[csi][k*gc->transform_size], 
+							  &(gc->coutps[csi][psofs]), &(gc->coutps[csi][psofs+gc->pssize1[i]]),
+							  gc->ndxofs[i], gc->fftavg[i]);
+	    psofs+=2*gc->pssize1[i];
+	  }
+      }
     }
-  }
-  else{
-    printf("Can only handle 1 or 2 channels\n");
-    exit(1);
-  }
+    else{
+      printf("Can only handle 1 or 2 channels\n");
+      exit(1);
+    }
  
-  CHK(cudaGetLastError());
+    CHK(cudaGetLastError());
+
+  }
+
   cudaEventRecord(gc->eDonePost[csi], cs);
 
   if (set->measure_delay) {
@@ -468,20 +475,21 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, SETTIN
     C12_Cross <<<blocksPerGrid, threadsPerBlock, 0, cs >>> (&(gc->cfft[csi][0]), &(gc->cfft[csi][gc->transform_size]),
 			    &(gc->cfft[csi][2*gc->transform_size]), &(gc->cfft[csi][3*gc->transform_size]));
     
+    CHK(cudaGetLastError());
     int status = cufftSetStream(gc->iplan, cs);
     if(status !=CUFFT_SUCCESS) {
       printf("CUFFTSETSTREAM failed\n");
       exit(1);
     }
-    status=cufftExecC2R(gc->plan, &(gc->cfft[csi][0]), &(gc->cfbuf[csi][0]) );
+    status=cufftExecC2R(gc->iplan, &(gc->cfft[csi][0]), &(gc->cfbuf[csi][0]) );
     if (status!=CUFFT_SUCCESS) {
       printf("CUFFT FAILED\n");
       exit(1);
     } 
 
-    C12_FindMax<<<1,1024,0,cs>>> (&(gc->cfbuf[csi][0]),gc->fftsize,csi);
-    
-    cudaMemcpyFromSymbol(&(gc->measured_delay[csi]), "cu_measured_delay", sizeof(int), csi, cudaMemcpyDeviceToHost);
+    C12_FindMax<<<1,1024,0,cs>>> (&(gc->cfbuf[csi][0]),gc->fftsize,&(gc->cmeasured_delay[csi]));
+    CHK(cudaGetLastError());
+
   } 
   // this is outside, side this is what means this stream is done.
 

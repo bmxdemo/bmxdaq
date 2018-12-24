@@ -5,6 +5,7 @@
 #define MAXCHAR 512
 #define MAXCUTS 10
 #define MAXFREQ 10
+#define MAXSTREAMS 8
 
 // modifiable settings
 struct SETTINGS {

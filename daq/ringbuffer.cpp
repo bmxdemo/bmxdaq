@@ -69,8 +69,8 @@ void fillRingBuffer(RINGBUFFER *rb, int8_t* src[2]) {
 
   // this makes the ringbuffer wait. Seem to keep the fill at 100% without
   // issues but perhaps revisit if neccessary.
-  for (int cardnum=0; cardnum<rb->ncards; cardnum++) 
-    if (rb->thread[cardnum].joinable()) rb->thread[cardnum].join();
+  //  for (int cardnum=0; cardnum<rb->ncards; cardnum++) 
+  //  if (rb->thread[cardnum].joinable()) rb->thread[cardnum].join();
 
   if (rb->filling[0] || rb->filling[1]) {
     rb->fillremain=rb->num_chunks;
