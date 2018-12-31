@@ -258,10 +258,11 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
   // start everything
   if(!set->simulate_digitizer){
 
-    for(int i=0; i<dc->num_cards; i++)
+    for(int i=0; i<dc->num_cards; i++) {
       if (ERR_OK!=spcm_dwSetParam_i32 (dc->hCard[i], SPC_M2CMD, M2CMD_CARD_START))
 	printErrorDie("Cannot start card.\n",dc, i, set);
-    sleep(1); // wait for cards to settle
+    }
+    sleep(1); // wait for cards to settle, cargo culting
     for(int i=0; i<dc->num_cards; i++){
       if (ERR_OK!=spcm_dwSetParam_i32 (dc->hCard[i], SPC_M2CMD, M2CMD_CARD_ENABLETRIGGER | M2CMD_DATA_STARTDMA))
 	printErrorDie("Cannot start DMA.\n",dc, i, set);
