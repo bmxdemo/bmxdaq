@@ -333,7 +333,7 @@ void printLiveStat(SETTINGS *set, GPUCARD *gc, int8_t **buf, TWRITER *twr) {
   if (set->measure_delay) {
     float delayms=float(gc->last_measured_delay)*1.0/(set->sample_rate)*1e3;
     tprintfn (twr,1, "Measured delay: %i samples = %f ms. Applied delay: %i %i ",
-	      gc->last_measured_delay, delayms, set->delay1, set->delay2);
+	      gc->last_measured_delay, delayms, set->delay[0], set->delay[1]);
 
   }
 
@@ -343,10 +343,11 @@ void printLiveStat(SETTINGS *set, GPUCARD *gc, int8_t **buf, TWRITER *twr) {
 //Input:
 //  gc: graphics card
 //      buf: data from digitizer
+//      pbuf: old data from digitizer (to implement delay) 
 //      wr: writer to write out power spectra and outliers to files
 
 //  set: settings
-int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, SETTINGS *set) {
+int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, int8_t **pbuf, WRITER *wr, TWRITER *twr, SETTINGS *set) {
   //streamed version
   //Check if other streams are finished and proccess the finished ones in order (i.e. print output to file)
 
@@ -385,9 +386,17 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, SETTIN
   
 
   //memory copy
-  for(int i=0; i<nCards; i++)
-    cudaMemcpyAsync(gc->cbuf[csi][i], buf[i], gc->bufsize , cudaMemcpyHostToDevice,cs);
-    
+  for(int i=0; i<nCards; i++) {
+    if (set->delay[i]==0) 
+      cudaMemcpyAsync(gc->cbuf[csi][i], buf[i], gc->bufsize , cudaMemcpyHostToDevice,cs);
+    else {
+      if (set->delay[i]>gc->fftsize) {printf ("Pathological delay.\n"); exit(1);}
+      unsigned ofs=set->delay[i]*gc->nchan;
+      cudaMemcpyAsync(&gc->cbuf[csi][i][ofs], buf[i], gc->bufsize-ofs , cudaMemcpyHostToDevice,cs);
+      if (pbuf[i])
+      	cudaMemcpyAsync(gc->cbuf[csi][i], &pbuf[i][gc->bufsize-ofs], ofs , cudaMemcpyHostToDevice,cs);
+    }
+  }
   //floatize
   cudaEventRecord(gc->eDoneCopy[csi], cs);
   int threadsPerBlock = gc->threads;

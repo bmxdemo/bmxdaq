@@ -51,7 +51,7 @@ struct SETTINGS {
 
   // delay calibration
 
-  long int delay1, delay2; // digital deltays for card 1,2
+  unsigned int delay[2]; // digital deltays for card 1,2 in samples
   int measure_delay; // measure delays between cards 1 and 2
   
 

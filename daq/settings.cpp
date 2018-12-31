@@ -58,8 +58,8 @@ void init_settings(SETTINGS *s, const char* fname) {
     s->n_sigma_null = 5;
     s->nsamples=0;
     s->wave_nbytes=0;
-    s->delay1=0;
-    s->delay2=0;
+    s->delay[0]=0;
+    s->delay[1]=0;
     s->measure_delay=0;
     
     sprintf(s->wave_fname,"wave.bin");

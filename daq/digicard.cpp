@@ -75,19 +75,26 @@ float deltaT (timespec t1,timespec t2) {
     + ( t2.tv_nsec - t1.tv_nsec )/ 1e9;
 }
 
+/* HINDY's stuff, doesn't seem to help
+
 void startDAQ(uint32 & dwError, drv_handle & hCard){
   dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD, M2CMD_CARD_START);
 }
 
 void startTrigger(uint32 & dwError, drv_handle & hCard){
-  dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD, M2CMD_CARD_ENABLETRIGGER);
+  //  dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD, M2CMD_DATA_STARTDMA);
+  //  timespec t1,t2;
   printf ("Waiting...\n");
   while (!_trigger) {};
-  dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD, M2CMD_DATA_STARTDMA);
+  //  clock_gettime(CLOCK_MONOTONIC, &t1);
+  dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD, M2CMD_CARD_ENABLETRIGGER | M2CMD_DATA_STARTDMA);
+  // clock_gettime(CLOCK_MONOTONIC, &t2);
+  // printf ("%i %i || %i %i \n",t1.tv_sec, t1.tv_nsec, t2.tv_sec, t2.tv_nsec);
 }
 
 void startDMA(uint32 & dwError, drv_handle & hCard){
 }
+*/
 
 /*
 **************************************************************************
@@ -244,10 +251,26 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
   printf("Number of digitizer cards: %d\n", dc->num_cards);
   uint32      dwError[2];
   int32       lStatus[2], lAvailUser[2], lPCPos[2], fill[2];
-  int8_t*    bufstart[2];
+  int8_t*     bufstart[2];
+  int8_t*     prev_bufstart[2]; // previous buf start
   int gpuFails=0;
+  prev_bufstart[0]=prev_bufstart[1]=NULL;
   // start everything
   if(!set->simulate_digitizer){
+
+    for(int i=0; i<dc->num_cards; i++)
+      if (ERR_OK!=spcm_dwSetParam_i32 (dc->hCard[i], SPC_M2CMD, M2CMD_CARD_START))
+	printErrorDie("Cannot start card.\n",dc, i, set);
+    sleep(1); // wait for cards to settle
+    for(int i=0; i<dc->num_cards; i++){
+      if (ERR_OK!=spcm_dwSetParam_i32 (dc->hCard[i], SPC_M2CMD, M2CMD_CARD_ENABLETRIGGER | M2CMD_DATA_STARTDMA))
+	printErrorDie("Cannot start DMA.\n",dc, i, set);
+      usleep(35000);
+    }
+	
+
+
+     /** HINDY's stuff, doesn't seem to work 
     std::thread th[2];
     //start DAQ
     for(int i=0; i<dc->num_cards; i++)
@@ -258,6 +281,8 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
       if (dwError[i] != ERR_OK) printErrorDie("Cannot start card.\n",dc, i, set);
     printf ("Card started.\n");
     //enable trigger
+
+
     _trigger=false;
     for(int i=0; i<dc->num_cards; i++)
       th[i] = std::thread(startTrigger, std::ref(dwError[i]), std::ref(dc->hCard[i]));
@@ -277,7 +302,7 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
     // for (int i=0; i<dc->num_cards; i++)    startDMA(dwError[i],dc->hCard[i]);
     // for(int i=0; i<dc->num_cards; i++)
     //   if (dwError[i] != ERR_OK) printErrorDie("Cannot start DMA.\n",dc, i, set);
-
+    **/
   }
   else
     dwError[0]=dwError[1] = ERR_OK;
@@ -332,7 +357,6 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
         clock_gettime(CLOCK_REALTIME, &tSim);
         dt=deltaT(t1,tSim);
         tprintfn (t,1,"Measured dt for card %d: %f ms, rate=%f MHz", dc->serialNumber[i], dt*1e3, set->fft_size/dt/1e6);
-        
       }
     }
     if (dumpSignal & (set->ringbuffer_size>0)) {
@@ -351,7 +375,9 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
     if (set->dont_process) 
       tprintfn (t,1," ** no GPU processing");
     else if( (sample_count >= 2) || set->simulate_digitizer){//don't proccess first few cycles if coming from ADC
-      processed = gpuProcessBuffer(gc,bufstart,w,t, set);
+      processed = gpuProcessBuffer(gc,bufstart,prev_bufstart,w,t, set);
+      prev_bufstart[0]=bufstart[0];
+      prev_bufstart[1]=bufstart[1];
       if (!processed) gpuFails++;
     }
 

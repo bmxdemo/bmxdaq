@@ -66,5 +66,6 @@ struct GPUCARD {
 
 extern "C" {
   void gpuCardInit (GPUCARD *gcard, SETTINGS *set);
-  int  gpuProcessBuffer(GPUCARD *gcard, int8_t ** buf, WRITER *w, TWRITER *t, SETTINGS *set);
+  int  gpuProcessBuffer(GPUCARD *gcard, int8_t ** buf, int8_t ** prevbuf, 
+			WRITER *w, TWRITER *t, SETTINGS *set);
 }
