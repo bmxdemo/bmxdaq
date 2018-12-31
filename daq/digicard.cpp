@@ -28,6 +28,7 @@
 
 volatile sig_atomic_t stopSignal = 0;
 volatile sig_atomic_t dumpSignal = 0;
+volatile bool _trigger = false;
 
 void loop_signal_handler(int sig){ // can be called asynchronously
   if (sig==SIGINT)  stopSignal=1;
@@ -43,7 +44,7 @@ szTypeToName: doing name translation
 
 
 char* szTypeToName (int32 lCardType){
-  static char szName[50];
+ static char szName[50];
   switch (lCardType & TYP_SERIESMASK){
     case TYP_M2ISERIES:     sprintf (szName, "M2i.%04x", (unsigned int) (lCardType & TYP_VERSIONMASK));      break;
     case TYP_M2IEXPSERIES:  sprintf (szName, "M2i.%04x-Exp", (unsigned int) (lCardType & TYP_VERSIONMASK));  break;
@@ -80,10 +81,12 @@ void startDAQ(uint32 & dwError, drv_handle & hCard){
 
 void startTrigger(uint32 & dwError, drv_handle & hCard){
   dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD, M2CMD_CARD_ENABLETRIGGER);
+  printf ("Waiting...\n");
+  while (!_trigger) {};
+  dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD, M2CMD_DATA_STARTDMA);
 }
 
 void startDMA(uint32 & dwError, drv_handle & hCard){
-  dwError = spcm_dwSetParam_i32 (hCard, SPC_M2CMD, M2CMD_DATA_STARTDMA);
 }
 
 /*
@@ -100,7 +103,8 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
   card->num_cards = 1 + (set->card_mask==3);
   card->lNotifySize = set->fft_size*(1+card->two_channel);
   card->lBufferSize = card->lNotifySize*set->buf_mult;
-    
+  printf ("%i",set->buf_mult);
+  printf ("Notify size: %iMB Buffer size: %iMB",card->lNotifySize/1024/1024, card->lBufferSize/1024/1024);
   /// alocate buffer
   card->pnData=(int16**)malloc(2*sizeof(int16*));
   for(int i=0; i<card->num_cards; i++){
@@ -251,21 +255,29 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
     for(int i=0; i<dc->num_cards; i++)
       th[i].join();
     for(int i=0; i<dc->num_cards; i++)
-      if (dwError[i] != ERR_OK) printErrorDie("Cannot start FIFO\n",dc, i, set);
+      if (dwError[i] != ERR_OK) printErrorDie("Cannot start card.\n",dc, i, set);
+    printf ("Card started.\n");
     //enable trigger
+    _trigger=false;
     for(int i=0; i<dc->num_cards; i++)
       th[i] = std::thread(startTrigger, std::ref(dwError[i]), std::ref(dc->hCard[i]));
+    sleep(1);
+    printf ("Go!\n");
+    _trigger=true;
+
     for(int i=0; i<dc->num_cards; i++)
       th[i].join();
     for(int i=0; i<dc->num_cards; i++)
-      if (dwError[i] != ERR_OK) printErrorDie("Cannot enable trigger\n",dc, i, set);
-    //start DMA
-    for(int i=0; i<dc->num_cards; i++)
-      th[i] = std::thread(startDMA, std::ref(dwError[i]), std::ref(dc->hCard[i]));
-    for(int i=0; i<dc->num_cards; i++)
-      th[i].join();
-    for(int i=0; i<dc->num_cards; i++)
-      if (dwError[i] != ERR_OK) printErrorDie("Cannot start DMA\n",dc, i, set);
+      if (dwError[i] != ERR_OK) printErrorDie("Cannot enable trigger.\n",dc, i, set);
+    // //start DMA
+    // for(int i=0; i<dc->num_cards; i++)
+    //   th[i] = std::thread(startDMA, std::ref(dwError[i]), std::ref(dc->hCard[i]));
+    // for(int i=0; i<dc->num_cards; i++)
+    //   th[i].join();
+    // for (int i=0; i<dc->num_cards; i++)    startDMA(dwError[i],dc->hCard[i]);
+    // for(int i=0; i<dc->num_cards; i++)
+    //   if (dwError[i] != ERR_OK) printErrorDie("Cannot start DMA.\n",dc, i, set);
+
   }
   else
     dwError[0]=dwError[1] = ERR_OK;
@@ -323,11 +335,11 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
         
       }
     }
-    if (dumpSignal) {
+    if (dumpSignal & (set->ringbuffer_size>0)) {
       dumpRingBuffer(rb);
       dumpSignal=0;
     }
-    fillRingBuffer(rb,bufstart);
+    if (set->ringbuffer_size>0) fillRingBuffer(rb,bufstart);
     clock_gettime(CLOCK_REALTIME, &timeNow);
     double accum = deltaT(timeStart, timeNow);
     tprintfn(t,1,"Time: %fs;", accum);
@@ -335,7 +347,7 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
         tprintfn(t,1,"Card %d Status:%i; Pos:%08x; Len:%08x; digitizer buffer fill %i/1000   ", dc->serialNumber[i],
             lStatus[i], lPCPos[i], lAvailUser[i], fill[i]);
     }
-    printInfoRingBuffer(rb,t);
+    if (set->ringbuffer_size>0) printInfoRingBuffer(rb,t);
     if (set->dont_process) 
       tprintfn (t,1," ** no GPU processing");
     else if( (sample_count >= 2) || set->simulate_digitizer){//don't proccess first few cycles if coming from ADC

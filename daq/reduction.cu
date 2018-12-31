@@ -263,18 +263,23 @@ __global__ void ps_X_reduce(cufftComplex *fftsA, cufftComplex *fftsB,
 // Overwrite CH1 FFT with (CH1+CH2)*CONJ((CH3+CH4))
 __global__ void C12_Cross(cufftComplex *ffts1, cufftComplex *ffts2, cufftComplex *ffts3, cufftComplex *ffts4) {
   int i = (blockDim.x * blockIdx.x + threadIdx.x);
-  // float ch12r=ffts1[i].x;//+ffts2[i].x;
-  // float ch12i=ffts1[i].y;//#+ffts2[i].y;
-  // float phi=-0.5e0*i;
-  // float cphi=cos(phi);
-  // float sphi=sin(phi);
-  // float ch34r=ch12r*cphi-ch12i*sphi;
-  // float ch34i=ch12r*sphi+ch12i*cphi;
 
+  ///#define DEBUGDELAY
+
+#ifdef DEBUGDELAY
+  float ch12r=ffts1[i].x;//+ffts2[i].x;
+  float ch12i=ffts1[i].y;//#+ffts2[i].y;
+  float phi=-2.5e-4*i;
+  float cphi=cos(phi);
+  float sphi=sin(phi);
+  float ch34r=ch12r*cphi-ch12i*sphi;
+  float ch34i=ch12r*sphi+ch12i*cphi;
+#else
   float ch12r=ffts1[i].x+ffts2[i].x;
   float ch12i=ffts1[i].y+ffts2[i].y;
   float ch34r=ffts3[i].x+ffts4[i].x;
   float ch34i=ffts3[i].y+ffts4[i].y;
+#endif
 
   float XR=(ch12r*ch34r)+(ch12i*ch34i);
   float XI=(ch12r*ch34i)-(ch12i*ch34r);
@@ -290,42 +295,54 @@ __global__ void C12_Cross(cufftComplex *ffts1, cufftComplex *ffts2, cufftComplex
 
 
 // find a global maximum and store it into device variable
-__global__ void C12_FindMax(cufftReal *data, int totsize, int* output) {
-  int tid=threadIdx.x; // thread
-  //int bl=blockIdx.x; // block, ps bin # // assumed zero here
-  int nth=blockDim.x; //nthreads
-  __shared__ float work[1024];
-  __shared__ int iwork[1024];
-  //global pos
-  size_t pos=tid;
-  work[tid]=-1e99;
-  iwork[tid]=-10;
-  while (pos<totsize) {
-    if (data[pos]>work[tid]) {
-      work[tid]=data[pos];
-      iwork[tid]=pos;
-    }
-    pos+=nth;
-  }
-  // now do the tree reduce.
-  int csum=nth/2;
-  while (csum>0) {
-    __syncthreads();
-    if (tid<csum) {
-      if (work[tid+csum]>work[tid]) {
-	work[tid]=work[tid+csum];
-	iwork[tid]=iwork[tid+csum];
+__global__ void C12_FindMax_Part1(cufftReal *data, int mult, float* outfloat, int* outint) {
+
+    int start = mult*(blockDim.x * blockIdx.x + threadIdx.x);
+    int end = start+mult;
+    int tid=threadIdx.x; // thread
+    
+    __shared__ float work[1024];
+    __shared__ int iwork[1024];
+    //global pos
+    work[tid]=-1e99;
+    iwork[tid]=-10;
+    for (size_t i=start; i<end; i++) {
+      if (data[i]>work[tid]) {
+	work[tid]=data[i];
+	iwork[tid]=i;
       }
     }
-    csum/=2;
-  }
-  if (tid==0) {
-      int res=iwork[0];
-      if (res>totsize/2) res-=totsize;
-      *output=res;
+
+    // now do the tree reduce.
+    int csum=blockDim.x/2;
+    while (csum>0) {
+      __syncthreads();
+      if (tid<csum) {
+	if (work[tid+csum]>work[tid]) {
+	  work[tid]=work[tid+csum];
+	  iwork[tid]=iwork[tid+csum];
+	}
+      }
+      csum/=2;
+    }
+    if (tid==0) {
+      outfloat[blockIdx.x]=work[0];
+      outint[blockIdx.x]=iwork[0];
     }
 }
 
+__global__ void C12_FindMax_Part2(int nblocks, int totsize, float*outfloat, int* outint, int* output) {
+  
+  float work=outfloat[0];
+  int iwork=outint[0];
+  for (int i=1; i<nblocks;i++) {
+    if (outfloat[i]>work) {
+      work=outfloat[i];
+      iwork=outint[i];
+    }
+  }
 
+  if (iwork>totsize/2) iwork-=totsize;
+  *output=iwork;
 
-
+}

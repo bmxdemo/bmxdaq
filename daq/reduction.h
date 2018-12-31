@@ -16,5 +16,5 @@ __global__ void ps_X_reduce(cufftComplex *fftsA, cufftComplex *fftsB, float* out
 
 __global__ void C12_Cross(cufftComplex *ffts1, cufftComplex *ffts2, cufftComplex *ffts3, cufftComplex *ffts4);
 
-__global__ void C12_FindMax(cufftReal *data, int totsize, int* output);
-
+__global__ void C12_FindMax_Part1(cufftReal *data, int mult, float*outfloat, int* outint);
+__global__ void C12_FindMax_Part2(int nblocks, int totsize, float*outfloat, int* outint, int* output);

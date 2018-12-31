@@ -7,7 +7,7 @@
 
 
 //allocate memory for digitizer buffer
-void digiCardAlloc (int16* & data, int32 size);
+void digiCardAlloc (int16* & data, size_t size);
 
 //free memory from digitizer buffer
 void digiCardFree (int16* & data);

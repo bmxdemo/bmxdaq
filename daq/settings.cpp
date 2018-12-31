@@ -101,7 +101,7 @@ void init_settings(SETTINGS *s, const char* fname) {
 	   else if(!strcmp(s1,"FFT_power="))
 	     s->fft_size = ( 1 << atoi(s2));
 	   else if(!strcmp(s1,"buf_mult="))
-	     s->buf_mult = ( 1 << atoi(s2));
+	     s->buf_mult = ( atoi(s2) );
 	   else if(!strcmp(s1,"channel_mask="))
 	     s->channel_mask=atoi(s2);
 	   else if(!strcmp(s1,"ADC_range="))

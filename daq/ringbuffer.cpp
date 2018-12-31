@@ -6,6 +6,7 @@
 #include "unistd.h"
 
 void ringbufferInit(RINGBUFFER *rb, SETTINGS *set, DIGICARD *dc){
+  if (set->ringbuffer_size<=0) return;
   printf ("==========================\n");
   rb->bufsize=dc->lNotifySize;
   rb->ncards=dc->num_cards;

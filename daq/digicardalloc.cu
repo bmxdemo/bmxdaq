@@ -12,10 +12,11 @@
 //     }
 //#endif
 
-void digiCardAlloc(int16* & data, int32 size){
+void digiCardAlloc(int16* & data, size_t size){
     //ALLOC(data, size);
     if(cudaMallocHost(&data, size)!= cudaSuccess){
 	printf("Digitizer memory allocation failed\n");
+	printf ("Requested %li bytes = %i Gb.\n",size, size/1024/1024/1024);
 	exit(1);
     }
 }

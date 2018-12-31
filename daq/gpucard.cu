@@ -350,6 +350,8 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, SETTIN
   //streamed version
   //Check if other streams are finished and proccess the finished ones in order (i.e. print output to file)
 
+  CHK(cudaGetLastError());
+
   int nCards=(set->card_mask==3) + 1;
 
   while(gc->active_streams > 0){
@@ -358,16 +360,10 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, SETTIN
     // printf ("%i ", cudaEventQuery(gc->eDoneFloatize[gc->fstream])==cudaSuccess);
     // printf ("%i ", cudaEventQuery(gc->eDoneFFT[gc->fstream])==cudaSuccess);
     // printf ("%i [%i]\n ", cudaEventQuery(gc->eDonePost[gc->fstream])==cudaSuccess, gc->fstream);
-    if(cudaEventQuery(gc->eDoneCalib[gc->fstream])==cudaSuccess){
+    if(cudaEventQuery(gc->eDoneCopyBack[gc->fstream])==cudaSuccess){
+      cudaMemcpy(&gc->last_measured_delay,&(gc->cmeasured_delay[gc->fstream]),
+    		    sizeof(int), cudaMemcpyDeviceToHost);
 
-      //print time and write to file
-      cudaEventRecord(gc->eBeginCopyBack[gc->fstream], gc->streams[gc->fstream]);
-      CHK(cudaMemcpyAsync(gc->outps,gc->coutps[gc->fstream], 
-          gc->tot_pssize*sizeof(float), cudaMemcpyDeviceToHost, gc->streams[gc->fstream]));
-      CHK(cudaMemcpyAsync(&gc->last_measured_delay,&(gc->cmeasured_delay[gc->fstream]),
-          sizeof(int), cudaMemcpyDeviceToHost, gc->streams[gc->fstream]));
-      cudaEventRecord(gc->eDoneCopyBack[gc->fstream], gc->streams[gc->fstream]);
-      cudaEventSynchronize(gc->eDoneCopyBack[gc->fstream]);
       printTiming(gc,gc->fstream,twr);
       printLiveStat(set,gc,buf,twr);
       writerAccumulatePS(wr,gc->outps,twr);
@@ -390,7 +386,7 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, SETTIN
 
   //memory copy
   for(int i=0; i<nCards; i++)
-    CHK(cudaMemcpyAsync(gc->cbuf[csi][i], buf[i], gc->bufsize , cudaMemcpyHostToDevice,cs));
+    cudaMemcpyAsync(gc->cbuf[csi][i], buf[i], gc->bufsize , cudaMemcpyHostToDevice,cs);
     
   //floatize
   cudaEventRecord(gc->eDoneCopy[csi], cs);
@@ -462,41 +458,55 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, WRITER *wr, TWRITER *twr, SETTIN
       printf("Can only handle 1 or 2 channels\n");
       exit(1);
     }
- 
-    CHK(cudaGetLastError());
-
+    cudaEventRecord(gc->eDonePost[csi], cs);
+    cudaEventRecord(gc->eDoneCalib[csi], cs);
+    cudaEventRecord(gc->eBeginCopyBack[csi], cs);
+    cudaMemcpyAsync(gc->outps,gc->coutps[csi], 
+		    gc->tot_pssize*sizeof(float), cudaMemcpyDeviceToHost, cs);
   }
 
-  cudaEventRecord(gc->eDonePost[csi], cs);
 
-  if (set->measure_delay) {
+
+  if (set->measure_delay ) {
+    cudaEventRecord(gc->eDonePost[csi], cs);
+
 
     int blocksPerGrid = gc->transform_size / threadsPerBlock;
-    C12_Cross <<<blocksPerGrid, threadsPerBlock, 0, cs >>> (&(gc->cfft[csi][0]), &(gc->cfft[csi][gc->transform_size]),
-			    &(gc->cfft[csi][2*gc->transform_size]), &(gc->cfft[csi][3*gc->transform_size]));
+    C12_Cross <<<blocksPerGrid, threadsPerBlock, 0, cs >>> (&(gc->cfft[csi][0]), 
+              &(gc->cfft[csi][gc->transform_size]),
+    	      &(gc->cfft[csi][2*gc->transform_size]), 
+              &(gc->cfft[csi][3*gc->transform_size]));
     
-    CHK(cudaGetLastError());
     int status = cufftSetStream(gc->iplan, cs);
-    if(status !=CUFFT_SUCCESS) {
-      printf("CUFFTSETSTREAM failed\n");
-      exit(1);
-    }
-    status=cufftExecC2R(gc->iplan, &(gc->cfft[csi][0]), &(gc->cfbuf[csi][0]) );
-    if (status!=CUFFT_SUCCESS) {
-      printf("CUFFT FAILED\n");
-      exit(1);
-    } 
+     if(status !=CUFFT_SUCCESS) {
+       printf("CUFFTSETSTREAM failed\n");
+       exit(1);
+     }
+        status=cufftExecC2R(gc->iplan, &(gc->cfft[csi][0]), &(gc->cfbuf[csi][0]) );
+     if (status!=CUFFT_SUCCESS) {
+       printf("CUFFT FAILED\n");
+       exit(1);
+     } 
 
-    C12_FindMax<<<1,1024,0,cs>>> (&(gc->cfbuf[csi][0]),gc->fftsize,&(gc->cmeasured_delay[csi]));
-    CHK(cudaGetLastError());
+    blocksPerGrid = threadsPerBlock;
+    int mult=gc->fftsize/blocksPerGrid/threadsPerBlock;
+    C12_FindMax_Part1<<<blocksPerGrid,threadsPerBlock,0,cs>>> (&(gc->cfbuf[csi][0]),
+	       mult,&(gc->cfbuf[csi][gc->fftsize]),(int*)gc->cbuf[csi][0]);
+    C12_FindMax_Part2<<<1,1,0,cs>>>(blocksPerGrid, gc->fftsize, 
+		&(gc->cfbuf[csi][gc->fftsize]),(int*)gc->cbuf[csi][0],
+                &gc->cmeasured_delay[csi]);
+
+
+    cudaEventRecord(gc->eDoneCalib[csi], cs);
+    cudaEventRecord(gc->eBeginCopyBack[csi], cs);
 
   } 
-  // this is outside, side this is what means this stream is done.
-
-  cudaEventRecord(gc->eDoneCalib[csi], cs);
+  // this is outside so that event gets processed.
   
 
 
+  cudaEventRecord(gc->eDoneCopyBack[csi], cs);
+  
   
   return true;
 }
