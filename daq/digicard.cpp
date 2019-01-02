@@ -28,11 +28,19 @@
 
 volatile sig_atomic_t stopSignal = 0;
 volatile sig_atomic_t dumpSignal = 0;
+volatile sig_atomic_t calibrateDelaySignal = 0; 
+volatile sig_atomic_t enableWriterSignal = 0; 
+volatile sig_atomic_t disableWriterSignal = 0; 
+
 volatile bool _trigger = false;
 
 void loop_signal_handler(int sig){ // can be called asynchronously
   if (sig==SIGINT)  stopSignal=1;
   if (sig==SIGUSR1) dumpSignal=1;
+  if (sig==SIGUSR2) calibrateDelaySignal=1;
+  if (sig==SIGRTMIN) enableWriterSignal=1;
+  if (sig==SIGRTMIN+1) disableWriterSignal=1;
+
 }
 
 
@@ -317,6 +325,9 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
   long int sample_count=0;
   signal(SIGINT, loop_signal_handler);
   signal(SIGUSR1, loop_signal_handler);
+  signal(SIGUSR2, loop_signal_handler);
+  signal(SIGRTMIN, loop_signal_handler);
+  signal(SIGRTMIN+1, loop_signal_handler);
 
   bool processed = true; //was the data processed properly on the gpu
   // terminal writer init
@@ -365,6 +376,15 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
       dumpSignal=0;
     }
     if (set->ringbuffer_size>0) fillRingBuffer(rb,bufstart);
+    if (enableWriterSignal) {
+      enableWriterSignal=0;
+      enableWriter(w);
+    }
+    if (disableWriterSignal) {
+      disableWriterSignal=0;
+      disableWriter(w);
+    }
+
     clock_gettime(CLOCK_REALTIME, &timeNow);
     double accum = deltaT(timeStart, timeNow);
     tprintfn(t,1,"Time: %fs;", accum);

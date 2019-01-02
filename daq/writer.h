@@ -39,11 +39,11 @@ struct RFIHEADER {
 };
 
 struct WRITER {
+  bool enabled;
   char fnamePS[MAXFNLEN], fnameRFI[MAXFNLEN]; //file names, from settings
   char afnamePS[MAXFNLEN], afnameRFI[MAXFNLEN];  //current file names
   char tafnamePS[MAXFNLEN], tafnameRFI[MAXFNLEN];  //temporary current file names //(with ".new")
   bool rfiOn;
-  
   uint32_t lenPS; // full length of PS info
   uint32_t lenRFI; //length of outlier chunk
   int new_file_every; // how many minutes we save.
@@ -76,6 +76,11 @@ float rfimean (float arr[], int n, int nsigma, float *cleanmean, float *outlierm
 void writerWritePS (WRITER *writer, float* ps);
 
 void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr);
+
+void enableWriter(WRITER *wr);
+void disableWriter(WRITER *wr);
+
+
 
 //void writerWriteRFI(WRITER *writer, int8_t * outlier, int chunk, int channel, float* nSigma);
 //void writerWriteLastBuffer(WRITER *writer, int8_t ** bufstart, int numCards, int size);

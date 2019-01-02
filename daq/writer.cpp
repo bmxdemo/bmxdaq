@@ -60,6 +60,7 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   printf ("==========================\n");
   strcpy(writer->fnamePS,s->ps_output_pattern);
   strcpy(writer->fnameRFI,s->rfi_output_pattern);
+  writer->enabled=false;
   writer->new_file_every=s->new_file_every;
   writer->headerPS.cardMask=s->card_mask;
   writer->headerPS.nChannels=1+(s->channel_mask==3);
@@ -83,26 +84,46 @@ void writerInit(WRITER *writer, SETTINGS *s) {
     writer->lenPS+=s->pssize[i]*(4+12*(s->card_mask==3));
 
   }
-  writer->average_recs=s->average_recs;
-  writer->writing=false;
-  writer->crec=0;
-  writer->fbad=0.0;
-  writer->counter = 0;
   writer->tone_freq = 0;
   writer->lj_voltage0 = 0;
   writer->lj_diode = 0;
   printf ("Record size: %i\n", writer->lenPS);
   printf ("Version: %i\n", writer->headerPS.version);
 
+
+  writer->average_recs=s->average_recs;
   writer->psbuftick = (float*)malloc(sizeof(float)*writer->lenPS * writer->average_recs);
   writer->psbuftock = (float*)malloc(sizeof(float)*writer->lenPS * writer->average_recs);
-  writer->totick=true;
   writer->cleanps = (float*)malloc(sizeof(float)*writer->lenPS);
   writer->badps = (float*) malloc(sizeof(float)*writer->lenPS);
   writer->numbad = (int*) malloc(sizeof(int)*writer->lenPS);
   writer->rfi_sigma=s->n_sigma_null;
-  maybeReOpenFile(writer, true);
 }
+
+void resetAverage (WRITER *writer) {
+  writer->writing=false;
+  writer->crec=0;
+  writer->fbad=0.0;
+  writer->counter = 0;
+  writer->totick=true;
+}
+
+void enableWriter(WRITER *wr) {
+  if (!wr->enabled) {
+    wr->enabled=true;
+    resetAverage(wr);
+    maybeReOpenFile(wr, true);
+  }
+}
+
+void disableWriter(WRITER *wr) {
+  if (wr->enabled) {
+    wr->enabled=false;
+    if (wr->savethread.joinable()) wr->savethread.join();
+    closeAndRename(wr);
+  }
+}
+
 
 double getMJDNow()
 {
@@ -130,6 +151,7 @@ void processThread (WRITER& wrr) {
 
 
 void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr) {
+  if (writer->enabled) {
   if (writer->average_recs<=1) {
     writerWritePS(writer,ps);
     return;
@@ -152,6 +174,9 @@ void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr) {
   
   tprintfn(twr,1,"Writer Accumulator: %03d   Writing:%01d Tick/Tock:%01d  Reject in last save: %4.3f%%", 
 	   writer->crec, writer->writing,writer->totick, writer->fbad*100);
+  } else {
+    tprintfn(twr,1,"Writer disabled.");
+  }
 }
 
 
