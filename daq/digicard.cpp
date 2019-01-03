@@ -316,7 +316,7 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
   else
     dwError[0]=dwError[1] = ERR_OK;
 
-  struct timespec timeStart, timeNow, tSim, t1;
+  struct timespec timeStart, timeNow, tSim, t1,tc[2];
   int sim_ofs=0;
   clock_gettime(CLOCK_REALTIME, &timeStart);
   tSim=timeStart;
@@ -356,7 +356,6 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
       tprintfn (t,1,"Measured dt: %f ms, rate=%f MHz",dt*1e3, set->fft_size/dt/1e6);
     }
     else {
-      t1=tSim;
       for (int i = 0; i < dc->num_cards; i++){
         dwError[i] = spcm_dwSetParam_i32 (dc->hCard[i], SPC_M2CMD, M2CMD_DATA_WAITDMA);
         if (dwError[i] != ERR_OK) printErrorDie ("DMA wait fail\n",dc, i, set);
@@ -367,9 +366,11 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
         bufstart[i]=((int8_t*)dc->pnData[i]+lPCPos[i]);
         assert(lAvailUser[i] >= dc->lNotifySize);
         clock_gettime(CLOCK_REALTIME, &tSim);
-        dt=deltaT(t1,tSim);
+        dt=deltaT(tc[i],tSim);
         tprintfn (t,1,"Measured dt for card %d: %f ms, rate=%f MHz", dc->serialNumber[i], dt*1e3, set->fft_size/dt/1e6);
+	tc[i]=tSim;
       }
+      if (dc->num_cards>1) tprintfn(t,1,"Delta T between cards: %f ms",deltaT(tc[0],tc[1]));
     }
     if (dumpSignal & (set->ringbuffer_size>0)) {
       dumpRingBuffer(rb);
