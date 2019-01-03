@@ -1,0 +1,5 @@
+alias daqdie='killall -SIGINT daq.out'
+alias daqdump='killall -SIGUSR1 daq.out'
+alias daqcal='killall -SIGUSR2 daq.out'
+alias daqstart='killall -s 34 daq.out'
+alias daqstop='killall -s 35 daq.out'
