@@ -44,7 +44,8 @@ void tprintfn(TWRITER * t, bool newline, const char* fmt, ...){
 void tflush(TWRITER * t){ 
   if (t->currentBlock==0) {
     if (!t->debug) {
-      while (t->terminal_nlines<t->num_lines) tprintfn(t,1,"");
+      //while (t->terminal_nlines<t->num_lines) tprintfn(t,1,"");
+      while (t->terminal_nlines<t->num_lines) { printf("\n"); t->terminal_nlines++;}
       printf("\033[%iA",t->num_lines);
     } else printf ("--- *** --- \n");
       t->terminal_nlines = 0;

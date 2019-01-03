@@ -1,4 +1,5 @@
 #include "digicard.h"
+#include "digicardalloc.h"
 #include "ringbuffer.h"
 #include "terminal.h"
 #include "stdio.h"
@@ -34,11 +35,13 @@ void ringbufferInit(RINGBUFFER *rb, SETTINGS *set, DIGICARD *dc){
     for (int i=0;i<rb->num_chunks;i++) {
       //printf ("%i %i %li\n",icard,i,rb->buffer[icard*MAXCHUNKS+i]);
       int8_t *p=(int8_t*)malloc(rb->bufsize);
+      //int16* p;
+      //digiCardAlloc(p, rb->bufsize);
       if (p==NULL){
 	printf ("Allocation failure in ringbuffer.\n");
 	exit(1);
       }
-      rb->buffer[icard*MAXCHUNKS+i]=p;
+      rb->buffer[icard*MAXCHUNKS+i]=(int8_t*)p;
       //printf ("%i %i %li\n",icard,i,rb->buffer[icard*MAXCHUNKS+i]);
     }
   }
@@ -70,8 +73,8 @@ void fillRingBuffer(RINGBUFFER *rb, int8_t* src[2]) {
 
   // this makes the ringbuffer wait. Seem to keep the fill at 100% without
   // issues but perhaps revisit if neccessary.
-  //  for (int cardnum=0; cardnum<rb->ncards; cardnum++) 
-  //  if (rb->thread[cardnum].joinable()) rb->thread[cardnum].join();
+  // for (int cardnum=0; cardnum<rb->ncards; cardnum++) 
+    //     if (rb->thread[cardnum].joinable()) rb->thread[cardnum].join();
 
   if (rb->filling[0] || rb->filling[1]) {
     rb->fillremain=rb->num_chunks;

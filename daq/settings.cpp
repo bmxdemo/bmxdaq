@@ -234,8 +234,6 @@ void init_settings(SETTINGS *s, const char* fname) {
     s->daqNum=daqNum;
     sprintf(s->ps_output_pattern,"%s_D%i.data",root_output_pattern,daqNum);
     sprintf(s->rfi_output_pattern,"%s_D%i.rfi",root_output_pattern,daqNum);
-    sprintf(s->rfi_output_pattern,"%%02d%%02d%%02d_%%02d%%02d.outliers");
-    
 }
 
 void print_settings(SETTINGS *s) {

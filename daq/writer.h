@@ -34,7 +34,6 @@ struct BMXHEADER {
 
 struct RFIHEADER {
   const char magic[8]=">>RFI<<";
-  int chunkSize; //number of elements per chunk 
   float nSigma;    //number of sigma away from mean
 };
 
@@ -74,6 +73,7 @@ void writerInit(WRITER *writer, SETTINGS *set);
 float rfimean (float arr[], int n, int nsigma, float *cleanmean, float *outliermean, int *numbad);
 
 void writerWritePS (WRITER *writer, float* ps);
+void writerWriteRFI (WRITER *writer, float* ps, int* numbad, int totbad);
 
 void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr);
 
@@ -82,8 +82,7 @@ void disableWriter(WRITER *wr);
 
 
 
-//void writerWriteRFI(WRITER *writer, int8_t * outlier, int chunk, int channel, float* nSigma);
-//void writerWriteLastBuffer(WRITER *writer, int8_t ** bufstart, int numCards, int size);
+
 void writerCleanUp(WRITER *writer);
 
 void closeAndRename(WRITER *writer);

@@ -60,7 +60,7 @@ struct GPUCARD {
   int fstream, bstream; // front stream (oldest running), back stream (newest runnig);
   int active_streams; // really needed just at the beginning (when 0)
   CUDA_EVENT_T *eStart, *eDoneCopy, *eDoneFloatize,  *eDoneFFT, *eDonePost, *eDoneCalib;
-  CUDA_EVENT_T *eBeginCopyBack, *eDoneCopyBack; //events
+  CUDA_EVENT_T *eDoneStream; //events
 };
 
 

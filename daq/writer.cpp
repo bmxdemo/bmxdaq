@@ -98,6 +98,7 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   writer->badps = (float*) malloc(sizeof(float)*writer->lenPS);
   writer->numbad = (int*) malloc(sizeof(int)*writer->lenPS);
   writer->rfi_sigma=s->n_sigma_null;
+  writer->headerRFI.nSigma=s->n_sigma_null;
 }
 
 void resetAverage (WRITER *writer) {
@@ -145,6 +146,7 @@ void processThread (WRITER& wrr) {
   writerWritePS(&wrr,wrr.cleanps);
   int totbad=0;
   for (size_t i=0;i<N;i++) totbad+=wrr.numbad[i];
+  writerWriteRFI(&wrr,wrr.badps,wrr.numbad,totbad);
   wrr.fbad=float(totbad)/(N*M);
   wrr.writing=false;
 }
@@ -199,37 +201,29 @@ void writerWritePS (WRITER *writer, float* ps) {
   writer->counter++;
 }
 
+void writerWriteRFI (WRITER *writer, float* ps, int* numbad, int totbad) {
+  maybeReOpenFile(writer);
+  size_t N=writer->lenPS;
+  int16_t totbads=totbad;
+  // first  write the total number of bad records, for fat reading
+  fwrite (&totbads,sizeof(int16_t), 1, writer->fRFI);
+  for (int16_t i=0; i<N; i++) {
+    if (numbad[i]>0) {
+      fwrite (&i,sizeof(int16_t),1,writer->fRFI);
+      int16_t tmp=numbad[i];
+      fwrite (&tmp,sizeof(int16_t),1,writer->fRFI);
+      fwrite (&ps[i],sizeof(float),1,writer->fRFI);
+    }
+  }
+  fflush(writer->fRFI);
+}
 
-// void writerWriteRFI(WRITER * writer, int8_t * outlier, int chunk, int channel, float *nSigma){
-//   maybeReOpenFile(writer, true);
-//   fwrite(&writer->counter, sizeof(int), 1, writer->fRFI);
-//   fwrite(&chunk, sizeof(int), 1, writer->fRFI);
-//   fwrite(&channel, sizeof(int), 1, writer->fRFI);
-//   fwrite(nSigma, sizeof(float), STAT_COUNT_MINUS_ONE +1, writer->fRFI);
 
-//   fwrite (outlier, sizeof(int8_t), writer->lenRFI, writer->fRFI);
-//   fflush(writer->fRFI);
-// }
-
-// void writerWriteLastBuffer(WRITER * writer, int8_t ** bufstart, int numCards, int size){
-//   time_t rawtime;
-//   time (&rawtime);
-//   struct tm *ti = localtime ( &rawtime );
-//   sprintf(writer->afnameLastBuffer, writer->fnameLastBuffer, ti->tm_year - 100 , ti->tm_mon + 1,
-//             ti->tm_mday, ti->tm_hour, ti->tm_min);
-//   printf("Creating: %s\n", writer->afnameLastBuffer);
-//   FILE * fw = fopen(writer->afnameLastBuffer, "wb");
-//   if(fw == NULL)
-// 	printf("CANNOT OPEN FILE: %s\n", writer->afnameLastBuffer);
-//   else {
-//     for(int i=0; i < numCards; i++)
-//   	  fwrite(bufstart[i], sizeof(int8_t), size, fw);
-//   	fclose(fw);
-//   }
-// }
 
 void writerCleanUp(WRITER *writer) {
   if (writer->savethread.joinable()) writer->savethread.join();
-  printf ("Closing/renaming output files...\n");
-  closeAndRename(writer);
+    if (writer->enabled) {
+      closeAndRename(writer);
+      printf ("Closing/renaming output files...\n");
+    }
 }

@@ -193,8 +193,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   gc->eDoneFFT=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
   gc->eDonePost=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
   gc->eDoneCalib=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
-  gc->eDoneCopyBack=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
-  gc->eBeginCopyBack=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
+  gc->eDoneStream=(cudaEvent_t*)malloc(gc->nstreams*sizeof(cudaEvent_t));
   for (int i=0;i<gc->nstreams;i++) {
     //create stream
     CHK(cudaStreamCreate(&gc->streams[i]));
@@ -205,8 +204,7 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
     CHK(cudaEventCreate(&gc->eDoneFFT[i]));
     CHK(cudaEventCreate(&gc->eDonePost[i]));
     CHK(cudaEventCreate(&gc->eDoneCalib[i]));
-    CHK(cudaEventCreate(&gc->eDoneCopyBack[i]));
-    CHK(cudaEventCreate(&gc->eBeginCopyBack[i]));
+    CHK(cudaEventCreate(&gc->eDoneStream[i]));
   }
  
   gc->fstream = 0; //oldest running stream
@@ -249,14 +247,13 @@ void printDt (cudaEvent_t cstart, cudaEvent_t cstop, float * total, TWRITER * t)
 
 void printTiming(GPUCARD *gc, int i, TWRITER * t) {
   float totalTime = 0;
-  tprintfn (t, 0, "GPU timing (copy/floatize/fft/post/calib/copyback): ");
+  tprintfn (t, 0, "GPU timing (copy/floatize/fft/post/calib): ");
   printDt (gc->eStart[i], gc->eDoneCopy[i], &totalTime, t);
   totalTime=0;
   printDt (gc->eDoneCopy[i], gc->eDoneFloatize[i], &totalTime, t);
   printDt (gc->eDoneFloatize[i], gc->eDoneFFT[i], &totalTime, t);
   printDt (gc->eDoneFFT[i], gc->eDonePost[i], &totalTime, t);
   printDt (gc->eDonePost[i], gc->eDoneCalib[i], &totalTime, t);
-  printDt (gc->eBeginCopyBack[i], gc->eDoneCopyBack[i], &totalTime, t);
   tprintfn (t,1,"");
   tprintfn (t, 1, "GPU timing cumpute total: %3.2f ", totalTime);
 }
@@ -361,7 +358,10 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, int8_t **pbuf, WRITER *wr, TWRIT
     // printf ("%i ", cudaEventQuery(gc->eDoneFloatize[gc->fstream])==cudaSuccess);
     // printf ("%i ", cudaEventQuery(gc->eDoneFFT[gc->fstream])==cudaSuccess);
     // printf ("%i [%i]\n ", cudaEventQuery(gc->eDonePost[gc->fstream])==cudaSuccess, gc->fstream);
-    if(cudaEventQuery(gc->eDoneCopyBack[gc->fstream])==cudaSuccess){
+    if(cudaEventQuery(gc->eDoneStream[gc->fstream])==cudaSuccess){
+      cudaMemcpy(gc->outps,gc->coutps[gc->fstream], 
+		    gc->tot_pssize*sizeof(float), cudaMemcpyDeviceToHost);
+
       cudaMemcpy(&gc->last_measured_delay,&(gc->cmeasured_delay[gc->fstream]),
     		    sizeof(int), cudaMemcpyDeviceToHost);
 
@@ -469,9 +469,6 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, int8_t **pbuf, WRITER *wr, TWRIT
     }
     cudaEventRecord(gc->eDonePost[csi], cs);
     cudaEventRecord(gc->eDoneCalib[csi], cs);
-    cudaEventRecord(gc->eBeginCopyBack[csi], cs);
-    cudaMemcpyAsync(gc->outps,gc->coutps[csi], 
-		    gc->tot_pssize*sizeof(float), cudaMemcpyDeviceToHost, cs);
   }
 
 
@@ -507,14 +504,13 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, int8_t **pbuf, WRITER *wr, TWRIT
 
 
     cudaEventRecord(gc->eDoneCalib[csi], cs);
-    cudaEventRecord(gc->eBeginCopyBack[csi], cs);
 
   } 
   // this is outside so that event gets processed.
   
 
 
-  cudaEventRecord(gc->eDoneCopyBack[csi], cs);
+  cudaEventRecord(gc->eDoneStream[csi], cs);
   
   
   return true;

@@ -5,7 +5,7 @@
 #include "digicard.h"
 #include <thread>
 
-#define MAXCHUNKS 32
+#define MAXCHUNKS 64
 #define RBHEADERVERSION 1
 
 struct RINGBUFFERHEADER {
