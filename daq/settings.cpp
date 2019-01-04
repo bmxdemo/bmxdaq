@@ -47,8 +47,9 @@ void init_settings(SETTINGS *s, const char* fname) {
     sprintf(root_output_pattern,"%%02d%%02d%%02d_%%02d%%02d"); 
     sprintf(captain_hostname,"palantir2"); 
     sprintf(sailor_hostname,"palantir3"); 
-
     sprintf(s->ringbuffer_output_pattern, "%%02d%%02d%%02d_%%02d%%02d%%02d.ring");
+    sprintf(s->card1, "/dev/spcm0");
+    sprintf(s->card2, "/dev/spcm1");
     s->fg_nfreq=0;
     s->fg_baudrate=9600;
     s->fg_switchevery=10;
@@ -92,6 +93,10 @@ void init_settings(SETTINGS *s, const char* fname) {
 	     s->debug=atoi(s2);
 	   else if(!strcmp(s1,"card_mask="))
 	     s->card_mask=atoi(s2);
+	   else if(!strcmp(s1,"card1="))
+	     strcpy(s->card1,s2);
+	   else if(!strcmp(s1,"card2="))
+	     strcpy(s->card2,s2);
 	   else if(!strcmp(s1,"sample_rate="))
 	     s->sample_rate=atof(s2)*1e6;
 	   else if(!strcmp(s1,"spc_sample_rate="))

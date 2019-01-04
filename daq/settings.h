@@ -17,6 +17,8 @@ struct SETTINGS {
   // basic settings
   uint64_t card_mask; //bit mask representing which cards are to be used
   // digi card settings
+  char  card1[MAXCHAR], card2[MAXCHAR];
+  
   float sample_rate; // in samples/s
   long long int spc_sample_rate;
   long long int spc_ref_clock;

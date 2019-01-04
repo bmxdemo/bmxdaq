@@ -184,14 +184,14 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
   //open digitizer cards
   switch(set->card_mask){
     case 1:
-      card->hCard[0] = spcm_hOpen ((char *)"/dev/spcm0");
+      card->hCard[0] = spcm_hOpen (set->card1);
       break;
     case 2:
-      card->hCard[0] = spcm_hOpen ((char *)"/dev/spcm1");
+      card->hCard[0] = spcm_hOpen (set->card2);
       break;
     case 3:
-      card->hCard[0] = spcm_hOpen ((char *)"/dev/spcm0");
-      card->hCard[1] = spcm_hOpen ((char *)"/dev/spcm1");
+      card->hCard[0] = spcm_hOpen (set->card1);
+      card->hCard[1] = spcm_hOpen (set->card2);
       break;
     default:
       printf("invalid value for card_mask.\n");
@@ -274,7 +274,7 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
     for(int i=0; i<dc->num_cards; i++){
       if (ERR_OK!=spcm_dwSetParam_i32 (dc->hCard[i], SPC_M2CMD, M2CMD_CARD_ENABLETRIGGER | M2CMD_DATA_STARTDMA))
 	printErrorDie("Cannot start DMA.\n",dc, i, set);
-      usleep(35000);
+      //usleep(35000);
     }
 	
 
