@@ -67,7 +67,9 @@ void gpuCardInit (GPUCARD *gc, SETTINGS *set) {
   //print out gpu device properties
   gc->devProp = (cudaDeviceProp *)malloc(sizeof(cudaDeviceProp));
   printDeviceProperties(gc->devProp, 0);  
-  
+  gc->calibrating=false;
+  gc->calibrated=false;
+  gc->calibok=0;
   int nchan=gc->nchan=1+(set->channel_mask==3);
   if ((nchan==2) and (FLOATIZE_X%2==1)) {
     printf ("Need FLOATIZE_X even for two channels\n");
@@ -327,14 +329,53 @@ void printLiveStat(SETTINGS *set, GPUCARD *gc, int8_t **buf, TWRITER *twr) {
     }
   }
 
-  if (set->measure_delay) {
+  if (set->measure_delay || gc->calibrating) {
     float delayms=float(gc->last_measured_delay)*1.0/(set->sample_rate)*1e3;
-    tprintfn (twr,1, "Measured delay: %i samples = %f ms. Applied delay: %i %i ",
-	      gc->last_measured_delay, delayms, set->delay[0], set->delay[1]);
-
+    tprintfn (twr,1, "Calibrating: %i/%i Last measured delay: %i samples = %f ms. ",
+	      gc->ndelays, NUM_DELAYS, gc->last_measured_delay, delayms);
+  } else {
+    if  (gc->calibrated) 
+      tprintfn (twr,1, "DCal: OK: %i/%i  Val %f +- %fms Applied delay: %i %i ",
+		gc->calibok, NUM_DELAYS, gc->calibmean_ms, gc->calibrms_ms, set->delay[0], set->delay[1]);
+    else
+      tprintfn (twr,1, "DCal: Failed: %i/%i  Applied delay: %i %i ",
+		gc->calibok, NUM_DELAYS, set->delay[0], set->delay[1]);
   }
-
 }
+
+//process calibration data and  stops calibrationc process
+void processCalibration(GPUCARD *gc, SETTINGS *set) {
+  gc->calibrating=false;
+  long int mean=0;
+  long int var=0;
+  int numok=0;
+  const int OK=1500000;  // 1.4 ms
+  for (int i=0; i<NUM_DELAYS; i++) {
+    if (abs(gc->delays[i])<OK) {
+      mean+=gc->delays[i];
+      var+=gc->delays[i]*gc->delays[i];
+      numok++;
+    }  
+  }
+  gc->calibok=numok;
+  if (numok>NUM_DELAYS/2) {
+    gc->calibrated=true;
+    mean/=numok;
+    var/=numok;
+    gc->calibmean=mean;
+    gc->calibrms = int(sqrt(var-mean*mean));
+    gc->calibmean_ms= gc->calibmean*1.0/(set->sample_rate)*1e3;
+    gc->calibrms_ms= gc->calibrms*1.0/(set->sample_rate)*1e3;
+
+  } else
+    gc->calibrated=false;
+}
+
+void startCalib(GPUCARD *gc) {
+  gc->calibrating=true;
+  gc->ndelays=0;
+}
+
 
 //Process one data packet from the digitizer
 //Input:
@@ -359,14 +400,20 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, int8_t **pbuf, WRITER *wr, TWRIT
     // printf ("%i ", cudaEventQuery(gc->eDoneFFT[gc->fstream])==cudaSuccess);
     // printf ("%i [%i]\n ", cudaEventQuery(gc->eDonePost[gc->fstream])==cudaSuccess, gc->fstream);
     if(cudaEventQuery(gc->eDoneStream[gc->fstream])==cudaSuccess){
-      cudaMemcpy(gc->outps,gc->coutps[gc->fstream], 
-		    gc->tot_pssize*sizeof(float), cudaMemcpyDeviceToHost);
-
-      cudaMemcpy(&gc->last_measured_delay,&(gc->cmeasured_delay[gc->fstream]),
-    		    sizeof(int), cudaMemcpyDeviceToHost);
+      int fstream=gc->fstream;
+      if (!gc->calib[fstream]) {
+	cudaMemcpy(gc->outps,gc->coutps[fstream], 
+		   gc->tot_pssize*sizeof(float), cudaMemcpyDeviceToHost);
+      } else {
+	cudaMemcpy(&gc->last_measured_delay,&(gc->cmeasured_delay[fstream]),
+		   sizeof(int), cudaMemcpyDeviceToHost);
+	gc->delays[gc->ndelays]=gc->last_measured_delay;
+	gc->ndelays++;
+	if (gc->ndelays==NUM_DELAYS) processCalibration(gc,set);
+      }
 
       if (gc->active_streams==1) {
-	printTiming(gc,gc->fstream,twr);
+	printTiming(gc,fstream,twr);
 	printLiveStat(set,gc,buf,twr);
 	writerAccumulatePS(wr,gc->outps,twr);
       } else
@@ -381,13 +428,13 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, int8_t **pbuf, WRITER *wr, TWRIT
   if(gc->active_streams == gc->nstreams){ //if no empty streams
        	return false;
   }
+
   gc->active_streams++;
   int csi = gc->bstream = (++gc->bstream)%(gc->nstreams); //add new stream
 
   cudaStream_t cs= gc->streams[gc->bstream];
   cudaEventRecord(gc->eStart[csi], cs);
   
-
   //memory copy
   for(int i=0; i<nCards; i++) {
     if (set->delay[i]==0) 
@@ -427,8 +474,8 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, int8_t **pbuf, WRITER *wr, TWRIT
   } 
   cudaEventRecord(gc->eDoneFFT[csi], cs);
   
-  if (!set->measure_delay) {
-
+  if (!set->measure_delay & !gc->calibrating) {
+    gc->calib[csi]=false;
     //compute spectra
     if (gc->nchan==1) {
       int psofs=0;
@@ -476,9 +523,9 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, int8_t **pbuf, WRITER *wr, TWRIT
 
 
 
-  if (set->measure_delay ) {
+  if (set->measure_delay || gc->calibrating) {
     cudaEventRecord(gc->eDonePost[csi], cs);
-
+    gc->calib[csi]=true;
 
     int blocksPerGrid = gc->transform_size / threadsPerBlock;
     C12_Cross <<<blocksPerGrid, threadsPerBlock, 0, cs >>> (&(gc->cfft[csi][0]), 

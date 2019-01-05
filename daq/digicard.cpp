@@ -377,6 +377,11 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
       dumpSignal=0;
     }
     if (set->ringbuffer_size>0) fillRingBuffer(rb,bufstart);
+    if (calibrateDelaySignal) {
+      calibrateDelaySignal=0;
+      startCalib(gc);
+    }
+
     if (enableWriterSignal) {
       enableWriterSignal=0;
       enableWriter(w);

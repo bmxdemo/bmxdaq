@@ -6,6 +6,7 @@
 #define MAXCUTS 10
 #define MAXFREQ 10
 #define MAXSTREAMS 8
+#define NUM_DELAYS 200
 
 // modifiable settings
 struct SETTINGS {
