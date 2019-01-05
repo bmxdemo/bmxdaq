@@ -365,9 +365,12 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, int8_t **pbuf, WRITER *wr, TWRIT
       cudaMemcpy(&gc->last_measured_delay,&(gc->cmeasured_delay[gc->fstream]),
     		    sizeof(int), cudaMemcpyDeviceToHost);
 
-      printTiming(gc,gc->fstream,twr);
-      printLiveStat(set,gc,buf,twr);
-      writerAccumulatePS(wr,gc->outps,twr);
+      if (gc->active_streams==1) {
+	printTiming(gc,gc->fstream,twr);
+	printLiveStat(set,gc,buf,twr);
+	writerAccumulatePS(wr,gc->outps,twr);
+      } else
+	writerAccumulatePS(wr,gc->outps,NULL); // accumulate, but without talking
       gc->fstream = (++gc->fstream)%(gc->nstreams);
       gc->active_streams--;
     }

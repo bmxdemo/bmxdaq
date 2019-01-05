@@ -430,8 +430,6 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
   }   
 
   terminalWriterCleanup(t);
-  
-  printf("\n\n\n\n\n\n\n\n\n");
   if (stopSignal) printf ("Ctrl-C detected. Stopping.\n");
     else if (sample_count==set->nsamples) {printf ("Reached required number of samples.\n");}
     else if (!processed) {printf ("GPU processing returned error.\n");}

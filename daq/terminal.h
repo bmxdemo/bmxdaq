@@ -2,13 +2,14 @@
 //Collects one sample's output and displays it all at once on terminal. 
 //Returns cursor so that next cycle  will overwrite previous one on console.
 #include "settings.h"
-
+#define TERMINAL_LINES 25
+#define TERMINAL_COLS 120
 struct TWRITER{
     int terminal_nlines;
-    int num_lines;
     int printEvery;
     int currentBlock;
     int debug;
+  char lines[TERMINAL_LINES][TERMINAL_COLS];
 };
 
 void terminalWriterInit(TWRITER * t, SETTINGS *s);
