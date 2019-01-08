@@ -256,7 +256,7 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
   printf ("\n\nStarting main loop\n");
   printf ("==========================\n");
   
-  printf("Number of digitizer cards: %d\n", dc->num_cards);
+  //printf("Number of digitizer cards: %d\n", dc->num_cards);
   uint32      dwError[2];
   int32       lStatus[2], lAvailUser[2], lPCPos[2], fill[2];
   int8_t*     bufstart[2];
@@ -328,6 +328,13 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
   signal(SIGUSR2, loop_signal_handler);
   signal(SIGRTMIN, loop_signal_handler);
   signal(SIGRTMIN+1, loop_signal_handler);
+
+
+  printf("Help:\n");
+  printf(" W / X -- enabel/disable writer \n");
+  printf(" D -- dump ringbuffer (if enabled) \n");
+  printf(" C -- run time delay calibration loop \n");
+  printf(" ! -- exit \n");
 
   bool processed = true; //was the data processed properly on the gpu
   // terminal writer init
@@ -432,6 +439,16 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
     //if (!processed) break;
     // return terminal cursor
     tflush(t);
+
+    if (terminal_kbhit()) {
+      char c=terminal_getch();
+      if (c=='!') stopSignal=1;
+      if (c=='D') dumpSignal=1;
+      if (c=='C') calibrateDelaySignal=1;
+      if (c=='W') enableWriterSignal=1;
+      if (c=='X') disableWriterSignal=1;
+    }
+
   }   
 
   terminalWriterCleanup(t);

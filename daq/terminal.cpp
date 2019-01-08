@@ -20,6 +20,8 @@ void terminalWriterInit(TWRITER * t, SETTINGS *s){
 	t->printEvery=s->print_every;
 	if (t->printEvery==0) t->printEvery=1;
 	t->debug=s->debug;
+	terminal_set_conio_mode(t);
+
 	for (int i=0; i<=TERMINAL_LINES; i++) {
 	  printf("\n\033[K");
 	  t->lines[i][0]='\0';
@@ -57,10 +59,55 @@ void tflush(TWRITER * t){
   if (t->currentBlock==t->printEvery)
     t->currentBlock=0;
 } 
+
+
+void terminal_reset_mode(TWRITER *t)
+{
+  tcsetattr(0, TCSANOW, &(t->orig_termios));
+}
+
+void terminal_set_conio_mode(TWRITER *t)
+{
+  struct termios new_termios;
+
+  /* take two copies - one for now, one for later */
+  tcgetattr(0, &(t->orig_termios));
+  memcpy(&new_termios, &(t->orig_termios), sizeof(new_termios));
+
+  /* register cleanup handler, and set the new terminal mode */
+  //atexit(reset_terminal_mode);
+  new_termios.c_lflag &= ~(ICANON | ECHO);
+  //    new_termios.c_lflag &= ~ECHO;
+  //cfmakeraw(&new_termios);
+  tcsetattr(0, TCSANOW, &new_termios);
+}
+
+int terminal_kbhit()
+{
+  struct timeval tv = { 0L, 0L };
+  fd_set fds;
+  FD_ZERO(&fds);
+  FD_SET(0, &fds);
+  return select(1, &fds, NULL, NULL, &tv);
+}
+
+char terminal_getch()
+{
+  int r;
+  unsigned char c;
+  if ((r = read(0, &c, sizeof(c))) < 0) {
+    return r;
+  } else {
+    return c;
+  }
+}
+
+
     
 void terminalWriterCleanup(TWRITER * t)
 {
   tflush(t);
+  terminal_reset_mode(t);
   printf ("\n-----------------------------------\n");
 }
 

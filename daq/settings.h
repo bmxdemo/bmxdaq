@@ -51,6 +51,8 @@ struct SETTINGS {
   
   // ring buffer
   int ringbuffer_size;
+  // ring buffer force memcpy
+  int ringbuffer_force;
 
   // delay calibration
 

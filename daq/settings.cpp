@@ -41,6 +41,7 @@ void init_settings(SETTINGS *s, const char* fname) {
     s->print_maxp=0;
     s->print_every=1;
     s->ringbuffer_size=8;
+    s->ringbuffer_force=0;
     char root_output_pattern[MAXCHAR];
     char captain_hostname[256];
     char sailor_hostname[256];
@@ -137,6 +138,8 @@ void init_settings(SETTINGS *s, const char* fname) {
              strcpy(s->ringbuffer_output_pattern,s2);
            else if(!strcmp(s1,"ringbuffer_size="))
              s->ringbuffer_size=atoi(s2);
+           else if(!strcmp(s1,"ringbuffer_force="))
+             s->ringbuffer_force=atoi(s2);
 	   else if(!strcmp(s1,"print_meanvar="))
 	     s->print_meanvar=atoi(s2);
 	   else if(!strcmp(s1,"print_maxp="))

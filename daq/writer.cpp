@@ -27,7 +27,6 @@ void maybeReOpenFile(WRITER *writer, bool first=false) {
     sprintf(writer->afnamePS,writer->fnamePS, ti->tm_year - 100 , ti->tm_mon + 1, 
 	    ti->tm_mday, ti->tm_hour, ti->tm_min);
     sprintf(writer->tafnamePS,"%s.new",writer->afnamePS);
-    printf ("New File: %s\n", writer->tafnamePS);
     writer->fPS=fopen(writer->tafnamePS,"wb");
     
     if (writer->fPS==NULL) {
@@ -41,7 +40,6 @@ void maybeReOpenFile(WRITER *writer, bool first=false) {
       sprintf(writer->afnameRFI,writer->fnameRFI, ti->tm_year - 100 , ti->tm_mon + 1, 
 	      ti->tm_mday, ti->tm_hour, ti->tm_min);
       sprintf(writer->tafnameRFI,"%s.new",writer->afnameRFI);
-      printf ("New File: %s\n", writer->tafnameRFI);
       writer->fRFI=fopen(writer->tafnameRFI,"wb");
       if (writer->fRFI==NULL) {
         printf ("CANNOT OPEN FILE:%s",writer->tafnameRFI);
@@ -180,9 +178,6 @@ void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr) {
     tprintfn(twr,1,"Writer disabled.");
   }
 }
-
-
-
 
 
 

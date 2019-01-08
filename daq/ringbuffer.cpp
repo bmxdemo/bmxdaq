@@ -14,6 +14,7 @@ void ringbufferInit(RINGBUFFER *rb, SETTINGS *set, DIGICARD *dc){
   rb->dumping=0;
   rb->filling[0]=rb->filling[1]=false;
   rb->fillremain=set->ringbuffer_size;
+  rb->force=set->ringbuffer_force;
   strcpy(rb->fname_pattern,set->ringbuffer_output_pattern);
 
   time_t rawtime;
@@ -73,8 +74,10 @@ void fillRingBuffer(RINGBUFFER *rb, int8_t* src[2]) {
 
   // this makes the ringbuffer wait. Seem to keep the fill at 100% without
   // issues but perhaps revisit if neccessary.
-  // for (int cardnum=0; cardnum<rb->ncards; cardnum++) 
-    //     if (rb->thread[cardnum].joinable()) rb->thread[cardnum].join();
+  if (rb->force) {
+    for (int cardnum=0; cardnum<rb->ncards; cardnum++) 
+      if (rb->thread[cardnum].joinable()) rb->thread[cardnum].join();
+  }
 
   if (rb->filling[0] || rb->filling[1]) {
     rb->fillremain=rb->num_chunks;
@@ -93,7 +96,6 @@ void fillRingBuffer(RINGBUFFER *rb, int8_t* src[2]) {
 
 
 void dumpAction(RINGBUFFER &rbr) {
-  printf ("HERE\n");
   RINGBUFFER *rb=&rbr;
   RINGBUFFERHEADER head;
   head.ncards=rb->ncards;
@@ -107,7 +109,7 @@ void dumpAction(RINGBUFFER &rbr) {
       int ofs=(rb->cur_chunk[icard]+i)%(rb->num_chunks);
       fwrite (rb->buffer[icard*MAXCHUNKS+ofs],rb->bufsize,1,f);
       rb->dumpercent=int((icard*rb->num_chunks+i)*100/totsize);
-      sleep(1);
+      usleep(1000);
     }
   }
   fclose(f);
@@ -124,8 +126,6 @@ void dumpRingBuffer(RINGBUFFER *rb) {
   rb->dumping=true;
   rb->dumpercent=0;
   rb->dumpthread=std::thread(dumpAction, std::ref(*rb));
-  //dumpAction(*rb);
-  printf ("here4 %s\n", rb->filename);
 }
 
 
