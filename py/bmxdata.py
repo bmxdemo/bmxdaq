@@ -38,6 +38,12 @@ class BMXFile(object):
                        ('fft_size','u4'),('ncuts','i4'),
                    ('numin','10f4'),('numax','10f4'),('fft_avg','10u4'),
                    ('pssize','10i4')]
+        elif self.version<=7:
+            maxcuts=10
+            head_desc=[('cardMask','i4'),('nChan','i4'),('sample_rate','f4'),
+                       ('fft_size','u4'),('ncuts','i4'),
+                   ('numin','10f4'),('numax','10f4'),('fft_avg','10u4'),
+                   ('pssize','10i4'),('bufdelay','2i4'),('delay','2i4')]
             
         else:
             print ("Unknown version",H['version'])
@@ -66,6 +72,9 @@ class BMXFile(object):
         self.haveDiode=False
         self.FilenameUTC=(self.version>=5)
 
+        if self.version>=7:
+            self.delay=H['delay'][0]
+            self.bufdelay=H['bufdelay'][0]
         if self.version>=3:
             self.haveMJD=True
             rec_desc+=[('mjd','f8')]

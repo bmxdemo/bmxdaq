@@ -16,7 +16,9 @@
 //     v4 -- save labjack voltage float and diode
 //     v5 -- changed localtime to gmtime in filename -- header hasn't changed
 //     v6 -- two digitizers 
-#define HEADERVERSION 6
+//     v7 -- delays in header
+
+#define HEADERVERSION 7
 
 
 struct BMXHEADER {
@@ -30,6 +32,8 @@ struct BMXHEADER {
   float nu_min[MAXCUTS], nu_max[MAXCUTS];
   uint32_t fft_avg[MAXCUTS];
   int pssize[MAXCUTS];
+  int bufdelay[2];
+  int delay[2];
 };
 
 struct RFIHEADER {
@@ -72,12 +76,12 @@ void writerInit(WRITER *writer, SETTINGS *set);
 
 float rfimean (float arr[], int n, int nsigma, float *cleanmean, float *outliermean, int *numbad);
 
-void writerWritePS (WRITER *writer, float* ps);
+void writerWritePS (WRITER *writer, float* ps, SETTINGS *set);
 void writerWriteRFI (WRITER *writer, float* ps, int* numbad, int totbad);
 
-void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr);
+void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr, SETTINGS *set);
 
-void enableWriter(WRITER *wr);
+void enableWriter(WRITER *wr, SETTINGS *set);
 void disableWriter(WRITER *wr);
 
 
