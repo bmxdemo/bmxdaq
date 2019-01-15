@@ -73,7 +73,8 @@ class BMXFile(object):
             rec_desc+=[('num_nulled','i4',H['nChan'])]
             self.haveNulled=True
 
-        self.nCards=(1+H['cardMask']==3) if (self.version>=6) else 1;
+        self.nCards=(1+int(H['cardMask']==3)) if (self.version>=6) else 1;
+        self.nChanTot=self.nCards*self.nChan
         if (self.nCards==1): 
             if self.nChan==1:
                 for i in range(self.ncuts):
