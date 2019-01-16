@@ -386,7 +386,7 @@ void startCalib(GPUCARD *gc) {
 //      wr: writer to write out power spectra and outliers to files
 
 //  set: settings
-int gpuProcessBuffer(GPUCARD *gc, int8_t **buf_one, int8_t **buf_two, WRITER *wr, TWRITER *twr, SETTINGS *set) {
+int gpuProcessBuffer(GPUCARD *gc, int8_t **buf_one, int8_t **buf_two, int lj_diode, WRITER *wr, TWRITER *twr, SETTINGS *set) {
   //streamed version
   //Check if other streams are finished and proccess the finished ones in order (i.e. print output to file)
 
@@ -423,9 +423,9 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf_one, int8_t **buf_two, WRITER *wr
       if (gc->active_streams==1) {
 	printTiming(gc,fstream,twr);
 	printLiveStat(set,gc,buf,twr);
-	writerAccumulatePS(wr,gc->outps,twr,set);
+	writerAccumulatePS(wr,gc->outps, gc->lj_diode[fstream], twr,set);
       } else
-	writerAccumulatePS(wr,gc->outps,NULL,set); // accumulate, but without talking
+	writerAccumulatePS(wr,gc->outps, gc->lj_diode[fstream], NULL,set); // accumulate, but without talking
       gc->fstream = (++gc->fstream)%(gc->nstreams);
       gc->active_streams--;
     }
@@ -441,6 +441,7 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf_one, int8_t **buf_two, WRITER *wr
   int csi = gc->bstream = (++gc->bstream)%(gc->nstreams); //add new stream
 
   cudaStream_t cs= gc->streams[gc->bstream];
+  gc->lj_diode[csi]=lj_diode;
   cudaEventRecord(gc->eStart[csi], cs);
   
   //memory copy

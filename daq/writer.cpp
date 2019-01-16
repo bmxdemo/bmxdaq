@@ -38,7 +38,7 @@ void maybeReOpenFile(WRITER *writer, SETTINGS *set, bool first=false) {
     writer->headerPS.bufdelay[1]=set->bufdelay[1];
     writer->headerPS.delay[0]=set->delay[0];
     writer->headerPS.delay[1]=set->delay[1];
-
+    
     fwrite(&writer->headerPS, sizeof(BMXHEADER),1, writer->fPS);
 
     if(writer->rfiOn){
@@ -69,6 +69,7 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   writer->headerPS.nChannels=1+(s->channel_mask==3);
   writer->headerPS.sample_rate=s->sample_rate;
   writer->headerPS.fft_size=s->fft_size;
+  writer->headerPS.average_recs = s->average_recs;
   writer->rfiOn=true;
   //writer->headerPS.ADC_range = s->ADC_range;
   //initialize statistics array
@@ -146,7 +147,9 @@ void processThread (WRITER& wrr, SETTINGS& setr) {
   for (size_t i=0;i<N;i++) {
     rfimean(&(ptr[i*M]),M,wrr.rfi_sigma, &(wrr.cleanps[i]), &(wrr.badps[i]), &(wrr.numbad[i]));
   }
-  writerWritePS(&wrr,wrr.cleanps, &setr);
+  // note we process THE OTHER ONE
+  int lj_diode = wrr.totick ? wrr.ljdtock : wrr.ljdtick;
+  writerWritePS(&wrr,wrr.cleanps, lj_diode, &setr);
   int totbad=0;
   for (size_t i=0;i<N;i++) totbad+=wrr.numbad[i];
   writerWriteRFI(&wrr,wrr.badps,wrr.numbad,totbad);
@@ -155,10 +158,10 @@ void processThread (WRITER& wrr, SETTINGS& setr) {
 }
 
 
-void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr, SETTINGS *set) {
+void writerAccumulatePS (WRITER *writer, float* ps, int ljack_diode, TWRITER *twr, SETTINGS *set) {
   if (writer->enabled) {
   if (writer->average_recs<=1) {
-    writerWritePS(writer,ps,set);
+    writerWritePS(writer,ps, ljack_diode, set);
     return;
   }
   size_t N=writer->lenPS;
@@ -168,12 +171,14 @@ void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr, SETTINGS *set)
   for (size_t i=0;i<N;i++,j+=M) {
     ptr[j]=ps[i];
   }
+  if (writer->totick) writer->ljdtick+=ljack_diode; else writer->ljdtock+=ljack_diode;
 
   writer->crec++;
   if (writer->crec==M) {
     if (writer->savethread.joinable()) writer->savethread.join();
     writer->crec=0;
     writer->totick = not writer->totick;
+    if (writer->totick) writer->ljdtick=0; else writer->ljdtock=0;
     writer->savethread = std::thread(processThread,std::ref(*writer), std::ref(*set));
   }
   
@@ -186,7 +191,7 @@ void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr, SETTINGS *set)
 
 
 
-void writerWritePS (WRITER *writer, float* ps, SETTINGS *set) {
+void writerWritePS (WRITER *writer, float* ps, int lj_diode, SETTINGS *set) {
   maybeReOpenFile(writer, set);
   double mjd=getMJDNow();
   fwrite (&mjd, sizeof(double), 1, writer->fPS);
@@ -196,7 +201,7 @@ void writerWritePS (WRITER *writer, float* ps, SETTINGS *set) {
   fwrite (ps, sizeof(float), writer->lenPS, writer->fPS);
   fwrite (&writer->tone_freq, sizeof(float), 1, writer->fPS);
   fwrite (&writer->lj_voltage0, sizeof(float), 1, writer->fPS);
-  fwrite (&writer->lj_diode, sizeof(int), 1, writer->fPS);
+  fwrite (&lj_diode, sizeof(int), 1, writer->fPS);
   fflush(writer->fPS);
   writer->counter++;
 }

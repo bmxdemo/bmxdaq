@@ -421,7 +421,7 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
       }
       buf_one[0]=bufstart[0];
       buf_two[0]=bufstart[1];
-      processed = gpuProcessBuffer(gc,buf_one, buf_two, w, t, set);
+      processed = gpuProcessBuffer(gc,buf_one, buf_two, lj->diode, w, t, set);
       if (!processed) gpuFails++;
     }
 

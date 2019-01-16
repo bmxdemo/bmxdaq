@@ -21,7 +21,7 @@ struct LJACK {
 
 
 //initialize
-void LJInit (LJACK *lj, WRITER* wr, SETTINGS *set);
+void LJInit (LJACK *lj, WRITER* wr,SETTINGS *set);
 
 //main worker loop
 void LJLoop (LJACK *lj, WRITER* wr, TWRITER * twr);

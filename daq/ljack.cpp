@@ -43,7 +43,7 @@ void LJLoop (LJACK *lj, WRITER* wr, TWRITER* twr) {
 
   if (wr) {
     wr->lj_voltage0=lj->voltage0;
-    wr->lj_diode=lj->diode;
+    //wr->lj_diode=lj->diode;
   }
   if (twr)
     tprintfn (twr, 1, "LabJack: count %i/%i Diode:%i  V0:%g ",lj->counter, 

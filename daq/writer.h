@@ -28,6 +28,7 @@ struct BMXHEADER {
   int nChannels;
   float sample_rate;
   uint32_t fft_size; 
+  uint32_t average_recs;
   int ncuts;
   float nu_min[MAXCUTS], nu_max[MAXCUTS];
   uint32_t fft_avg[MAXCUTS];
@@ -56,6 +57,7 @@ struct WRITER {
   bool totick, writing;
   std::thread savethread;
   float *psbuftick, *psbuftock, *cleanps, *badps;
+  int ljdtick, ljdtock;
   int *numbad;
   float fbad; //fraction bad last time
   
@@ -76,10 +78,10 @@ void writerInit(WRITER *writer, SETTINGS *set);
 
 float rfimean (float arr[], int n, int nsigma, float *cleanmean, float *outliermean, int *numbad);
 
-void writerWritePS (WRITER *writer, float* ps, SETTINGS *set);
+void writerWritePS (WRITER *writer, float* ps, int lj_diode, SETTINGS *set);
 void writerWriteRFI (WRITER *writer, float* ps, int* numbad, int totbad);
 
-void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr, SETTINGS *set);
+void writerAccumulatePS (WRITER *writer, float* ps, int lj_diode, TWRITER *twr, SETTINGS *set);
 
 void enableWriter(WRITER *wr, SETTINGS *set);
 void disableWriter(WRITER *wr);

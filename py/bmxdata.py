@@ -41,7 +41,7 @@ class BMXFile(object):
         elif self.version<=7:
             maxcuts=10
             head_desc=[('cardMask','i4'),('nChan','i4'),('sample_rate','f4'),
-                       ('fft_size','u4'),('ncuts','i4'),
+                       ('fft_size','u4'),('average_recs','u4', ('ncuts','i4'),
                    ('numin','10f4'),('numax','10f4'),('fft_avg','10u4'),
                    ('pssize','10i4'),('bufdelay','2i4'),('delay','2i4')]
             
@@ -55,8 +55,9 @@ class BMXFile(object):
         self.ncuts=H['ncuts'][0]
         print ("CardMask: %i, Channels: %i,  Cuts: %i"%(self.cardMask, self.nChan, self.ncuts))
         self.fft_size=H['fft_size'][0]
+        self.average_recs=H['average_recs'][0] if self.version>=7 else 1
         self.sample_rate=H['sample_rate']/1e6
-        self.deltaT = 1./self.sample_rate*self.fft_size/1e6
+        self.deltaT = 1./self.sample_rate*self.fft_size/1e6 * self.average_recs
         self.nP=H['pssize'][0]
         self.numin=(H['numin'][0]/1e6)[:self.ncuts]
         self.numax=(H['numax'][0]/1e6)[:self.ncuts]
