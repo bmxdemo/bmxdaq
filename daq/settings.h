@@ -6,6 +6,8 @@
 #define MAXCUTS 10
 #define MAXFREQ 10
 #define MAXSTREAMS 8
+#define NUM_DELAYS 200
+#define NDELAYBUFS 4
 
 // modifiable settings
 struct SETTINGS {
@@ -17,6 +19,8 @@ struct SETTINGS {
   // basic settings
   uint64_t card_mask; //bit mask representing which cards are to be used
   // digi card settings
+  char  card1[MAXCHAR], card2[MAXCHAR];
+  
   float sample_rate; // in samples/s
   long long int spc_sample_rate;
   long long int spc_ref_clock;
@@ -48,10 +52,13 @@ struct SETTINGS {
   
   // ring buffer
   int ringbuffer_size;
+  // ring buffer force memcpy
+  int ringbuffer_force;
 
   // delay calibration
 
-  unsigned int delay[2]; // digital deltays for card 1,2 in samples
+  unsigned short int bufdelay[2]; // digital delays in full buffers 
+  unsigned int delay[2]; // digital deltays for card 1,2 in samples on top of bufdelay
   int measure_delay; // measure delays between cards 1 and 2
   
 

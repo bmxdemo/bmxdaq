@@ -28,6 +28,7 @@ struct RINGBUFFER {
   bool dumping;
   int dumpercent;
   size_t bufsize, ncards;
+  int force;
 };
 
 struct DIGICARD;

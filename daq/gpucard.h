@@ -57,15 +57,19 @@ struct GPUCARD {
   CUDA_STREAM_T *streams; // streams
   int *cmeasured_delay;
   int last_measured_delay;
+  int delays[NUM_DELAYS], ndelays;
+  bool calib[MAXSTREAMS];
+  int lj_diode[MAXSTREAMS];
+  bool calibrating, calibrated;
+  int calibmean, calibrms, calibok;
+  float calibmean_ms, calibrms_ms;
   int fstream, bstream; // front stream (oldest running), back stream (newest runnig);
   int active_streams; // really needed just at the beginning (when 0)
   CUDA_EVENT_T *eStart, *eDoneCopy, *eDoneFloatize,  *eDoneFFT, *eDonePost, *eDoneCalib;
   CUDA_EVENT_T *eDoneStream; //events
 };
 
-
-extern "C" {
-  void gpuCardInit (GPUCARD *gcard, SETTINGS *set);
-  int  gpuProcessBuffer(GPUCARD *gcard, int8_t ** buf, int8_t ** prevbuf, 
-			WRITER *w, TWRITER *t, SETTINGS *set);
-}
+void gpuCardInit (GPUCARD *gcard, SETTINGS *set);
+void startCalib(GPUCARD *gc);
+int  gpuProcessBuffer(GPUCARD *gcard, int8_t ** buf_one, int8_t ** buf_two, 
+		      int lj_diode, WRITER *w, TWRITER *t, SETTINGS *set);

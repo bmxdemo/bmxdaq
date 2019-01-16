@@ -184,14 +184,14 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
   //open digitizer cards
   switch(set->card_mask){
     case 1:
-      card->hCard[0] = spcm_hOpen ((char *)"/dev/spcm0");
+      card->hCard[0] = spcm_hOpen (set->card1);
       break;
     case 2:
-      card->hCard[0] = spcm_hOpen ((char *)"/dev/spcm1");
+      card->hCard[0] = spcm_hOpen (set->card2);
       break;
     case 3:
-      card->hCard[0] = spcm_hOpen ((char *)"/dev/spcm0");
-      card->hCard[1] = spcm_hOpen ((char *)"/dev/spcm1");
+      card->hCard[0] = spcm_hOpen (set->card1);
+      card->hCard[1] = spcm_hOpen (set->card2);
       break;
     default:
       printf("invalid value for card_mask.\n");
@@ -256,13 +256,17 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
   printf ("\n\nStarting main loop\n");
   printf ("==========================\n");
   
-  printf("Number of digitizer cards: %d\n", dc->num_cards);
+  //printf("Number of digitizer cards: %d\n", dc->num_cards);
   uint32      dwError[2];
   int32       lStatus[2], lAvailUser[2], lPCPos[2], fill[2];
   int8_t*     bufstart[2];
-  int8_t*     prev_bufstart[2]; // previous buf start
+  int8_t*     buf_one[NDELAYBUFS];
+  int8_t*     buf_two[NDELAYBUFS]; // previous buf start
   int gpuFails=0;
-  prev_bufstart[0]=prev_bufstart[1]=NULL;
+  for (int i=0; i<NDELAYBUFS;i++) {
+    buf_one[i]=NULL;
+    buf_two[i]=NULL;
+  }
   // start everything
   if(!set->simulate_digitizer){
 
@@ -274,7 +278,7 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
     for(int i=0; i<dc->num_cards; i++){
       if (ERR_OK!=spcm_dwSetParam_i32 (dc->hCard[i], SPC_M2CMD, M2CMD_CARD_ENABLETRIGGER | M2CMD_DATA_STARTDMA))
 	printErrorDie("Cannot start DMA.\n",dc, i, set);
-      usleep(35000);
+      //usleep(35000);
     }
 	
 
@@ -329,6 +333,15 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
   signal(SIGRTMIN, loop_signal_handler);
   signal(SIGRTMIN+1, loop_signal_handler);
 
+
+  printf("Help:\n");
+  printf(" W / X -- enabel/disable writer \n");
+  printf(" D -- dump ringbuffer (if enabled) \n");
+  printf(" []\\ -- full buf delays for card 1\n");
+  printf(" {}| -- full buf delays for card 2\n");
+  printf(" C -- run time delay calibration loop \n");
+  printf(" ! -- exit \n");
+
   bool processed = true; //was the data processed properly on the gpu
   // terminal writer init
   terminalWriterInit(t, set);
@@ -377,9 +390,14 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
       dumpSignal=0;
     }
     if (set->ringbuffer_size>0) fillRingBuffer(rb,bufstart);
+    if (calibrateDelaySignal) {
+      calibrateDelaySignal=0;
+      startCalib(gc);
+    }
+
     if (enableWriterSignal) {
       enableWriterSignal=0;
-      enableWriter(w);
+      enableWriter(w,set);
     }
     if (disableWriterSignal) {
       disableWriterSignal=0;
@@ -397,9 +415,13 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
     if (set->dont_process) 
       tprintfn (t,1," ** no GPU processing");
     else if( (sample_count >= 2) || set->simulate_digitizer){//don't proccess first few cycles if coming from ADC
-      processed = gpuProcessBuffer(gc,bufstart,prev_bufstart,w,t, set);
-      prev_bufstart[0]=bufstart[0];
-      prev_bufstart[1]=bufstart[1];
+      for (int i=1; i<NDELAYBUFS; i++) {
+	buf_one[i]=buf_one[i-1];
+	buf_two[i]=buf_two[i-1];
+      }
+      buf_one[0]=bufstart[0];
+      buf_two[0]=bufstart[1];
+      processed = gpuProcessBuffer(gc,buf_one, buf_two, lj->diode, w, t, set);
       if (!processed) gpuFails++;
     }
 
@@ -427,11 +449,25 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
     //if (!processed) break;
     // return terminal cursor
     tflush(t);
+
+    if (terminal_kbhit()) {
+      char c=terminal_getch();
+      if (c=='!') stopSignal=1;
+      else if (c=='D') dumpSignal=1;
+      else if (c=='C') calibrateDelaySignal=1;
+      else if (c=='W') enableWriterSignal=1;
+      else if (c=='X') disableWriterSignal=1;
+      else if (c=='[') set->bufdelay[0]=2;
+      else if (c==']') set->bufdelay[0]=1;
+      else if (c=='\\') set->bufdelay[0]=0;
+      else if (c=='{') set->bufdelay[1]=2;
+      else if (c=='}') set->bufdelay[1]=1;
+      else if (c=='|') set->bufdelay[1]=0;
+    }
+
   }   
 
   terminalWriterCleanup(t);
-  
-  printf("\n\n\n\n\n\n\n\n\n");
   if (stopSignal) printf ("Ctrl-C detected. Stopping.\n");
     else if (sample_count==set->nsamples) {printf ("Reached required number of samples.\n");}
     else if (!processed) {printf ("GPU processing returned error.\n");}

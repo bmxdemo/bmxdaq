@@ -41,14 +41,16 @@ void init_settings(SETTINGS *s, const char* fname) {
     s->print_maxp=0;
     s->print_every=1;
     s->ringbuffer_size=8;
+    s->ringbuffer_force=0;
     char root_output_pattern[MAXCHAR];
     char captain_hostname[256];
     char sailor_hostname[256];
     sprintf(root_output_pattern,"%%02d%%02d%%02d_%%02d%%02d"); 
     sprintf(captain_hostname,"palantir2"); 
     sprintf(sailor_hostname,"palantir3"); 
-
     sprintf(s->ringbuffer_output_pattern, "%%02d%%02d%%02d_%%02d%%02d%%02d.ring");
+    sprintf(s->card1, "/dev/spcm0");
+    sprintf(s->card2, "/dev/spcm1");
     s->fg_nfreq=0;
     s->fg_baudrate=9600;
     s->fg_switchevery=10;
@@ -60,6 +62,8 @@ void init_settings(SETTINGS *s, const char* fname) {
     s->wave_nbytes=0;
     s->delay[0]=0;
     s->delay[1]=0;
+    s->bufdelay[0]=0;
+    s->bufdelay[1]=0;
     s->measure_delay=0;
     
     sprintf(s->wave_fname,"wave.bin");
@@ -92,6 +96,10 @@ void init_settings(SETTINGS *s, const char* fname) {
 	     s->debug=atoi(s2);
 	   else if(!strcmp(s1,"card_mask="))
 	     s->card_mask=atoi(s2);
+	   else if(!strcmp(s1,"card1="))
+	     strcpy(s->card1,s2);
+	   else if(!strcmp(s1,"card2="))
+	     strcpy(s->card2,s2);
 	   else if(!strcmp(s1,"sample_rate="))
 	     s->sample_rate=atof(s2)*1e6;
 	   else if(!strcmp(s1,"spc_sample_rate="))
@@ -132,6 +140,8 @@ void init_settings(SETTINGS *s, const char* fname) {
              strcpy(s->ringbuffer_output_pattern,s2);
            else if(!strcmp(s1,"ringbuffer_size="))
              s->ringbuffer_size=atoi(s2);
+           else if(!strcmp(s1,"ringbuffer_force="))
+             s->ringbuffer_force=atoi(s2);
 	   else if(!strcmp(s1,"print_meanvar="))
 	     s->print_meanvar=atoi(s2);
 	   else if(!strcmp(s1,"print_maxp="))

@@ -15,7 +15,7 @@ void closeAndRename(WRITER *writer) {
   }
 }
 
-void maybeReOpenFile(WRITER *writer, bool first=false) {
+void maybeReOpenFile(WRITER *writer, SETTINGS *set, bool first=false) {
   time_t rawtime;   
   time ( &rawtime );
   struct tm *ti = gmtime ( &rawtime );
@@ -27,7 +27,6 @@ void maybeReOpenFile(WRITER *writer, bool first=false) {
     sprintf(writer->afnamePS,writer->fnamePS, ti->tm_year - 100 , ti->tm_mon + 1, 
 	    ti->tm_mday, ti->tm_hour, ti->tm_min);
     sprintf(writer->tafnamePS,"%s.new",writer->afnamePS);
-    printf ("New File: %s\n", writer->tafnamePS);
     writer->fPS=fopen(writer->tafnamePS,"wb");
     
     if (writer->fPS==NULL) {
@@ -35,13 +34,17 @@ void maybeReOpenFile(WRITER *writer, bool first=false) {
       exit(1);
     }
     
+    writer->headerPS.bufdelay[0]=set->bufdelay[0];
+    writer->headerPS.bufdelay[1]=set->bufdelay[1];
+    writer->headerPS.delay[0]=set->delay[0];
+    writer->headerPS.delay[1]=set->delay[1];
+    
     fwrite(&writer->headerPS, sizeof(BMXHEADER),1, writer->fPS);
 
     if(writer->rfiOn){
       sprintf(writer->afnameRFI,writer->fnameRFI, ti->tm_year - 100 , ti->tm_mon + 1, 
 	      ti->tm_mday, ti->tm_hour, ti->tm_min);
       sprintf(writer->tafnameRFI,"%s.new",writer->afnameRFI);
-      printf ("New File: %s\n", writer->tafnameRFI);
       writer->fRFI=fopen(writer->tafnameRFI,"wb");
       if (writer->fRFI==NULL) {
         printf ("CANNOT OPEN FILE:%s",writer->tafnameRFI);
@@ -66,6 +69,7 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   writer->headerPS.nChannels=1+(s->channel_mask==3);
   writer->headerPS.sample_rate=s->sample_rate;
   writer->headerPS.fft_size=s->fft_size;
+  writer->headerPS.average_recs = s->average_recs;
   writer->rfiOn=true;
   //writer->headerPS.ADC_range = s->ADC_range;
   //initialize statistics array
@@ -109,11 +113,11 @@ void resetAverage (WRITER *writer) {
   writer->totick=true;
 }
 
-void enableWriter(WRITER *wr) {
+void enableWriter(WRITER *wr, SETTINGS *set) {
   if (!wr->enabled) {
     wr->enabled=true;
     resetAverage(wr);
-    maybeReOpenFile(wr, true);
+    maybeReOpenFile(wr, set, true);
   }
 }
 
@@ -134,7 +138,7 @@ double getMJDNow()
 
 
 
-void processThread (WRITER& wrr) {
+void processThread (WRITER& wrr, SETTINGS& setr) {
   size_t N=wrr.lenPS;
   int M=wrr.average_recs;
   wrr.writing=true;
@@ -143,7 +147,9 @@ void processThread (WRITER& wrr) {
   for (size_t i=0;i<N;i++) {
     rfimean(&(ptr[i*M]),M,wrr.rfi_sigma, &(wrr.cleanps[i]), &(wrr.badps[i]), &(wrr.numbad[i]));
   }
-  writerWritePS(&wrr,wrr.cleanps);
+  // note we process THE OTHER ONE
+  int lj_diode = wrr.totick ? wrr.ljdtock : wrr.ljdtick;
+  writerWritePS(&wrr,wrr.cleanps, lj_diode, &setr);
   int totbad=0;
   for (size_t i=0;i<N;i++) totbad+=wrr.numbad[i];
   writerWriteRFI(&wrr,wrr.badps,wrr.numbad,totbad);
@@ -152,10 +158,10 @@ void processThread (WRITER& wrr) {
 }
 
 
-void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr) {
+void writerAccumulatePS (WRITER *writer, float* ps, int ljack_diode, TWRITER *twr, SETTINGS *set) {
   if (writer->enabled) {
   if (writer->average_recs<=1) {
-    writerWritePS(writer,ps);
+    writerWritePS(writer,ps, ljack_diode, set);
     return;
   }
   size_t N=writer->lenPS;
@@ -165,13 +171,15 @@ void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr) {
   for (size_t i=0;i<N;i++,j+=M) {
     ptr[j]=ps[i];
   }
+  if (writer->totick) writer->ljdtick+=ljack_diode; else writer->ljdtock+=ljack_diode;
 
   writer->crec++;
   if (writer->crec==M) {
     if (writer->savethread.joinable()) writer->savethread.join();
     writer->crec=0;
     writer->totick = not writer->totick;
-    writer->savethread = std::thread(processThread,std::ref(*writer));
+    if (writer->totick) writer->ljdtick=0; else writer->ljdtock=0;
+    writer->savethread = std::thread(processThread,std::ref(*writer), std::ref(*set));
   }
   
   tprintfn(twr,1,"Writer Accumulator: %03d   Writing:%01d Tick/Tock:%01d  Reject in last save: %4.3f%%", 
@@ -183,11 +191,8 @@ void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr) {
 
 
 
-
-
-
-void writerWritePS (WRITER *writer, float* ps) {
-  maybeReOpenFile(writer);
+void writerWritePS (WRITER *writer, float* ps, int lj_diode, SETTINGS *set) {
+  maybeReOpenFile(writer, set);
   double mjd=getMJDNow();
   fwrite (&mjd, sizeof(double), 1, writer->fPS);
   //fix here
@@ -196,13 +201,12 @@ void writerWritePS (WRITER *writer, float* ps) {
   fwrite (ps, sizeof(float), writer->lenPS, writer->fPS);
   fwrite (&writer->tone_freq, sizeof(float), 1, writer->fPS);
   fwrite (&writer->lj_voltage0, sizeof(float), 1, writer->fPS);
-  fwrite (&writer->lj_diode, sizeof(int), 1, writer->fPS);
+  fwrite (&lj_diode, sizeof(int), 1, writer->fPS);
   fflush(writer->fPS);
   writer->counter++;
 }
 
 void writerWriteRFI (WRITER *writer, float* ps, int* numbad, int totbad) {
-  maybeReOpenFile(writer);
   size_t N=writer->lenPS;
   int16_t totbads=totbad;
   // first  write the total number of bad records, for fat reading
