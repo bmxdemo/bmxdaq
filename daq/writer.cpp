@@ -15,7 +15,7 @@ void closeAndRename(WRITER *writer) {
   }
 }
 
-void maybeReOpenFile(WRITER *writer, bool first=false) {
+void maybeReOpenFile(WRITER *writer, SETTINGS *set, bool first=false) {
   time_t rawtime;   
   time ( &rawtime );
   struct tm *ti = gmtime ( &rawtime );
@@ -34,6 +34,11 @@ void maybeReOpenFile(WRITER *writer, bool first=false) {
       exit(1);
     }
     
+    writer->headerPS.bufdelay[0]=set->bufdelay[0];
+    writer->headerPS.bufdelay[1]=set->bufdelay[1];
+    writer->headerPS.delay[0]=set->delay[0];
+    writer->headerPS.delay[1]=set->delay[1];
+
     fwrite(&writer->headerPS, sizeof(BMXHEADER),1, writer->fPS);
 
     if(writer->rfiOn){
@@ -107,11 +112,11 @@ void resetAverage (WRITER *writer) {
   writer->totick=true;
 }
 
-void enableWriter(WRITER *wr) {
+void enableWriter(WRITER *wr, SETTINGS *set) {
   if (!wr->enabled) {
     wr->enabled=true;
     resetAverage(wr);
-    maybeReOpenFile(wr, true);
+    maybeReOpenFile(wr, set, true);
   }
 }
 
@@ -132,7 +137,7 @@ double getMJDNow()
 
 
 
-void processThread (WRITER& wrr) {
+void processThread (WRITER& wrr, SETTINGS& setr) {
   size_t N=wrr.lenPS;
   int M=wrr.average_recs;
   wrr.writing=true;
@@ -141,7 +146,7 @@ void processThread (WRITER& wrr) {
   for (size_t i=0;i<N;i++) {
     rfimean(&(ptr[i*M]),M,wrr.rfi_sigma, &(wrr.cleanps[i]), &(wrr.badps[i]), &(wrr.numbad[i]));
   }
-  writerWritePS(&wrr,wrr.cleanps);
+  writerWritePS(&wrr,wrr.cleanps, &setr);
   int totbad=0;
   for (size_t i=0;i<N;i++) totbad+=wrr.numbad[i];
   writerWriteRFI(&wrr,wrr.badps,wrr.numbad,totbad);
@@ -150,10 +155,10 @@ void processThread (WRITER& wrr) {
 }
 
 
-void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr) {
+void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr, SETTINGS *set) {
   if (writer->enabled) {
   if (writer->average_recs<=1) {
-    writerWritePS(writer,ps);
+    writerWritePS(writer,ps,set);
     return;
   }
   size_t N=writer->lenPS;
@@ -169,7 +174,7 @@ void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr) {
     if (writer->savethread.joinable()) writer->savethread.join();
     writer->crec=0;
     writer->totick = not writer->totick;
-    writer->savethread = std::thread(processThread,std::ref(*writer));
+    writer->savethread = std::thread(processThread,std::ref(*writer), std::ref(*set));
   }
   
   tprintfn(twr,1,"Writer Accumulator: %03d   Writing:%01d Tick/Tock:%01d  Reject in last save: %4.3f%%", 
@@ -181,8 +186,8 @@ void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr) {
 
 
 
-void writerWritePS (WRITER *writer, float* ps) {
-  maybeReOpenFile(writer);
+void writerWritePS (WRITER *writer, float* ps, SETTINGS *set) {
+  maybeReOpenFile(writer, set);
   double mjd=getMJDNow();
   fwrite (&mjd, sizeof(double), 1, writer->fPS);
   //fix here
@@ -197,7 +202,6 @@ void writerWritePS (WRITER *writer, float* ps) {
 }
 
 void writerWriteRFI (WRITER *writer, float* ps, int* numbad, int totbad) {
-  maybeReOpenFile(writer);
   size_t N=writer->lenPS;
   int16_t totbads=totbad;
   // first  write the total number of bad records, for fat reading

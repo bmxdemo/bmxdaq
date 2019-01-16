@@ -70,5 +70,5 @@ struct GPUCARD {
 
 void gpuCardInit (GPUCARD *gcard, SETTINGS *set);
 void startCalib(GPUCARD *gc);
-int  gpuProcessBuffer(GPUCARD *gcard, int8_t ** buf, int8_t ** prevbuf, 
+int  gpuProcessBuffer(GPUCARD *gcard, int8_t ** buf_one, int8_t ** buf_two, 
 			WRITER *w, TWRITER *t, SETTINGS *set);

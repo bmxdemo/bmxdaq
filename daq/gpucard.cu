@@ -338,8 +338,9 @@ void printLiveStat(SETTINGS *set, GPUCARD *gc, int8_t **buf, TWRITER *twr) {
       tprintfn (twr,1, "DCal: OK: %i/%i  Val %f +- %fms Applied delay: %i %i ",
 		gc->calibok, NUM_DELAYS, gc->calibmean_ms, gc->calibrms_ms, set->delay[0], set->delay[1]);
     else
-      tprintfn (twr,1, "DCal: Failed: %i/%i  Applied delay: %i %i ",
-		gc->calibok, NUM_DELAYS, set->delay[0], set->delay[1]);
+      tprintfn (twr,1, "DCal: Failed: %i/%i  Applied delay: %iB+%iS %iB+%iS ",
+		gc->calibok, NUM_DELAYS, set->bufdelay[0], set->delay[0], 
+		set->bufdelay[1], set->delay[1]);
   }
 }
 
@@ -385,13 +386,20 @@ void startCalib(GPUCARD *gc) {
 //      wr: writer to write out power spectra and outliers to files
 
 //  set: settings
-int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, int8_t **pbuf, WRITER *wr, TWRITER *twr, SETTINGS *set) {
+int gpuProcessBuffer(GPUCARD *gc, int8_t **buf_one, int8_t **buf_two, WRITER *wr, TWRITER *twr, SETTINGS *set) {
   //streamed version
   //Check if other streams are finished and proccess the finished ones in order (i.e. print output to file)
 
   CHK(cudaGetLastError());
 
   int nCards=(set->card_mask==3) + 1;
+
+  int8_t* buf[2];
+  int8_t* pbuf[2];
+  buf[0]=buf_one[set->bufdelay[0]];
+  pbuf[0]=buf_one[set->bufdelay[0]+1];
+  buf[1]=buf_two[set->bufdelay[0]];
+  pbuf[1]=buf_two[set->bufdelay[0]+1];
 
   while(gc->active_streams > 0){
     // printf ("S:%i ", cudaEventQuery(gc->eStart[gc->fstream])==cudaSuccess);
@@ -415,9 +423,9 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf, int8_t **pbuf, WRITER *wr, TWRIT
       if (gc->active_streams==1) {
 	printTiming(gc,fstream,twr);
 	printLiveStat(set,gc,buf,twr);
-	writerAccumulatePS(wr,gc->outps,twr);
+	writerAccumulatePS(wr,gc->outps,twr,set);
       } else
-	writerAccumulatePS(wr,gc->outps,NULL); // accumulate, but without talking
+	writerAccumulatePS(wr,gc->outps,NULL,set); // accumulate, but without talking
       gc->fstream = (++gc->fstream)%(gc->nstreams);
       gc->active_streams--;
     }
