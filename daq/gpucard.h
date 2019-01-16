@@ -59,6 +59,7 @@ struct GPUCARD {
   int last_measured_delay;
   int delays[NUM_DELAYS], ndelays;
   bool calib[MAXSTREAMS];
+  int lj_diode[MAXSTREAMS];
   bool calibrating, calibrated;
   int calibmean, calibrms, calibok;
   float calibmean_ms, calibrms_ms;
@@ -70,5 +71,5 @@ struct GPUCARD {
 
 void gpuCardInit (GPUCARD *gcard, SETTINGS *set);
 void startCalib(GPUCARD *gc);
-int  gpuProcessBuffer(GPUCARD *gcard, int8_t ** buf, int8_t ** prevbuf, 
-			WRITER *w, TWRITER *t, SETTINGS *set);
+int  gpuProcessBuffer(GPUCARD *gcard, int8_t ** buf_one, int8_t ** buf_two, 
+		      int lj_diode, WRITER *w, TWRITER *t, SETTINGS *set);

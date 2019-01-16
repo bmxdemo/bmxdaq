@@ -7,6 +7,7 @@
 #define MAXFREQ 10
 #define MAXSTREAMS 8
 #define NUM_DELAYS 200
+#define NDELAYBUFS 4
 
 // modifiable settings
 struct SETTINGS {
@@ -56,7 +57,8 @@ struct SETTINGS {
 
   // delay calibration
 
-  unsigned int delay[2]; // digital deltays for card 1,2 in samples
+  unsigned short int bufdelay[2]; // digital delays in full buffers 
+  unsigned int delay[2]; // digital deltays for card 1,2 in samples on top of bufdelay
   int measure_delay; // measure delays between cards 1 and 2
   
 
