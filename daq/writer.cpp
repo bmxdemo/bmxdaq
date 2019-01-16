@@ -98,6 +98,7 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   writer->average_recs=s->average_recs;
   writer->psbuftick = (float*)malloc(sizeof(float)*writer->lenPS * writer->average_recs);
   writer->psbuftock = (float*)malloc(sizeof(float)*writer->lenPS * writer->average_recs);
+  writer->ljdtick=writer->ljdtock=0;
   writer->cleanps = (float*)malloc(sizeof(float)*writer->lenPS);
   writer->badps = (float*) malloc(sizeof(float)*writer->lenPS);
   writer->numbad = (int*) malloc(sizeof(int)*writer->lenPS);
