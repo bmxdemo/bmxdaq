@@ -93,7 +93,13 @@ def animate(i,state):
              print("Picked up ",fnamet)
              time.sleep(2) ## wait for the file to start for real
              fname=fnamet
-             d=bmx.BMXFile(fname)
+             while True:
+                 try:
+                     d=bmx.BMXFile(fname)
+                     break
+                 except:
+                     time.sleep(1)
+
              state[1]=fname
              state[2]=d
 

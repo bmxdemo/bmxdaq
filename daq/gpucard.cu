@@ -335,8 +335,10 @@ void printLiveStat(SETTINGS *set, GPUCARD *gc, int8_t **buf, TWRITER *twr) {
 	      gc->ndelays, NUM_DELAYS, gc->last_measured_delay, delayms);
   } else {
     if  (gc->calibrated) 
-      tprintfn (twr,1, "DCal: OK: %i/%i  Val %f +- %fms Applied delay: %i %i ",
-		gc->calibok, NUM_DELAYS, gc->calibmean_ms, gc->calibrms_ms, set->delay[0], set->delay[1]);
+      tprintfn (twr,1, "DCal: OK: %i/%i  Val %f +- %fms Applied delay: %iB+%iS %iB+%iS",
+		gc->calibok, NUM_DELAYS, gc->calibmean_ms, gc->calibrms_ms, 
+		set->bufdelay[0], set->delay[0], 
+		set->bufdelay[1], set->delay[1]);
     else
       tprintfn (twr,1, "DCal: Failed: %i/%i  Applied delay: %iB+%iS %iB+%iS ",
 		gc->calibok, NUM_DELAYS, set->bufdelay[0], set->delay[0], 
@@ -364,6 +366,14 @@ void processCalibration(GPUCARD *gc, SETTINGS *set) {
     mean/=numok;
     var/=numok;
     gc->calibmean=mean;
+    if (gc->calibmean>0) {
+      set->delay[0]+=gc->calibmean;
+    } else if (gc->calibmean<0) {
+      set->delay[1]+= (-gc->calibmean);
+    }
+    int mindel=std::min(set->delay[0],set->delay[1]);
+    set->delay[0]-=mindel;
+    set->delay[1]-=mindel;
     gc->calibrms = int(sqrt(var-mean*mean));
     gc->calibmean_ms= gc->calibmean*1.0/(set->sample_rate)*1e3;
     gc->calibrms_ms= gc->calibrms*1.0/(set->sample_rate)*1e3;
@@ -398,8 +408,8 @@ int gpuProcessBuffer(GPUCARD *gc, int8_t **buf_one, int8_t **buf_two, int lj_dio
   int8_t* pbuf[2];
   buf[0]=buf_one[set->bufdelay[0]];
   pbuf[0]=buf_one[set->bufdelay[0]+1];
-  buf[1]=buf_two[set->bufdelay[0]];
-  pbuf[1]=buf_two[set->bufdelay[0]+1];
+  buf[1]=buf_two[set->bufdelay[1]];
+  pbuf[1]=buf_two[set->bufdelay[1]+1];
 
   while(gc->active_streams > 0){
     // printf ("S:%i ", cudaEventQuery(gc->eStart[gc->fstream])==cudaSuccess);
