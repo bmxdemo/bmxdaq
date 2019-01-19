@@ -52,10 +52,11 @@ class BMXFile(object):
             sys.exit(1)
         H=np.fromfile(f,head_desc,count=1)
         print(H)
-        self.cardMask=H['cardMask']
+	if self.version>=6: self.cardMask=H['cardMask']
         self.nChan=H['nChan'][0]
         self.ncuts=H['ncuts'][0]
-        print ("CardMask: %i, Channels: %i,  Cuts: %i"%(self.cardMask, self.nChan, self.ncuts))
+        if self.version>=6: print ("CardMask: %i, Channels: %i,  Cuts: %i"%(self.cardMask, self.nChan, self.ncuts))
+	else: print("Channels: %i,  Cuts: %i"%(self.nChan, self.ncuts))
         self.fft_size=H['fft_size'][0]
         self.average_recs=H['average_recs'][0] if self.version>=7 else 1
         self.sample_rate=H['sample_rate']/1e6
