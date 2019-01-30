@@ -8,15 +8,17 @@ except:
 import sys
 from numpy.fft import rfft, irfft, ifft
 from scipy.optimize import leastsq
+import numpy.lib.recfunctions as rf
 
 class BMXFile(object):
     freqOffset = 1100
-    def __init__(self,fname, nsamples=None, force_version=None):
+    def __init__(self,fname, nsamples=None, force_version=None, loadD2=False, verbose=0):
         ## old header!!
         #head_desc=[('nChan','i4'),
         #           ('fftsize','i4'),('fft_avg','i4'),('sample_rate','f4'),
         #           ('numin','f4'),('numax','f4'),('pssize','i4')]
 
+        self.verbose=verbose
         prehead_desc=[('magic','S8'),('version','i4')]
         f=open(fname);
         H=np.fromfile(f,prehead_desc,count=1)
@@ -27,7 +29,11 @@ class BMXFile(object):
             self.version=force_version
         else:
             self.version=H['version'][0]
-        print ("Loading version:",self.version)
+        if verbose>0:
+            print ("Loading: ",fname)
+            print ("Format Version:",self.version)
+        if verbose>1:
+            print ("Header:",H)
         if self.version<=5:
             maxcuts=10
             head_desc=[('nChan','i4'),('sample_rate','f4'),('fft_size','u4'),
@@ -51,12 +57,11 @@ class BMXFile(object):
             print ("Unknown version",H['version'])
             sys.exit(1)
         H=np.fromfile(f,head_desc,count=1)
-        print(H)
         if self.version>=6: self.cardMask=H['cardMask']
         self.nChan=H['nChan'][0]
         self.ncuts=H['ncuts'][0]
         if self.version>=6: 
-            print ("CardMask: %i, Channels: %i,  Cuts: %i"%(self.cardMask, self.nChan, self.ncuts))
+            if verbose>0: print ("CardMask: %i, Channels: %i,  Cuts: %i"%(self.cardMask, self.nChan, self.ncuts))
         else: 
             print("Channels: %i,  Cuts: %i"%(self.nChan, self.ncuts))
         self.fft_size=H['fft_size'][0]
@@ -66,10 +71,10 @@ class BMXFile(object):
         self.nP=H['pssize'][0]
         self.numin=(H['numin'][0]/1e6)[:self.ncuts]
         self.numax=(H['numax'][0]/1e6)[:self.ncuts]
-        print("We have ",self.ncuts,"cuts:")
+        if verbose>0: print("We have ",self.ncuts,"cuts:")
         self.freq=[]
         for i in range(self.ncuts):
-            print("    Cut ",i," ",self.numin[i],'-',self.numax[i],'MHz #P=',self.nP[i])
+            if verbose>0: print("    Cut ",i," ",self.numin[i],'-',self.numax[i],'MHz #P=',self.nP[i])
             self.freq.append(self.freqOffset+self.numin[i]+(np.arange(self.nP[i])+0.5)*(self.numax[i]-self.numin[i])/self.nP[i])
         rec_desc=[]
         self.haveMJD=False
@@ -129,7 +134,68 @@ class BMXFile(object):
             self.data=np.fromfile(f,rec_dt,count=nsamples)
         self.fhandle=f
         self.nSamples = len(self.data)
-        print ("Loading done, %i samples"%(len(self.data)))
+        if verbose>0: print ("Loading done, %i samples"%(len(self.data)))
+        if loadD2:
+            D2File=BMXFile(fname.replace("D1","D2"),
+                           nsamples=nsamples, force_version=force_version, loadD2=False, 
+                           verbose=verbose)
+            self.joinD2(D2File)
+
+    def joinD2(self,D2):
+        L=min(len(self.data),len(D2.data))
+        ## First find best offset, starting with zero
+        offset=0
+        def getSlices(offset):
+            if offset>0:
+                slice1=self.data[offset:]
+                slice2=D2.data[:]
+                L=min(len(slice1),len(slice2))
+                slice1=slice1[:L]
+                slice2=slice2[:L]
+            else:
+                slice1=self.data[:]
+                slice2=D2.data[-offset:]
+                L=min(len(slice1),len(slice2))
+                slice1=slice1[:L]
+                slice2=slice2[:L]
+            return slice1, slice2
+        
+        def mjdoffset(offset):
+            s1,s2=getSlices(offset)
+            return s2['mjd'].mean()-s1['mjd'].mean()
+
+        while True:
+            p0,pp,pm=mjdoffset(offset)**2,mjdoffset(offset+1)**2,mjdoffset(offset-1)**2
+            if p0<pp and p0<pm:
+                break
+            elif pm<pp:
+                offset-=1
+            else:
+                offset+=1
+            if (abs(offset)>L-2):
+                print ("Offset not converging!")
+                raise RuntimeError("Offset")
+        self.dTD2=mjdoffset(offset)*3600*24.
+        if (self.verbose>0):
+            print ("Best offset:",offset, 'dTD2:',self.dTD2,"s")
+        data1,data2=getSlices(offset)
+        data1=rf.drop_fields(data1,['lj_voltage','lj_diode','nu_tone'])
+        data2=rf.drop_fields(data2,['mjd','nu_tone'])
+        # rename fields in 12
+        d1,d2={},{}
+        for n in data1.dtype.names:
+            if 'chan' in n:
+                d1[n]=n.replace('chan','chanA')
+                d2[n]=n.replace('chan','chanB')
+        d1['num_nulled']='num_nulledA'
+        d2['num_nulled']='num_nulledB'
+
+        data1=rf.rename_fields(data1,d1)
+        data2=rf.rename_fields(data2,d2)
+        self.data=rf.merge_arrays((data1,data2),flatten=True)
+        if (self.verbose>0):
+            print ("Merge successful, total records:",len(self.data))
+
 
     def update(self,replace=False):
         ndata=np.fromfile(self.fhandle,self.rec_dt)
