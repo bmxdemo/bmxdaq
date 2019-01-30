@@ -126,8 +126,6 @@ class BMXFile(object):
             self.haveDiode=True
 
         rec_dt=np.dtype(rec_desc,align=False)
-        self.rec_dt=rec_dt
-        self.names=rec_dt.names
         if nsamples is None:
             self.data=np.fromfile(f,rec_dt)
         else:
@@ -140,6 +138,8 @@ class BMXFile(object):
                            nsamples=nsamples, force_version=force_version, loadD2=False, 
                            verbose=verbose)
             self.joinD2(D2File)
+        self.names=self.data.dtype.names
+
 
     def joinD2(self,D2):
         ## set num channels to 8
