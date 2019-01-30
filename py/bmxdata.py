@@ -115,8 +115,8 @@ class BMXFile(object):
                         rec_desc+=[('chan%i_%i'%(ch,i),'f4',self.nP[i])]
                     for ch1 in range(1,5):
                         for ch2 in range(ch1+1,5):
-                               rec_desc+=[('chan%i%iR_%i'%(ch1,ch2,i),'f4',self.nP[i]),
-                                          ('chan%i%iI_%i'%(ch1,ch2,i),'f4',self.nP[i])]
+                               rec_desc+=[('chan%ix%iR_%i'%(ch1,ch2,i),'f4',self.nP[i]),
+                                          ('chan%ix%iI_%i'%(ch1,ch2,i),'f4',self.nP[i])]
 
         if self.version>=1.5:
             rec_desc+=[('nu_tone','f4')]
@@ -187,10 +187,11 @@ class BMXFile(object):
         d1,d2={},{}
         for n in data1.dtype.names:
             if 'chan' in n:
-                d1[n]=n.replace('chan','chanA')
-                d2[n]=n.replace('chan','chanB')
-        d1['num_nulled']='num_nulledA'
-        d2['num_nulled']='num_nulledB'
+                #d1[n]=n.replace('chan','chanA')
+                
+                d2[n]=n.replace('1','5').replace('2','6').replace('3','7').replace('4','8')
+        d1['num_nulled']='num_nulled14'
+        d2['num_nulled']='num_nulled58'
 
         data1=rf.rename_fields(data1,d1)
         data2=rf.rename_fields(data2,d2)
