@@ -210,10 +210,10 @@ class BMXFile(object):
         return nd
 
     def getNames(self, cut):
-        if self.nChan==1:
-            return ['chan1_'+str(cut)]
-        else:
-            return ['chan1_'+str(cut),'chan2_'+str(cut),'chanXR_'+str(cut),'chanXI_'+str(cut)]
+        cutstr="_"+str(cut)
+        i=len(cutstr)
+        chnames=sorted([n for n in self.names if ('chan' in n) and (n[-i:]==cutstr)])
+        return chnames
 
     def getAutoName(self,chan,cut):
         return 'chan%i_%i'%(chan,cut)
