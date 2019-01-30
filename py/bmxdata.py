@@ -142,6 +142,8 @@ class BMXFile(object):
             self.joinD2(D2File)
 
     def joinD2(self,D2):
+        ## set num channels to 8
+        self.nChanTot+=D2.nChanTot
         L=min(len(self.data),len(D2.data))
         ## First find best offset, starting with zero
         offset=0
