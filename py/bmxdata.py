@@ -139,7 +139,7 @@ class BMXFile(object):
                            verbose=verbose)
             self.joinD2(D2File)
         self.names=self.data.dtype.names
-
+        self.nSamples = self.data['chan1_0'].shape[0]
 
     def joinD2(self,D2):
         ## set num channels to 8
