@@ -22,7 +22,7 @@ void terminalWriterInit(TWRITER * t, SETTINGS *s){
 	t->debug=s->debug;
 	terminal_set_conio_mode(t);
 
-	for (int i=0; i<=TERMINAL_LINES; i++) {
+	for (int i=0; i<TERMINAL_LINES; i++) {
 	  printf("\n\033[K");
 	  t->lines[i][0]='\0';
 	}

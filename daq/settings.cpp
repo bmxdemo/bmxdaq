@@ -48,6 +48,7 @@ void init_settings(SETTINGS *s, const char* fname) {
     sprintf(root_output_pattern,"%%02d%%02d%%02d_%%02d%%02d"); 
     sprintf(captain_hostname,"palantir2"); 
     sprintf(sailor_hostname,"palantir3"); 
+    sprintf(s->sailor_bind, "172.16.1.102");
     sprintf(s->ringbuffer_output_pattern, "%%02d%%02d%%02d_%%02d%%02d%%02d.ring");
     sprintf(s->card1, "/dev/spcm0");
     sprintf(s->card2, "/dev/spcm1");
@@ -136,6 +137,8 @@ void init_settings(SETTINGS *s, const char* fname) {
 	     strcpy(captain_hostname,s2);
 	   else if(!strcmp(s1,"sailor_hostname="))
 	     strcpy(sailor_hostname,s2);
+	   else if(!strcmp(s1,"sailor_bind="))
+	     strcpy(s->sailor_bind,s2);
            else if(!strcmp(s1,"ringbuffer_output_pattern="))
              strcpy(s->ringbuffer_output_pattern,s2);
            else if(!strcmp(s1,"ringbuffer_size="))
