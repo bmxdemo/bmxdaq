@@ -7,6 +7,7 @@
 void UDPCommInit (UDPCOMM *UDP, SETTINGS *set) {
   if (set->daqNum==2) {
     // sailor code, sailor is "server" in this scheme
+    //printf ("Ready to receive\n");
     UDP->captain=0;
     // Creating socket file descriptor 
 
@@ -38,6 +39,7 @@ void UDPCommInit (UDPCOMM *UDP, SETTINGS *set) {
       } 
       
   } else if (set->daqNum==1) {
+    //printf ("Ready to send\n");
     // captain code : captain is client in this scheme
     UDP->captain=1;
     // Creating socket file descriptor 
@@ -52,6 +54,9 @@ void UDPCommInit (UDPCOMM *UDP, SETTINGS *set) {
     UDP->servaddr.sin_family = AF_INET; 
     UDP->servaddr.sin_port = htons(UDPCOMM_PORT); 
     UDP->servaddr.sin_addr.s_addr = inet_addr(set->sailor_bind); 
+
+
+
       
   } else  {
     perror ("Bad daqNum!! Internal error. \n");
@@ -64,7 +69,7 @@ void UDPCommInit (UDPCOMM *UDP, SETTINGS *set) {
 }
 
 // BUFSIZE for messages;
-#define BUFSIZE 2
+#define BUFSIZE 1024
 
 void UDPPassKeyPress (UDPCOMM *UDP, char key) {
   char buffer[BUFSIZE];
@@ -72,10 +77,9 @@ void UDPPassKeyPress (UDPCOMM *UDP, char key) {
   if (UDP->captain) {
     buffer[0]='~'; // meaning == keypress;
     buffer[1]=key;
-    
-    sendto(UDP->sockfd, (const char*)(&buffer), sizeof(BUFSIZE), 
+    sendto(UDP->sockfd, (const char*)(buffer), 2, 
 	   MSG_CONFIRM, (const struct sockaddr *) &(UDP->servaddr),  
-	   sizeof(&(UDP->servaddr))); 
+	   sizeof(UDP->servaddr)); 
   }
 }
 
@@ -86,17 +90,15 @@ int UDPGetKeyPress (UDPCOMM *UDP, char *key) {
   socklen_t len;
   
   if (UDP->captain) return 0;
-  n = recvfrom(UDP->sockfd, &buffer, BUFSIZE,  
+  n = recvfrom(UDP->sockfd, buffer, BUFSIZE,  
 	       MSG_WAITALL, ( struct sockaddr *) &UDP->cliaddr, 
 	       &len); 
-
   if (n>0) {
     if (buffer[0]!='~') {
       printf ("Bad message received for captain\n");
       exit(EXIT_FAILURE); 
     }
     *key=buffer[1];
-    printf ("\n\n GOT: %c\n",*key);
     return 1;
   };
   return 0;

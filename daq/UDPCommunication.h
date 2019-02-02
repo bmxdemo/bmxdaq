@@ -10,7 +10,7 @@
 
 // PORT hardcoded for the time beign
 
-#define UDPCOMM_PORT 12099
+#define UDPCOMM_PORT 18080
 
 struct UDPCOMM {
   int captain;

@@ -458,7 +458,7 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
 
     char c;
     int remotekeypress=UDPGetKeyPress(UDP,&c);
-    if (terminal_kbhit() ||remotekeypress ) {
+    if (remotekeypress || terminal_kbhit() ) {
       if (!remotekeypress) c=terminal_getch();
 
       if ((c=='~') && captain)
