@@ -92,5 +92,6 @@ void UDPGetKeyPress (UDPCOMM *UDP, char *key) {
       exit(EXIT_FAILURE); 
     }
     *key=buffer[1];
+    printf ("\n\n GOT: %c\n",*key);
   };
 }

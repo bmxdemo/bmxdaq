@@ -345,8 +345,8 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
   if (captain) printf(" ~ -- enable/disable key passing to sailor\n");
   printf(" ! -- exit \n");
 
-  bool processed = true; //was the data processed properly on the gpu
-  bool passkeys = false;
+  int processed = 1; //was the data processed properly on the gpu
+  int passkeys = 0;
   // terminal writer init
   terminalWriterInit(t, set);
   while (!stopSignal) {
@@ -460,8 +460,10 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
 
       if ((c=='~') && captain)
 	passkeys = not passkeys;
-      else if (captain && passkeys)
+      else if (captain && passkeys) {
+	printf ("\n\n PASSING\n");
 	UDPPassKeyPress (UDP,c);
+      }
 
       if (sailor) UDPGetKeyPress (UDP,&c);
       if (c=='!') stopSignal=1;
