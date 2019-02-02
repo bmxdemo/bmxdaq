@@ -459,11 +459,11 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
       char c=terminal_getch();
 
       if ((c=='~') && captain)
-	passkeys = !passkeys;
+	passkeys = not passkeys;
       else if (captain && passkeys)
 	UDPPassKeyPress (UDP,c);
 
-      UDPGetKeyPress (UDP,&c);
+      if (sailor) UDPGetKeyPress (UDP,&c);
       if (c=='!') stopSignal=1;
       else if (c=='D') dumpSignal=1;
       else if (c=='C') calibrateDelaySignal=1;

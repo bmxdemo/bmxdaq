@@ -5,8 +5,8 @@
 #include "UDPCommunication.h"
 
 void UDPCommInit (UDPCOMM *UDP, SETTINGS *set) {
-  if (set->daqNum==1) {
-    // captain code.
+  if (set->daqNum==2) {
+    // sailor code, sailor is "server" in this scheme
 
     // Creating socket file descriptor 
 
@@ -37,8 +37,8 @@ void UDPCommInit (UDPCOMM *UDP, SETTINGS *set) {
         exit(EXIT_FAILURE); 
       } 
       
-  } else if (set->daqNum==2) {
-    // sailor code
+  } else if (set->daqNum==1) {
+    // captain code : captain is client in this scheme
 
     // Creating socket file descriptor 
     if ( (UDP->sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) { 
