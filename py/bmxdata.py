@@ -126,6 +126,7 @@ class BMXFile(object):
             self.haveDiode=True
 
         rec_dt=np.dtype(rec_desc,align=False)
+        self.rec_dt=rec_dt
         if nsamples is None:
             self.data=np.fromfile(f,rec_dt)
         else:
