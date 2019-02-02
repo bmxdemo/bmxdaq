@@ -19,7 +19,7 @@
 //     v7 -- delays in header
 
 #define HEADERVERSION 7
-
+#define RFIHEADERVERSION 2
 
 struct BMXHEADER {
   const char magic[8]=">>BMX<<"; // magic header char to recogize files *BMX*
@@ -38,7 +38,8 @@ struct BMXHEADER {
 };
 
 struct RFIHEADER {
-  const char magic[8]=">>RFI<<";
+  const char magic[8]=">>RFI2<";
+  int version=RFIHEADERVERSION;
   float nSigma;    //number of sigma away from mean
 };
 

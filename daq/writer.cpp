@@ -152,7 +152,7 @@ void processThread (WRITER& wrr, SETTINGS& setr) {
   int lj_diode = wrr.totick ? wrr.ljdtock : wrr.ljdtick;
   writerWritePS(&wrr,wrr.cleanps, lj_diode, &setr);
   int totbad=0;
-  for (size_t i=0;i<N;i++) totbad+=wrr.numbad[i];
+  for (size_t i=0;i<N;i++) if (wrr.numbad[i]>0) totbad++;
   writerWriteRFI(&wrr,wrr.badps,wrr.numbad,totbad);
   wrr.fbad=float(totbad)/(N*M);
   wrr.writing=false;

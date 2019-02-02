@@ -463,10 +463,9 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
 
       if ((c=='~') && captain)
 	passkeys = not passkeys;
-      else if (captain && passkeys) {
-	printf ("\n\n PASSING\n");
+      else if (captain && passkeys) 
 	UDPPassKeyPress (UDP,c);
-      }
+      
 
       if (c=='!') stopSignal=1;
       else if (c=='D') dumpSignal=1;
