@@ -7,7 +7,7 @@
 void UDPCommInit (UDPCOMM *UDP, SETTINGS *set) {
   if (set->daqNum==2) {
     // sailor code, sailor is "server" in this scheme
-
+    UDP->captain=0;
     // Creating socket file descriptor 
 
     if ( (UDP->sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) { 
@@ -39,7 +39,7 @@ void UDPCommInit (UDPCOMM *UDP, SETTINGS *set) {
       
   } else if (set->daqNum==1) {
     // captain code : captain is client in this scheme
-
+    UDP->captain=1;
     // Creating socket file descriptor 
     if ( (UDP->sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) { 
         perror("socket creation failed"); 
@@ -69,19 +69,23 @@ void UDPCommInit (UDPCOMM *UDP, SETTINGS *set) {
 void UDPPassKeyPress (UDPCOMM *UDP, char key) {
   char buffer[BUFSIZE];
 
-  buffer[0]='~'; // meaning == keypress;
-  buffer[1]=key;
-  
-  sendto(UDP->sockfd, (const char*)(&buffer), sizeof(BUFSIZE), 
-	 MSG_CONFIRM, (const struct sockaddr *) &(UDP->servaddr),  
-	 sizeof(&(UDP->servaddr))); 
+  if (UDP->captain) {
+    buffer[0]='~'; // meaning == keypress;
+    buffer[1]=key;
+    
+    sendto(UDP->sockfd, (const char*)(&buffer), sizeof(BUFSIZE), 
+	   MSG_CONFIRM, (const struct sockaddr *) &(UDP->servaddr),  
+	   sizeof(&(UDP->servaddr))); 
+  }
 }
 
-void UDPGetKeyPress (UDPCOMM *UDP, char *key) {
+
+int UDPGetKeyPress (UDPCOMM *UDP, char *key) {
   char buffer[BUFSIZE];
   int n;
   socklen_t len;
   
+  if (UDP->captain) return 0;
   n = recvfrom(UDP->sockfd, &buffer, BUFSIZE,  
 	       MSG_WAITALL, ( struct sockaddr *) &UDP->cliaddr, 
 	       &len); 
@@ -93,5 +97,7 @@ void UDPGetKeyPress (UDPCOMM *UDP, char *key) {
     }
     *key=buffer[1];
     printf ("\n\n GOT: %c\n",*key);
+    return 1;
   };
+  return 0;
 }

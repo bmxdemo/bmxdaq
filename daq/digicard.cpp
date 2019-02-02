@@ -455,8 +455,11 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
     // return terminal cursor
     tflush(t);
 
-    if (terminal_kbhit()) {
-      char c=terminal_getch();
+
+    char c;
+    int remotekeypress=UDPGetKeyPress(UDP,&c);
+    if (terminal_kbhit() ||remotekeypress ) {
+      if (!remotekeypress) c=terminal_getch();
 
       if ((c=='~') && captain)
 	passkeys = not passkeys;
@@ -465,7 +468,6 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
 	UDPPassKeyPress (UDP,c);
       }
 
-      if (sailor) UDPGetKeyPress (UDP,&c);
       if (c=='!') stopSignal=1;
       else if (c=='D') dumpSignal=1;
       else if (c=='C') calibrateDelaySignal=1;

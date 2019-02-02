@@ -13,6 +13,7 @@
 #define UDPCOMM_PORT 12099
 
 struct UDPCOMM {
+  int captain;
   int sockfd; 
   struct sockaddr_in servaddr, cliaddr; 
 };
@@ -20,6 +21,7 @@ struct UDPCOMM {
 void UDPCommInit (UDPCOMM *udp, SETTINGS *set);
 
 void UDPPassKeyPress (UDPCOMM *udp, char key);
-void UDPGetKeyPress (UDPCOMM *udp, char *key);
+// return true if new key arrived
+int UDPGetKeyPress (UDPCOMM *udp, char *key);
 
 
