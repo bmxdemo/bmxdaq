@@ -1,6 +1,7 @@
 #pragma once
 
 #include "settings.h"
+#include "UDPCommunication.h"
 #include "ringbuffer.h"
 #include "gpucard.h"
 #include "freqgen.h"
@@ -40,8 +41,8 @@ struct DIGICARD {
 void digiCardInit (DIGICARD *card, SETTINGS *set);
 
 //main worker loop
-void  digiWorkLoop(DIGICARD *card, RINGBUFFER *rb, GPUCARD *gcard, SETTINGS *set, FREQGEN *fgen, 
-		   LJACK *lj, WRITER *w, TWRITER *t);
+void  digiWorkLoop(DIGICARD *card, RINGBUFFER *rb, GPUCARD *gcard, SETTINGS *set, UDPCOMM *UDP,
+		   FREQGEN *fgen, LJACK *lj, WRITER *w, TWRITER *t);
 
 //shutdown
 void digiCardCleanUp(DIGICARD *card, SETTINGS *set);

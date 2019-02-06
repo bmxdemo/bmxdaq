@@ -251,7 +251,7 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
 }
 
 void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set, 
-                   FREQGEN *fgen, LJACK *lj, WRITER *w, TWRITER *t) {
+                   UDPCOMM *UDP, FREQGEN *fgen, LJACK *lj, WRITER *w, TWRITER *t) {
 
   printf ("\n\nStarting main loop\n");
   printf ("==========================\n");
@@ -333,22 +333,26 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
   signal(SIGRTMIN, loop_signal_handler);
   signal(SIGRTMIN+1, loop_signal_handler);
 
-
+  bool captain = set->daqNum==1;
+  bool sailor = !captain;
+  
   printf("Help:\n");
-  printf(" W / X -- enabel/disable writer \n");
+  printf(" W / X -- enable/disable writer \n");
   printf(" D -- dump ringbuffer (if enabled) \n");
   printf(" []\\ -- full buf delays for card 1\n");
   printf(" {}| -- full buf delays for card 2\n");
   printf(" C -- run time delay calibration loop \n");
+  if (captain) printf(" ~ -- enable/disable key passing to sailor\n");
   printf(" ! -- exit \n");
 
-  bool processed = true; //was the data processed properly on the gpu
+  int processed = 1; //was the data processed properly on the gpu
+  int passkeys = 0;
   // terminal writer init
   terminalWriterInit(t, set);
   while (!stopSignal) {
     clock_gettime(CLOCK_REALTIME, &t1);
     float dt=deltaT(tSim,t1);
-    tprintfn (t,1,"Sample number=%d, gpu_fail=%d, Cycle taking %fs, hope for < %fs",sample_count,gpuFails, dt, towait);
+    tprintfn (t,1,"Sample number=%d, gpu_fail=%d, Cycle %fs (< %fs), KeyPass: %i",sample_count,gpuFails, dt, towait, passkeys);
     if (set->simulate_digitizer) {
       for(int i=0; i<dc->num_cards; i++){
         lPCPos[i] = dc->lNotifySize*sim_ofs;
@@ -451,8 +455,18 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
     // return terminal cursor
     tflush(t);
 
-    if (terminal_kbhit()) {
-      char c=terminal_getch();
+
+    char c;
+    int remotekeypress=UDPGetKeyPress(UDP,&c);
+    if (remotekeypress || terminal_kbhit() ) {
+      if (!remotekeypress) c=terminal_getch();
+
+      if ((c=='~') && captain)
+	passkeys = not passkeys;
+      else if (captain && passkeys) 
+	UDPPassKeyPress (UDP,c);
+      
+
       if (c=='!') stopSignal=1;
       else if (c=='D') dumpSignal=1;
       else if (c=='C') calibrateDelaySignal=1;
@@ -465,7 +479,6 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
       else if (c=='}') set->bufdelay[1]=1;
       else if (c=='|') set->bufdelay[1]=0;
     }
-
   }   
 
   terminalWriterCleanup(t);

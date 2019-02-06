@@ -115,8 +115,8 @@ class BMXFile(object):
                         rec_desc+=[('chan%i_%i'%(ch,i),'f4',self.nP[i])]
                     for ch1 in range(1,5):
                         for ch2 in range(ch1+1,5):
-                               rec_desc+=[('chan%i%iR_%i'%(ch1,ch2,i),'f4',self.nP[i]),
-                                          ('chan%i%iI_%i'%(ch1,ch2,i),'f4',self.nP[i])]
+                               rec_desc+=[('chan%ix%iR_%i'%(ch1,ch2,i),'f4',self.nP[i]),
+                                          ('chan%ix%iI_%i'%(ch1,ch2,i),'f4',self.nP[i])]
 
         if self.version>=1.5:
             rec_desc+=[('nu_tone','f4')]
@@ -127,7 +127,6 @@ class BMXFile(object):
 
         rec_dt=np.dtype(rec_desc,align=False)
         self.rec_dt=rec_dt
-        self.names=rec_dt.names
         if nsamples is None:
             self.data=np.fromfile(f,rec_dt)
         else:
@@ -140,8 +139,12 @@ class BMXFile(object):
                            nsamples=nsamples, force_version=force_version, loadD2=False, 
                            verbose=verbose)
             self.joinD2(D2File)
+        self.names=self.data.dtype.names
+        self.nSamples = self.data['chan1_0'].shape[0]
 
     def joinD2(self,D2):
+        ## set num channels to 8
+        self.nChanTot+=D2.nChanTot
         L=min(len(self.data),len(D2.data))
         ## First find best offset, starting with zero
         offset=0
@@ -185,10 +188,11 @@ class BMXFile(object):
         d1,d2={},{}
         for n in data1.dtype.names:
             if 'chan' in n:
-                d1[n]=n.replace('chan','chanA')
-                d2[n]=n.replace('chan','chanB')
-        d1['num_nulled']='num_nulledA'
-        d2['num_nulled']='num_nulledB'
+                #d1[n]=n.replace('chan','chanA')
+                
+                d2[n]=n.replace('1','5').replace('2','6').replace('3','7').replace('4','8')
+        d1['num_nulled']='num_nulled14'
+        d2['num_nulled']='num_nulled58'
 
         data1=rf.rename_fields(data1,d1)
         data2=rf.rename_fields(data2,d2)
@@ -266,10 +270,10 @@ class BMXFile(object):
         return nd
 
     def getNames(self, cut):
-        if self.nChan==1:
-            return ['chan1_'+str(cut)]
-        else:
-            return ['chan1_'+str(cut),'chan2_'+str(cut),'chanXR_'+str(cut),'chanXI_'+str(cut)]
+        cutstr="_"+str(cut)
+        i=len(cutstr)
+        chnames=sorted([n for n in self.names if ('chan' in n) and (n[-i:]==cutstr)])
+        return chnames
 
     def getAutoName(self,chan,cut):
         return 'chan%i_%i'%(chan,cut)

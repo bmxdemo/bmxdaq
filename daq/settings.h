@@ -92,6 +92,10 @@ struct SETTINGS {
 
   //RFI rejection
   float n_sigma_null; //number of standard deviations used to determine outliers to null out. 0 for none
+
+  // Communication
+  char sailor_bind[MAXCHAR];
+
 };
 
 // Fixed defines

@@ -11,6 +11,7 @@ Anze Slosar, anze@bnl.gob
 
 #include "settings.h"
 #include "digicard.h"
+#include "UDPCommunication.h"
 #include "ringbuffer.h"
 #include "gpucard.h"
 #include "freqgen.h"
@@ -36,6 +37,7 @@ int main(int argc,char **argv)
   SETTINGS settings;                      // settings
   WRITER writer;                          // writer module
   DIGICARD dcard;                         // digitizer CARD
+  UDPCOMM UDP;                            // UDP cross daq communication server
   RINGBUFFER rbuffer;                          // ring buffer
   GPUCARD gcard;                          // GPU card
   FREQGEN fgen;                           // Freq generator
@@ -60,6 +62,8 @@ int main(int argc,char **argv)
   if (settings.lj_Non) LJInit(&ljack, &writer, &settings);
   // GPU
   if (!settings.dont_process) gpuCardInit(&gcard,&settings);
+  // UDP
+  UDPCommInit(&UDP, &settings);
   // writer
   writerInit(&writer,&settings);
   // digitizer
@@ -68,7 +72,7 @@ int main(int argc,char **argv)
   ringbufferInit(&rbuffer, &settings, &dcard);
 
   //MAIN LOOP
-  digiWorkLoop(&dcard, &rbuffer, &gcard, &settings, &fgen, &ljack, &writer, &twriter);
+  digiWorkLoop(&dcard, &rbuffer, &gcard, &settings, &UDP,  &fgen, &ljack, &writer, &twriter);
 
   //shutdown
   digiCardCleanUp(&dcard, &settings);
