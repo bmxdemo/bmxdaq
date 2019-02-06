@@ -196,6 +196,65 @@ class BMXFile(object):
         if (self.verbose>0):
             print ("Merge successful, total records:",len(self.data))
 
+    def loadRFI(self, fname):
+	fnamerfi = fname[:14] + 'rfi' + fname[13:28] + '.rfi'
+	f = open(fnamerfi)
+	prehead_desc = [('magic','S8')]
+	H = np.fromfile(f, prehead_desc, count=1)[0]
+	if H['magic'][:7]==b'>>RFI<<':   # RFI version 1
+	    prehead_desc = [('nSigma','f4')]
+	    nSigma = np.fromfile(f, prehead_desc, count=1)[0][0]
+
+	    prehead_desc = [('totbad','i2')]
+	    head_desc = [('ind','i2'),('num','i2'),('val','f4')]
+	    
+            rfi = np.zeros((self.nSamples, 16*2048))
+	    rfimask = np.zeros((self.nSamples, 16*2048))
+	    numbad = np.zeros((self.nSamples, 16*2048))
+
+	    for i in range(self.nSamples):
+	        lastind = 0
+		totbad = np.fromfile(f, prehead_desc, count=1)[0][0]
+	    	while totbad>0:
+		    H = np.fromfile(f, head_desc, count=1)[0]
+		    if (lastind > H['ind']) or (H['ind'] > 16*2048) or (H['ind'] < 0):
+		    	print('RFI indbad out of range.')
+			print('ind:',H['ind'],', loc:', j,'/',totbad,', tsample:',i,', lastind:', lastind)
+			return
+		    else:
+			rfi[i,H['ind']] = H['val']
+		    	rfimask[i,H['ind']] = 1
+			numbad[i,H['ind']] = H['num']
+			lastind = H['ind']
+			totbad += -H['num']
+
+	elif H['magic'][:7]==b'>>RFI2<': # RFI version 2
+	    prehead_desc = [('version','i4'),('nSigma','f4')]
+	    H = np.fromfile(f, prehead_desc, count=1)[0]
+	    
+	    prehead_desc = [('totbad','i2')]
+	    head_desc = [('ind','i2'),('num','i2'),('val','f4')]
+	
+	    rfi = np.zeros((self.nSamples, 16*2048))
+	    rfimask = np.zeros((self.nSamples, 16*2048))
+	    numbad = np.zeros((self.nSamples, 16*2048))
+
+	    for i in range(self.nSamples):
+		totbad = np.fromfile(f, prehead_desc, count=1)[0][0]
+		H = np.fromfile(f, head_desc, count=totbad)
+		rfi[i,H['ind']] = H['val']
+		rfimask[i,H['ind']] = 1
+		numbad[i,H['ind']] = H['num']
+	    
+	else:
+	    print("Bad magic.",H['magic'])
+            sys.exit(1)
+
+	self.rfi = rfi
+	self.rfimask = rfimask
+	self.rfinumbad = numbad
+	f.close()
+
 
     def update(self,replace=False):
         ndata=np.fromfile(self.fhandle,self.rec_dt)
@@ -329,7 +388,7 @@ class BMXFile(object):
                   arr[i] = np.reshape(arr[i],(-1, binSize[0])) 
                   arr[i] = np.mean(arr[i], axis = 1)  
            
-           arr = np.array(arr) 
+           arr = np.array(arr)
 
            #bin along y axis (time bins)
            if binSize[1] > 1:
@@ -350,7 +409,7 @@ class BMXFile(object):
     def getToneAmplFreq(self,chan, pm=20,freq="index"):
         mxf=[]
         mx=[]
-        for line in self.data[chan]:
+        for line in self.data[chan]: 
             i=abs(line).argmax()
             mxf.append(i)
             mx.append(line[max(0,i-pm):i+pm].sum())
