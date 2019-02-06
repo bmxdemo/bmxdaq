@@ -200,65 +200,68 @@ class BMXFile(object):
         if (self.verbose>0):
             print ("Merge successful, total records:",len(self.data))
 
-    def loadRFI(self, fname):
-	fnamerfi = fname[:14] + 'rfi' + fname[13:28] + '.rfi'
-	f = open(fnamerfi)
-	prehead_desc = [('magic','S8')]
-	H = np.fromfile(f, prehead_desc, count=1)[0]
-	if H['magic'][:7]==b'>>RFI<<':   # RFI version 1
-	    prehead_desc = [('nSigma','f4')]
-	    nSigma = np.fromfile(f, prehead_desc, count=1)[0][0]
+    def parseRFI(self, fname):
+	magic_desc = [('magic','S8')]
+	prehead_desc = [('totbad','i2')]
+        head_desc = [('ind','i2'),('num','i2'),('val','f4')] 
+        rfi = np.zeros((self.nSamples, 16*2048), dtype=np.float32)
+        rfimask = np.zeros((self.nSamples, 16*2048), dtype=np.float32)
+        numbad = np.zeros((self.nSamples, 16*2048), dtype=np.float32)
 
-	    prehead_desc = [('totbad','i2')]
-	    head_desc = [('ind','i2'),('num','i2'),('val','f4')]
-	    
-            rfi = np.zeros((self.nSamples, 16*2048))
-	    rfimask = np.zeros((self.nSamples, 16*2048))
-	    numbad = np.zeros((self.nSamples, 16*2048))
-
+	f = open(fname)
+	H = np.fromfile(f, magic_desc, count=1)[0]
+	# RFI version 1
+	if H['magic'][:7]==b'>>RFI<<':
+	    preprehead_desc = [('nSigma','f4')]
+	    nSigma = np.fromfile(f, preprehead_desc, count=1)[0][0]
 	    for i in range(self.nSamples):
 	        lastind = 0
 		totbad = np.fromfile(f, prehead_desc, count=1)[0][0]
 	    	while totbad>0:
 		    H = np.fromfile(f, head_desc, count=1)[0]
-		    if (lastind > H['ind']) or (H['ind'] > 16*2048) or (H['ind'] < 0):
-		    	print('RFI indbad out of range.')
-			print('ind:',H['ind'],', loc:', j,'/',totbad,', tsample:',i,', lastind:', lastind)
-			return
-		    else:
-			rfi[i,H['ind']] = H['val']
-		    	rfimask[i,H['ind']] = 1
-			numbad[i,H['ind']] = H['num']
-			lastind = H['ind']
-			totbad += -H['num']
-
-	elif H['magic'][:7]==b'>>RFI2<': # RFI version 2
-	    prehead_desc = [('version','i4'),('nSigma','f4')]
-	    H = np.fromfile(f, prehead_desc, count=1)[0]
-	    
-	    prehead_desc = [('totbad','i2')]
-	    head_desc = [('ind','i2'),('num','i2'),('val','f4')]
-	
-	    rfi = np.zeros((self.nSamples, 16*2048))
-	    rfimask = np.zeros((self.nSamples, 16*2048))
-	    numbad = np.zeros((self.nSamples, 16*2048))
-
+		    rfi[i,H['ind']] = H['val']
+		    rfimask[i,H['ind']] = 1
+		    numbad[i,H['ind']] = H['num']
+		    lastind = H['ind']
+		    totbad += -H['num']
+	# RFI version 2
+	elif H['magic'][:7]==b'>>RFI2<':
+	    preprehead_desc = [('version','i4'),('nSigma','f4')]
+	    H = np.fromfile(f, preprehead_desc, count=1)[0]
 	    for i in range(self.nSamples):
 		totbad = np.fromfile(f, prehead_desc, count=1)[0][0]
-		H = np.fromfile(f, head_desc, count=totbad)
+		H = np.fromfile(f, head_desc, count=totbad)[0]
 		rfi[i,H['ind']] = H['val']
 		rfimask[i,H['ind']] = 1
 		numbad[i,H['ind']] = H['num']
-	    
 	else:
 	    print("Bad magic.",H['magic'])
             sys.exit(1)
+	f.close()
+	return rfi, rfimask, numbad
 
+    def loadRFI(self, fname): # use self.rawfname
+	# Load data from both D1/D2 files
+	fname_rfiD1 = fname[:14] + 'rfi' + fname[13:28] + '.rfi'
+	fname_rfiD2 = fname_rfiD1.replace('D1','D2')
+	rfiD1, rfimaskD1, numbadD1 = self.parseRFI(fname_rfiD1)
+	rfiD2, rfimaskD2, numbadD2 = self.parseRFI(fname_rfiD2)
+	# Merge data
+	rfi = np.concatenate((rfiD1,rfiD2),axis=1)
+	rfimask = np.concatenate((rfimaskD1,rfimaskD2),axis=1)
+	numbad = np.concatenate((numbadD1,numbadD2),axis=1)
+	# Define channels
+	dtype = []
+	for i in range(2,18): dtype.append((self.names[i],'2048f4'))
+	for i in range(19,35): dtype.append((self.names[i],'2048f4'))
+	# Restructure data into channels
+	rfi = rfi.view(dtype=dtype)[:,0]
+	rfimask = rfimask.view(dtype=dtype)[:,0]
+	numbad = numbad.view(dtype=dtype)[:,0]
+	# Save data
 	self.rfi = rfi
 	self.rfimask = rfimask
 	self.rfinumbad = numbad
-	f.close()
-
 
     def update(self,replace=False):
         ndata=np.fromfile(self.fhandle,self.rec_dt)
