@@ -141,6 +141,7 @@ class BMXFile(object):
             self.joinD2(D2File)
         self.names=self.data.dtype.names
         self.nSamples = self.data['chan1_0'].shape[0]
+        self.fname = fname
 
     def joinD2(self,D2):
         ## set num channels to 8
@@ -406,9 +407,9 @@ class BMXFile(object):
         f.close()
         return rfi, rfimask, numbad
 
-    def loadRFI(self, fname): # use self.rawfname
+    def loadRFI(self): # use self.rawfname
         # Load data from both D1/D2 files
-        fname_rfiD1 = fname[:14] + 'rfi' + fname[13:28] + '.rfi'
+        fname_rfiD1 = self.fname[:14] + 'rfi' + self.fname[13:28] + '.rfi'
         fname_rfiD2 = fname_rfiD1.replace('D1','D2')
         rfiD1, rfimaskD1, numbadD1 = self.parseRFI(fname_rfiD1)
         rfiD2, rfimaskD2, numbadD2 = self.parseRFI(fname_rfiD2)
