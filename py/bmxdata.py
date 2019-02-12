@@ -426,10 +426,11 @@ class BMXFile(object):
         f.close()
         return rfi, rfimask, numbad
 
-    def loadRFI(self, fname=None):
+    def loadRFI(self, fname_rfi=None):
         # Load data from file
-	if fname==None: fname = self.fname
-	fname_rfi = os.path.join(os.path.dirname(fname),'rfi',os.path.basename(fname).replace('data','rfi'))
+	if fname_rfi is None:
+            fname = self.fname
+	    fname_rfi = os.path.join(os.path.dirname(fname),'rfi',os.path.basename(fname).replace('data','rfi'))
 	rfi, rfimask, numbad = self.parseRFI(fname_rfi)
         # Define channels
         dtype = []
