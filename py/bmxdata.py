@@ -433,9 +433,9 @@ class BMXFile(object):
 	rfi, rfimask, numbad = self.parseRFI(fname_rfi)
         # Define channels
         dtype = []
-        for i in self.names:
-	    if 'chan' in i:	
-		 dtype.append((i,'2048f4'))
+        for name in self.names:
+	    if 'chan' in name:	
+		 dtype.append((name,'2048f4'))
         # Restructure data into channels
         rfi = rfi.view(dtype=dtype)[:,0]
         rfimask = rfimask.view(dtype=dtype)[:,0]
