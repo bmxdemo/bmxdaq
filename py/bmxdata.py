@@ -136,9 +136,10 @@ class BMXFile(object):
         self.nSamples = len(self.data)
         if verbose>0: print ("Loading done, %i samples"%(len(self.data)))
 	self.names=self.data.dtype.names
+	self.fname = fname
 	if loadRFI:
 	    if verbose>0: print('Loading RFI...')
-	    self.loadRFI(fname)
+	    self.loadRFI()
         if loadD2:
             D2File=BMXFile(fname.replace("D1","D2"),
                            nsamples=nsamples, force_version=force_version, loadD2=False, 
@@ -146,7 +147,6 @@ class BMXFile(object):
             self.joinD2(D2File, loadRFI=loadRFI)
         self.names=self.data.dtype.names
         self.nSamples = self.data['chan1_0'].shape[0]
-        self.fname = fname
 
     def joinD2(self,D2,loadRFI=False):
         ## set num channels to 8
@@ -413,10 +413,10 @@ class BMXFile(object):
         # RFI version 2
         elif H['magic'][:7]==b'>>RFI2<':
             preprehead_desc = [('version','i4'),('nSigma','f4')]
-            H = np.fromfile(f, preprehead_desc, count=1)[0]
+            H = np.fromfile(f, preprehead_desc, count=1)
             for i in range(self.nSamples):
                 totbad = np.fromfile(f, prehead_desc, count=1)[0][0]
-                H = np.fromfile(f, head_desc, count=totbad)[0]
+                H = np.fromfile(f, head_desc, count=totbad)
                 rfi[i,H['ind']] = H['val']
                 rfimask[i,H['ind']] = 1
                 numbad[i,H['ind']] = H['num']
