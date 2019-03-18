@@ -135,11 +135,11 @@ class BMXFile(object):
         self.fhandle=f
         self.nSamples = len(self.data)
         if verbose>0: print ("Loading done, %i samples"%(len(self.data)))
-	self.names=self.data.dtype.names
-	self.fname = fname
-	if loadRFI:
-	    if verbose>0: print('Loading RFI...')
-	    self.loadRFI()
+        self.names=self.data.dtype.names
+        self.fname = fname
+        if loadRFI:
+            if verbose>0: print('Loading RFI...')
+            self.loadRFI()
         if loadD2:
             D2File=BMXFile(fname.replace("D1","D2"),
                            nsamples=nsamples, force_version=force_version, loadD2=False, 
@@ -217,7 +217,7 @@ class BMXFile(object):
             self.rfi=rf.merge_arrays((rfi1,rfi2),flatten=True)
             self.rfimask=rf.merge_arrays((rfimask1,rfimask2),flatten=True)
             self.rfinumbad=rf.merge_arrays((rfinumbad1,rfinumbad2),flatten=True)
-	if (self.verbose>0):
+        if (self.verbose>0):
             print ("Merge successful, total records:",len(self.data))
 
     def update(self,replace=False):
@@ -347,7 +347,7 @@ class BMXFile(object):
            arr = []
            for i in range(nsamples):
                arr.append(self.data[i]['chan' + str(n+1)+'_' + str(cut)])
-	       #bin along x axis (frequency bins)
+               #bin along x axis (frequency bins)
                if binSize[0] > 1:
                   arr[i] = np.reshape(arr[i],(-1, binSize[0])) 
                   arr[i] = np.mean(arr[i], axis = 1)  
@@ -428,15 +428,15 @@ class BMXFile(object):
 
     def loadRFI(self, fname_rfi=None):
         # Load data from file
-	if fname_rfi is None:
+        if fname_rfi is None:
             fname = self.fname
-	    fname_rfi = os.path.join(os.path.dirname(fname),'rfi',os.path.basename(fname).replace('data','rfi'))
-	rfi, rfimask, numbad = self.parseRFI(fname_rfi)
+            fname_rfi = os.path.join(os.path.dirname(fname),'rfi',os.path.basename(fname).replace('data','rfi'))
+        rfi, rfimask, numbad = self.parseRFI(fname_rfi)
         # Define channels
         dtype = []
         for name in self.names:
-	    if 'chan' in name:	
-		 dtype.append((name,'2048f4'))
+            if 'chan' in name:  
+                 dtype.append((name,'2048f4'))
         # Restructure data into channels
         rfi = rfi.view(dtype=dtype)[:,0]
         rfimask = rfimask.view(dtype=dtype)[:,0]
