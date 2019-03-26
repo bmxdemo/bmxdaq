@@ -6,8 +6,12 @@
 #include <math.h>
 #include <assert.h>
 
+FILE *dbf;
+
+
 void closeAndRename(WRITER *writer) {
 	fclose(writer->fPS);
+	fclose(dbf);
 	rename(writer->tafnamePS,writer->afnamePS);
   if(writer->rfiOn){
 	  fclose(writer->fRFI);
@@ -28,7 +32,8 @@ void maybeReOpenFile(WRITER *writer, SETTINGS *set, bool first=false) {
 	    ti->tm_mday, ti->tm_hour, ti->tm_min);
     sprintf(writer->tafnamePS,"%s.new",writer->afnamePS);
     writer->fPS=fopen(writer->tafnamePS,"wb");
-    
+    dbf=fopen("../data/debug_full.dat","wb");
+
     if (writer->fPS==NULL) {
       printf ("CANNOT OPEN FILE:%s",writer->tafnamePS);
       exit(1);
@@ -40,6 +45,7 @@ void maybeReOpenFile(WRITER *writer, SETTINGS *set, bool first=false) {
     writer->headerPS.delay[1]=set->delay[1];
     
     fwrite(&writer->headerPS, sizeof(BMXHEADER),1, writer->fPS);
+    fwrite(&writer->headerPS, sizeof(BMXHEADER),1,dbf);
 
     if(writer->rfiOn){
       sprintf(writer->afnameRFI,writer->fnameRFI, ti->tm_year - 100 , ti->tm_mon + 1, 
@@ -161,10 +167,27 @@ void processThread (WRITER& wrr, SETTINGS& setr) {
 
 void writerAccumulatePS (WRITER *writer, float* ps, int ljack_diode, TWRITER *twr, SETTINGS *set) {
   if (writer->enabled) {
+    //debug 
+    if (1)  {
+      double mjd=getMJDNow();
+      fwrite (&mjd, sizeof(double), 1, dbf);
+      //fix here
+      int numOutliersNulled=0;
+      fwrite (&numOutliersNulled, sizeof(int), writer->headerPS.nChannels, dbf);
+      fwrite (ps, sizeof(float), writer->lenPS, dbf);
+      fwrite (&writer->tone_freq, sizeof(float), 1, dbf);
+      fwrite (&writer->lj_voltage0, sizeof(float), 1, dbf);
+      fwrite (&numOutliersNulled, sizeof(int), 1, dbf);
+      fflush(dbf);
+    }
+
+
   if (writer->average_recs<=1) {
+    tprintfn(twr,1,"Writer Processing %f %f",ps[1400],ps[1401]); 
     writerWritePS(writer,ps, ljack_diode, set);
     return;
   }
+
   size_t N=writer->lenPS;
   int M=writer->average_recs;
   size_t j=writer->crec;
@@ -176,11 +199,36 @@ void writerAccumulatePS (WRITER *writer, float* ps, int ljack_diode, TWRITER *tw
 
   writer->crec++;
   if (writer->crec==M) {
-    if (writer->savethread.joinable()) writer->savethread.join();
-    writer->crec=0;
-    writer->totick = not writer->totick;
-    if (writer->totick) writer->ljdtick=0; else writer->ljdtock=0;
-    writer->savethread = std::thread(processThread,std::ref(*writer), std::ref(*set));
+    if (writer->rfi_sigma==0) {
+      // no need to do special separate thread thing, just dump
+      writer->crec=0;
+      // we'll leave to tick the same
+
+      //FILE* debug=fopen("debug.txt","w");
+      //for (size_t i=0; i<=M*N; i++) fprintf(debug, "%10.10g  \n",ptr[i]);
+      //fclose(debug);
+      //debug=fopen("debug2.txt","w");
+      
+      for (size_t i=0; i<N; i++) {
+	double acc=0.0;
+	for (size_t j=i*M; j<(i+1)*M; j++) acc+=ptr[j];
+	acc/=M;
+	//fprintf(debug, "%10.10g  \n",acc);
+	ps[i]=float(acc);
+      }
+
+      //fclose(debug);
+      //exit(1);
+
+      writerWritePS(writer,ps, writer->ljdtick, set);
+      writer->ljdtick=0;
+    } else {
+      if (writer->savethread.joinable()) writer->savethread.join();
+      writer->crec=0;
+      writer->totick = not writer->totick;
+      if (writer->totick) writer->ljdtick=0; else writer->ljdtock=0;
+      writer->savethread = std::thread(processThread,std::ref(*writer), std::ref(*set));
+    }
   }
   
   tprintfn(twr,1,"Writer Accumulator: %03d   Writing:%01d Tick/Tock:%01d  Reject in last save: %4.3f%%", 
