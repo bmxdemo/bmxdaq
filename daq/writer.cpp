@@ -161,30 +161,32 @@ void processThread (WRITER& wrr, SETTINGS& setr) {
 
 void writerAccumulatePS (WRITER *writer, float* ps, int ljack_diode, TWRITER *twr, SETTINGS *set) {
   if (writer->enabled) {
-  if (writer->average_recs<=1) {
-    writerWritePS(writer,ps, ljack_diode, set);
-    return;
-  }
-  size_t N=writer->lenPS;
-  int M=writer->average_recs;
-  size_t j=writer->crec;
-  float* ptr = writer->totick ? writer->psbuftick : writer->psbuftock;
-  for (size_t i=0;i<N;i++,j+=M) {
-    ptr[j]=ps[i];
-  }
-  if (writer->totick) writer->ljdtick+=ljack_diode; else writer->ljdtock+=ljack_diode;
+    tprintfn(twr,1,"Saving data to: %s ",writer->tafnamePS); 
 
-  writer->crec++;
-  if (writer->crec==M) {
-    if (writer->savethread.joinable()) writer->savethread.join();
-    writer->crec=0;
-    writer->totick = not writer->totick;
-    if (writer->totick) writer->ljdtick=0; else writer->ljdtock=0;
-    writer->savethread = std::thread(processThread,std::ref(*writer), std::ref(*set));
-  }
+    if (writer->average_recs<=1) {
+      writerWritePS(writer,ps, ljack_diode, set);
+      return;
+    }
+    size_t N=writer->lenPS;
+    int M=writer->average_recs;
+    size_t j=writer->crec;
+    float* ptr = writer->totick ? writer->psbuftick : writer->psbuftock;
+    for (size_t i=0;i<N;i++,j+=M) {
+      ptr[j]=ps[i];
+    }
+    if (writer->totick) writer->ljdtick+=ljack_diode; else writer->ljdtock+=ljack_diode;
+
+    writer->crec++;
+    if (writer->crec==M) {
+      if (writer->savethread.joinable()) writer->savethread.join();
+      writer->crec=0;
+      writer->totick = not writer->totick;
+      if (writer->totick) writer->ljdtick=0; else writer->ljdtock=0;
+      writer->savethread = std::thread(processThread,std::ref(*writer), std::ref(*set));
+    }
   
-  tprintfn(twr,1,"Writer Accumulator: %03d   Writing:%01d Tick/Tock:%01d  Reject in last save: %4.3f%%", 
-	   writer->crec, writer->writing,writer->totick, writer->fbad*100);
+    tprintfn(twr,1,"Writer Accumulator: %03d   Writing:%01d Tick/Tock:%01d  Reject in last save: %4.3f%%", 
+	     writer->crec, writer->writing,writer->totick, writer->fbad*100);
   } else {
     tprintfn(twr,1,"Writer disabled.");
   }
