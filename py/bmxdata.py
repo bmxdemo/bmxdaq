@@ -9,10 +9,11 @@ import sys
 from numpy.fft import rfft, irfft, ifft
 from scipy.optimize import leastsq
 import numpy.lib.recfunctions as rf
+import os
 
 class BMXFile(object):
     freqOffset = 1100
-    def __init__(self,fname, nsamples=None, force_version=None, loadD2=False, verbose=0):
+    def __init__(self,fname, nsamples=None, force_version=None, loadD2=False, loadRFI=False, verbose=0):
         ## old header!!
         #head_desc=[('nChan','i4'),
         #           ('fftsize','i4'),('fft_avg','i4'),('sample_rate','f4'),
@@ -134,30 +135,35 @@ class BMXFile(object):
         self.fhandle=f
         self.nSamples = len(self.data)
         if verbose>0: print ("Loading done, %i samples"%(len(self.data)))
+        self.names=self.data.dtype.names
+        self.fname = fname
+        if loadRFI:
+            if verbose>0: print('Loading RFI...')
+            self.loadRFI()
         if loadD2:
             D2File=BMXFile(fname.replace("D1","D2"),
                            nsamples=nsamples, force_version=force_version, loadD2=False, 
-                           verbose=verbose)
-            self.joinD2(D2File)
+                           loadRFI=loadRFI, verbose=verbose)
+            self.joinD2(D2File, loadRFI=loadRFI)
         self.names=self.data.dtype.names
         self.nSamples = self.data['chan1_0'].shape[0]
 
-    def joinD2(self,D2):
+    def joinD2(self,D2,loadRFI=False):
         ## set num channels to 8
         self.nChanTot+=D2.nChanTot
         L=min(len(self.data),len(D2.data))
         ## First find best offset, starting with zero
         offset=0
-        def getSlices(offset):
+        def getSlices(offset, d1data=self.data, d2data=D2.data):
             if offset>0:
-                slice1=self.data[offset:]
-                slice2=D2.data[:]
+                slice1=d1data[offset:]
+                slice2=d2data[:]
                 L=min(len(slice1),len(slice2))
                 slice1=slice1[:L]
                 slice2=slice2[:L]
             else:
-                slice1=self.data[:]
-                slice2=D2.data[-offset:]
+                slice1=d1data[:]
+                slice2=d2data[-offset:]
                 L=min(len(slice1),len(slice2))
                 slice1=slice1[:L]
                 slice2=slice2[:L]
@@ -197,9 +203,22 @@ class BMXFile(object):
         data1=rf.rename_fields(data1,d1)
         data2=rf.rename_fields(data2,d2)
         self.data=rf.merge_arrays((data1,data2),flatten=True)
+        if loadRFI:
+            rfi1, rfi2 = getSlices(offset, d1data=self.rfi, d2data=D2.rfi)
+            rfimask1, rfimask2 = getSlices(offset, d1data=self.rfimask, d2data=D2.rfimask)
+            rfinumbad1, rfinumbad2 = getSlices(offset, d1data=self.rfinumbad, d2data=D2.rfinumbad)
+            rfid2={}
+            for n in data1.dtype.names:
+                if 'chan' in n:
+                    rfid2[n]=n.replace('1','5').replace('2','6').replace('3','7').replace('4','8')
+            rfi2=rf.rename_fields(rfi2,rfid2)
+            rfimask2=rf.rename_fields(rfimask2,rfid2)
+            rfinumbad2=rf.rename_fields(rfinumbad2,rfid2)
+            self.rfi=rf.merge_arrays((rfi1,rfi2),flatten=True)
+            self.rfimask=rf.merge_arrays((rfimask1,rfimask2),flatten=True)
+            self.rfinumbad=rf.merge_arrays((rfinumbad1,rfinumbad2),flatten=True)
         if (self.verbose>0):
             print ("Merge successful, total records:",len(self.data))
-
 
     def update(self,replace=False):
         ndata=np.fromfile(self.fhandle,self.rec_dt)
@@ -328,12 +347,12 @@ class BMXFile(object):
            arr = []
            for i in range(nsamples):
                arr.append(self.data[i]['chan' + str(n+1)+'_' + str(cut)])
-	       #bin along x axis (frequency bins)
+               #bin along x axis (frequency bins)
                if binSize[0] > 1:
                   arr[i] = np.reshape(arr[i],(-1, binSize[0])) 
                   arr[i] = np.mean(arr[i], axis = 1)  
            
-           arr = np.array(arr) 
+           arr = np.array(arr)
 
            #bin along y axis (time bins)
            if binSize[1] > 1:
@@ -354,7 +373,7 @@ class BMXFile(object):
     def getToneAmplFreq(self,chan, pm=20,freq="index"):
         mxf=[]
         mx=[]
-        for line in self.data[chan]:
+        for line in self.data[chan]: 
             i=abs(line).argmax()
             mxf.append(i)
             mx.append(line[max(0,i-pm):i+pm].sum())
@@ -366,6 +385,67 @@ class BMXFile(object):
             if freq=="dfreq":
                 mxf-=self.freq[chan].mean()
         return mxf,mx
+
+    def parseRFI(self, fname):
+        magic_desc = [('magic','S8')]
+        prehead_desc = [('totbad','i2')]
+        head_desc = [('ind','i2'),('num','i2'),('val','f4')]
+        rfi = np.zeros((self.nSamples, 16*2048), dtype=np.float32)
+        rfimask = np.zeros((self.nSamples, 16*2048), dtype=np.float32)
+        numbad = np.zeros((self.nSamples, 16*2048), dtype=np.float32)
+
+        f = open(fname)
+        H = np.fromfile(f, magic_desc, count=1)[0]
+        # RFI version 1
+        if H['magic'][:7]==b'>>RFI<<':
+            preprehead_desc = [('nSigma','f4')]
+            nSigma = np.fromfile(f, preprehead_desc, count=1)[0][0]
+            for i in range(self.nSamples):
+                lastind = 0
+                totbad = np.fromfile(f, prehead_desc, count=1)[0][0]
+                while totbad>0:
+                    H = np.fromfile(f, head_desc, count=1)[0]
+                    rfi[i,H['ind']] = H['val']
+                    rfimask[i,H['ind']] = 1
+                    numbad[i,H['ind']] = H['num']
+                    lastind = H['ind']
+                    totbad += -H['num']
+        # RFI version 2
+        elif H['magic'][:7]==b'>>RFI2<':
+            preprehead_desc = [('version','i4'),('nSigma','f4')]
+            H = np.fromfile(f, preprehead_desc, count=1)
+            for i in range(self.nSamples):
+                totbad = np.fromfile(f, prehead_desc, count=1)[0][0]
+                H = np.fromfile(f, head_desc, count=totbad)
+                rfi[i,H['ind']] = H['val']
+                rfimask[i,H['ind']] = 1
+                numbad[i,H['ind']] = H['num']
+        else:
+            print("Bad magic.",H['magic'])
+            sys.exit(1)
+        f.close()
+        return rfi, rfimask, numbad
+
+    def loadRFI(self, fname_rfi=None):
+        # Load data from file
+        if fname_rfi is None:
+            fname = self.fname
+            fname_rfi = os.path.join(os.path.dirname(fname),'rfi',os.path.basename(fname).replace('data','rfi'))
+        rfi, rfimask, numbad = self.parseRFI(fname_rfi)
+        # Define channels
+        dtype = []
+        for name in self.names:
+            if 'chan' in name:  
+                 dtype.append((name,'2048f4'))
+        # Restructure data into channels
+        rfi = rfi.view(dtype=dtype)[:,0]
+        rfimask = rfimask.view(dtype=dtype)[:,0]
+        numbad = numbad.view(dtype=dtype)[:,0]
+        # Save data
+        self.rfi = rfi
+        self.rfimask = rfimask
+        self.rfinumbad = numbad
+
             
 
 
