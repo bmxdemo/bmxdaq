@@ -139,7 +139,8 @@ class BMXFile(object):
         self.fname = fname
         if loadRFI:
             if verbose>0: print('Loading RFI...')
-            self.loadRFI()
+            rfierr = self.loadRFI()
+            if rfierr: loadRFI = False
         if loadD2:
             D2File=BMXFile(fname.replace("D1","D2"),
                            nsamples=nsamples, force_version=force_version, loadD2=False, 
@@ -393,7 +394,7 @@ class BMXFile(object):
         rfi = np.zeros((self.nSamples, 16*2048), dtype=np.float32)
         rfimask = np.zeros((self.nSamples, 16*2048), dtype=np.float32)
         numbad = np.zeros((self.nSamples, 16*2048), dtype=np.float32)
-
+        
         f = open(fname)
         H = np.fromfile(f, magic_desc, count=1)[0]
         # RFI version 1
@@ -431,6 +432,9 @@ class BMXFile(object):
         if fname_rfi is None:
             fname = self.fname
             fname_rfi = os.path.join(os.path.dirname(fname),'rfi',os.path.basename(fname).replace('data','rfi'))
+        if not os.path.isfile(fname_rfi): # if RFI file does not exist, exit with error
+            print('RFI file does not exist.')
+            return 1
         rfi, rfimask, numbad = self.parseRFI(fname_rfi)
         # Define channels
         dtype = []
@@ -445,6 +449,7 @@ class BMXFile(object):
         self.rfi = rfi
         self.rfimask = rfimask
         self.rfinumbad = numbad
+        return 0
 
             
 
