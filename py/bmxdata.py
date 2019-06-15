@@ -340,29 +340,30 @@ class BMXFile(object):
     #inputs:
     #       binSize [x, y]: how many samples to average per bin on both the x and y  axis
     #       cut: which cut to use
-    def getImageArray(self, binSize = [1, 1], nsamples=None, cut=0 ):
+    def getImageArray(self, binSize = [1, 1], nsamples=None, cut=None ):
         if nsamples is  None:
             nsamples = self.nSamples
         reducedArr = []  #for reduced array after binning
-        for n in range(2):
-           arr = []
-           for i in range(nsamples):
-               arr.append(self.data[i]['chan' + str(n+1)+'_' + str(cut)])
-               #bin along x axis (frequency bins)
-               if binSize[0] > 1:
-                  arr[i] = np.reshape(arr[i],(-1, binSize[0])) 
-                  arr[i] = np.mean(arr[i], axis = 1)  
-           
-           arr = np.array(arr)
-
-           #bin along y axis (time bins)
-           if binSize[1] > 1:
-               reducedArr.append([])
-               for i in range(int(len(arr)/binSize[1])):
-                        reducedArr[n].append(arr[binSize[1]*i:binSize[1]*(i+1)].mean(axis=0))
-           else:
-               reducedArr = arr
-
+        if cut is None:
+            cut='chan1_0'
+        arr = []
+        for i in range(nsamples):
+            arr.append(self.data[i][cut])
+            #bin along x axis (frequency bins)
+            if binSize[0] > 1:
+                arr[i] = np.reshape(arr[i],(-1, binSize[0])) 
+                arr[i] = np.mean(arr[i], axis = 1)  
+                
+        arr = np.array(arr)
+ 
+        #bin along y axis (time bins)
+        if binSize[1] > 1:
+            reducedArr.append([])
+            for i in range(int(len(arr)/binSize[1])):
+                reducedArr[n].append(arr[binSize[1]*i:binSize[1]*(i+1)].mean(axis=0))
+        else:
+            reducedArr = arr
+ 
         return (reducedArr)
 
 
