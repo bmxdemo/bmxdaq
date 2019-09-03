@@ -36,6 +36,8 @@ def getOpts():
                       help="ymax", type=float)
     parser.add_argument("--psavg", dest="psavg", action="store_true",
                       help="Average power spectra")
+    parser.add_argument("--freqofs", dest="freqofs", type=float, default=0,
+                      help="Add this number to frequency value")
     parser.add_argument("--linear", dest="log", action="store_false",
                       help="Use linear y scale (default is log)")
     o=parser.parse_args()
@@ -88,10 +90,16 @@ def animate(i,state):
     
     if (nr==0) and (o.filename is None):
         print("Looking for new file...")
-        fnamet=max(glob.iglob('data/*.data.new'), key=os.path.getctime)
+        try:
+            fnamet=max(glob.iglob('data/*.data.new'), key=os.path.getctime)
+        except:
+            print ("No file, skipping.")
+            fname=""
+            state[1]=fname
+            return
         if fnamet!=fname:
              print("Picked up ",fnamet)
-             time.sleep(2) ## wait for the file to start for real
+             #time.sleep(2) ## wait for the file to start for real
              fname=fnamet
              while True:
                  try:
@@ -112,7 +120,7 @@ def animate(i,state):
             if 'chan'==name[:4]:
                 cut=int(name.split('_')[-1])
                 if (name in d.names):
-                    ax.plot(d.freq[cut],d.data[name].mean(axis=0),'b-')
+                    ax.plot(d.freq[cut]-o.freqofs,d.data[name].mean(axis=0),'b-')
 
                     if o.log:
                         if ("R" in name) or ("I" in name):
@@ -120,7 +128,7 @@ def animate(i,state):
                         ax.semilogy()
                     if (o.ymax>0):
                         ymin,ymax=ax.get_ylim()
-                        ax.set_ylim(ymin,o.ymax)
+                        ax.set_ylim(0,o.ymax)
                 ax.text(.5,.9,name,
                         horizontalalignment='center',
                         transform=ax.transAxes)
