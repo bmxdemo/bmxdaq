@@ -203,23 +203,30 @@ __global__ void ps_reduce(cufftComplex *ffts, float* output_ps, size_t istart, s
   //global pos
   size_t pos=istart+bl*avgsize;
   size_t pose=pos+avgsize;
-  pos+=tid;
-  work[tid]=0;
-  while (pos<pose) {
-    work[tid]+=ffts[pos].x*ffts[pos].x+ffts[pos].y*ffts[pos].y;
-    pos+=nth;
-  }
-  // now do the tree reduce.
-  int csum=nth/2;
-  while (csum>0) {
-    __syncthreads();
-    if (tid<csum) {
-      work[tid]+=work[tid+csum];
+  if (avgsize==1) {
+    if (tid==0) output_ps[bl]=ffts[pos].x*ffts[pos].x+ffts[pos].y*ffts[pos].y;
+  } else {
+    pos+=tid;
+    work[tid]=0;
+    while (pos<pose) {
+      work[tid]+=ffts[pos].x*ffts[pos].x+ffts[pos].y*ffts[pos].y;
+      pos+=nth;
     }
-    csum/=2;
+    // now do the tree reduce.
+    int csum=nth/2;
+    while (csum>0) {
+      __syncthreads();
+      if (tid<csum) {
+	work[tid]+=work[tid+csum];
+      }
+      csum/=2;
+    }
+    if (tid==0) output_ps[bl]=work[0];
   }
-  if (tid==0) output_ps[bl]=work[0];
 }
+
+
+
 
 //Reduction algorithm, to calculate cross power spectrum
 __global__ void ps_X_reduce(cufftComplex *fftsA, cufftComplex *fftsB, 
