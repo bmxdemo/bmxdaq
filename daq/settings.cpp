@@ -276,3 +276,23 @@ void print_settings(SETTINGS *s) {
   printf ("Buffer multiplier (size of ADC buffer in FFT buf size): %i\n", s->buf_mult);
   printf ("\n*********************************************************************\n");
 }
+
+char* getCardDev(SETTINGS* set, int cardnum){
+  switch(set->card_mask){
+    case 1:
+      if (cardnum==0) return set->card1; else return NULL;
+      break;
+    case 2:
+      if (cardnum==0) return set->card2; else return NULL;
+      break;
+    case 3:
+      if (cardnum==0) return set->card1;
+      else if (cardnum==1) return set->card2;
+      else return NULL;
+      break;
+    default:
+      printf("invalid value for card_mask.\n");
+      exit(1);
+  }
+}
+

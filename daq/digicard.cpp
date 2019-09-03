@@ -72,7 +72,7 @@ void printErrorDie(const char* message, DIGICARD *card, int cardIndex,  SETTINGS
   spcm_dwGetErrorInfo_i32 (card->hCard[cardIndex], NULL, NULL, szErrorTextBuffer);
   //we correct card number in case where we are only using the second digitizer card
   int cardNum = (set->card_mask==2)? 1 : cardIndex;
-  printf ("Digitizer card %d fatal error: %s\n",card->serialNumber[cardNum], message);
+  printf ("Digitizer card %s fatal error: %s\n",getCardDev(set,cardIndex), message);
   printf ("Error Text: %s\n", szErrorTextBuffer);
   digiCardCleanUp(card, set);
   exit(1);
@@ -182,23 +182,8 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
   printf ("==========================\n");
 
   //open digitizer cards
-  switch(set->card_mask){
-    case 1:
-      card->hCard[0] = spcm_hOpen (set->card1);
-      break;
-    case 2:
-      card->hCard[0] = spcm_hOpen (set->card2);
-      break;
-    case 3:
-      card->hCard[0] = spcm_hOpen (set->card1);
-      card->hCard[1] = spcm_hOpen (set->card2);
-      break;
-    default:
-      printf("invalid value for card_mask.\n");
-      exit(1);
-  }
-  
   for(int i =0; i < card->num_cards; i++){
+    card->hCard[i] = spcm_hOpen(getCardDev(set,i));
     if (!card->hCard[i]) printErrorDie("Can't open digitizer card", card, i, set);
     int32 lCardType, lFncType;
     // read type, function and sn and check for A/D card
