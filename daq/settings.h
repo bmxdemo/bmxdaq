@@ -105,3 +105,4 @@ struct SETTINGS {
 
 void init_settings(SETTINGS *settings, const char* inifile);
 void print_settings(SETTINGS *s);
+char* getCardDev(SETTINGS*s, int cardnum);
