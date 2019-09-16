@@ -66,6 +66,9 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   writer->enabled=false;
   writer->new_file_every=s->new_file_every;
   writer->headerPS.cardMask=s->card_mask;
+  writer->headerPS.daqNum=s->daqNum;
+  if (s->daqNum==1) memcpy(writer->headerPS.wires,s->captain_wires,8);
+  else memcpy(writer->headerPS.wires,s->sailor_wires,8);
   writer->headerPS.nChannels=1+(s->channel_mask==3);
   writer->headerPS.sample_rate=s->sample_rate;
   writer->headerPS.fft_size=s->fft_size;
