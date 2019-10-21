@@ -15,10 +15,13 @@ struct SETTINGS {
   int debug;
   // daq num. 1 is captain, 2 is sailor
   int daqNum;
+  // config of which wires go where
+  char captain_wires[8], sailor_wires[8];
+  
   
   // basic settings
   uint64_t card_mask; //bit mask representing which cards are to be used
-  // digi card settings
+  // digi card device driver
   char  card1[MAXCHAR], card2[MAXCHAR];
   
   float sample_rate; // in samples/s

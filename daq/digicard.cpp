@@ -183,6 +183,7 @@ void digiCardInit (DIGICARD *card, SETTINGS *set) {
 
   //open digitizer cards
   for(int i =0; i < card->num_cards; i++){
+    printf ("Attempting to open: %s \n",getCardDev(set,i));
     card->hCard[i] = spcm_hOpen(getCardDev(set,i));
     if (!card->hCard[i]) printErrorDie("Can't open digitizer card", card, i, set);
     int32 lCardType, lFncType;

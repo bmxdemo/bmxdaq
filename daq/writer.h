@@ -18,12 +18,14 @@
 //     v6 -- two digitizers 
 //     v7 -- delays in header
 
-#define HEADERVERSION 7
+#define HEADERVERSION 8
 #define RFIHEADERVERSION 2
 
 struct BMXHEADER {
   const char magic[8]=">>BMX<<"; // magic header char to recogize files *BMX*
   int version=HEADERVERSION;
+  int daqNum;
+  char wires[8]; // whcih wires go where from captain sailor, etc 
   int cardMask;
   int nChannels;
   float sample_rate;

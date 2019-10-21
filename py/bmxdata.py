@@ -53,6 +53,13 @@ class BMXFile(object):
                        ('fft_size','u4'),('average_recs','u4'), ('ncuts','i4'),
                    ('numin','10f4'),('numax','10f4'),('fft_avg','10u4'),
                    ('pssize','10i4'),('bufdelay','2i4'),('delay','2i4')]
+        elif self.version<=8:
+            maxcuts=10
+            head_desc=[('daqNum','i4'), ('wires','S8'),
+                       ('cardMask','i4'),('nChan','i4'),('sample_rate','f4'),
+                       ('fft_size','u4'),('average_recs','u4'), ('ncuts','i4'),
+                       ('numin','10f4'),('numax','10f4'),('fft_avg','10u4'),
+                       ('pssize','10i4'),('bufdelay','2i4'),('delay','2i4')]
             
         else:
             print ("Unknown version",H['version'])
@@ -84,6 +91,12 @@ class BMXFile(object):
         self.haveDiode=False
         self.FilenameUTC=(self.version>=5)
 
+        if self.version>=8:
+            self.wires={} ## let's make this dictonary to avoid counting convention crap
+            j=1
+            for i in range(0,len(H['wires'][0]),2):
+                self.wires[j]=H['wires'][0][i:i+2]
+                j+=1
         if self.version>=7:
             self.delay=H['delay'][0]
             self.bufdelay=H['bufdelay'][0]
