@@ -293,6 +293,41 @@ void printLiveStat(SETTINGS *set, GPUCARD *gc, int8_t **buf, TWRITER *twr) {
       tprintfn (twr,1,"CH3 mean/rms: %f %f   CH4 mean/rms: %f %f   ",m3,v3,m4,v4);
     }
   }
+  if (set->check_CH2) {
+    // heuristic to see if CH2 is OK.
+    float mean_card1=0;
+    float mean_card2=0;
+    int count=0;
+    float numin=set->nu_min[0];
+    float nustep=(set->nu_max[0]-set->nu_min[0])/(gc->pssize1[0]);
+    int ofs2=gc->pssize1[0];
+    int ofs4=3*gc->pssize1[0];
+
+    for (int j=0; j<gc->pssize1[0];j++) { // check just cut 0
+      float f=numin+nustep*j;
+      if ((f>1560e6-1100e6) && (f<1640e6-1100e6)) {
+	count++;
+	mean_card1+=gc->outps[ofs2+j];
+	if (nCards==2) mean_card2+=gc->outps[ofs4+j];
+      }
+    }
+    if (count>0) {
+      mean_card1/=(count*1e11);
+      int ok=0;
+      if (nCards==1) {
+	ok=mean_card1<1;
+	tprintfn (twr,0,"CH2 check : %f : ",mean_card1);
+
+      } else {
+	mean_card2/=(count*1e11);
+	ok=((mean_card1<1) && (mean_card2<1));
+	tprintfn (twr,0,"CH2 check : %f / %f : ",mean_card1, mean_card2);
+      }
+      if (ok) tprintfn(twr,1, " OK "); else
+		tprintfn(twr,1, " NOT OK !!!");
+    }
+  }
+
   if (set->print_maxp) {
     // find max power in each cutout in each channel.
     int of1=0; // CH1 auto

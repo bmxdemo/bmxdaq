@@ -76,6 +76,7 @@ struct SETTINGS {
   int print_meanvar;
   int print_maxp;
   int print_every;
+  int check_CH2; // funny CH2 behavior check
 
   // "derived" quantities for passing
   int pssize[MAXCUTS];

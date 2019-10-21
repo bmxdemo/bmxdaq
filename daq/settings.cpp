@@ -38,6 +38,7 @@ void init_settings(SETTINGS *s, const char* fname) {
     s->new_file_every=60;
     s->average_recs=128;
     s->print_meanvar=1;
+    s->check_CH2=1;
     s->print_maxp=0;
     s->print_every=1;
     s->ringbuffer_size=8;
@@ -153,6 +154,8 @@ void init_settings(SETTINGS *s, const char* fname) {
              s->ringbuffer_force=atoi(s2);
 	   else if(!strcmp(s1,"print_meanvar="))
 	     s->print_meanvar=atoi(s2);
+	   else if(!strcmp(s1,"check_CH2="))
+	     s->check_CH2=atoi(s2);
 	   else if(!strcmp(s1,"print_maxp="))
 	     s->print_maxp=atoi(s2);
 	   else if(!strcmp(s1,"print_every="))
