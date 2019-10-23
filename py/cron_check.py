@@ -28,15 +28,18 @@ if alive:
     dmtime=abs(os.path.getmtime(fnamet)-time.time())
     sname=fnamet.replace("/home/bmx/bmxdaq/data/","")
     if dmtime<3:
-        outline += " %s"%(sname)
+        outline += " %s "%(sname)
         d=bmxdata.BMXFile(fnamet, nsamples=10)
+        badline=""
         for ch in range(1,5):
             name='chan%i_0'%ch
             pow=d.data[name].mean()/1e12
-            outline += " CH%i: %f3.2"%(ch,pow)
+            outline += "%3.2f/"%(pow)
             if (pow<1):
                 print ("CH%i, power too low!"%ch)
+                badline+=" CH%i_BAD"%ch
                 ## do something
+        outline+=badline
     else:
         outline+=" not recording"
 open (logfile,'a+').write(outline+"\n")
