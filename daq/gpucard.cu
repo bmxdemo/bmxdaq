@@ -312,14 +312,14 @@ void printLiveStat(SETTINGS *set, GPUCARD *gc, int8_t **buf, TWRITER *twr) {
       }
     }
     if (count>0) {
-      mean_card1/=(count*1e11);
+      mean_card1/=(count*1e11)*(set->fft_avg[0]/8192);
       int ok=0;
       if (nCards==1) {
 	ok=mean_card1<1;
 	tprintfn (twr,0,"CH2 check : %f : ",mean_card1);
 
       } else {
-	mean_card2/=(count*1e11);
+	mean_card2/=(count*1e11)*(set->fft_avg[0]/8192);;
 	ok=((mean_card1<1) && (mean_card2<1));
 	tprintfn (twr,0,"CH2 check : %f / %f : ",mean_card1, mean_card2);
       }
