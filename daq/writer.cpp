@@ -1,6 +1,6 @@
 #include "writer.h"
 #include "string.h"
-#include "time.h"
+#include "sys/time.h"
 #include <unistd.h>
 #include "stdlib.h"
 #include <math.h>
@@ -136,8 +136,10 @@ void disableWriter(WRITER *wr) {
 
 double getMJDNow()
 {
-  long int t=time(NULL);
-  return (double)(t) / 86400.0  + 40587.0;
+  struct timeval ts;
+  gettimeofday(&ts,NULL);
+  double t = ts.tv_sec + 1e-6*double(ts.tv_usec);
+  return t / 86400.0  + 40587.0;
 }
 
 
@@ -163,6 +165,7 @@ void processThread (WRITER& wrr, SETTINGS& setr) {
 
 
 void writerAccumulatePS (WRITER *writer, float* ps, int ljack_diode, TWRITER *twr, SETTINGS *set) {
+  tprintfn (twr,1,"MJD : %10.7f ",getMJDNow());
   if (writer->enabled) {
     tprintfn(twr,1,"Saving data to: %s ",writer->tafnamePS); 
 
