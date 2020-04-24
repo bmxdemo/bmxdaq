@@ -17,8 +17,10 @@
 //     v5 -- changed localtime to gmtime in filename -- header hasn't changed
 //     v6 -- two digitizers 
 //     v7 -- delays in header
+//     v8 -- ??
+//     v9 -- added record num in header -- a basic counter since recording started.
 
-#define HEADERVERSION 8
+#define HEADERVERSION 9
 #define RFIHEADERVERSION 2
 
 struct BMXHEADER {
@@ -37,6 +39,7 @@ struct BMXHEADER {
   int pssize[MAXCUTS];
   int bufdelay[2];
   int delay[2];
+  uint32_t rec_num;
 };
 
 struct RFIHEADER {
@@ -47,6 +50,7 @@ struct RFIHEADER {
 
 struct WRITER {
   bool enabled;
+  uint32_t sample_counter; 
   char fnamePS[MAXFNLEN], fnameRFI[MAXFNLEN]; //file names, from settings
   char afnamePS[MAXFNLEN], afnameRFI[MAXFNLEN];  //current file names
   char tafnamePS[MAXFNLEN], tafnameRFI[MAXFNLEN];  //temporary current file names //(with ".new")
@@ -72,7 +76,6 @@ struct WRITER {
   float tone_freq;
   float lj_voltage0;
   int lj_diode;
-  int counter; //number of PS written to current file
 };
 
 

@@ -22,8 +22,6 @@ void maybeReOpenFile(WRITER *writer, SETTINGS *set, bool first=false) {
   
   if (first || ((ti->tm_min%writer->new_file_every==0) && writer->reopen)) {
     if (!first) closeAndRename(writer);
-
-    writer->counter =0; //reset sample counter to 0
     sprintf(writer->afnamePS,writer->fnamePS, ti->tm_year - 100 , ti->tm_mon + 1, 
 	    ti->tm_mday, ti->tm_hour, ti->tm_min);
     sprintf(writer->tafnamePS,"%s.new",writer->afnamePS);
@@ -34,11 +32,11 @@ void maybeReOpenFile(WRITER *writer, SETTINGS *set, bool first=false) {
       exit(1);
     }
     
-    writer->headerPS.bufdelay[0]=set->bufdelay[0];
-    writer->headerPS.bufdelay[1]=set->bufdelay[1];
-    writer->headerPS.delay[0]=set->delay[0];
-    writer->headerPS.delay[1]=set->delay[1];
-    
+    writer->headerPS.bufdelay[0] = set->bufdelay[0];
+    writer->headerPS.bufdelay[1] = set->bufdelay[1];
+    writer->headerPS.delay[0] = set->delay[0];
+    writer->headerPS.delay[1] = set->delay[1];
+    writer->headerPS.rec_num = writer->sample_counter;
     fwrite(&writer->headerPS, sizeof(BMXHEADER),1, writer->fPS);
 
     if(writer->rfiOn){
@@ -113,13 +111,13 @@ void resetAverage (WRITER *writer) {
   writer->writing=false;
   writer->crec=0;
   writer->fbad=0.0;
-  writer->counter = 0;
   writer->totick=true;
 }
 
 void enableWriter(WRITER *wr, SETTINGS *set) {
   if (!wr->enabled) {
     wr->enabled=true;
+    wr->sample_counter = 0;
     resetAverage(wr);
     maybeReOpenFile(wr, set, true);
   }
@@ -166,8 +164,9 @@ void processThread (WRITER& wrr, SETTINGS& setr) {
 
 void writerAccumulatePS (WRITER *writer, float* ps, int ljack_diode, TWRITER *twr, SETTINGS *set) {
   tprintfn (twr,1,"MJD : %10.7f ",getMJDNow());
+  writer->sample_counter++;
   if (writer->enabled) {
-    tprintfn(twr,1,"Saving data to: %s ",writer->tafnamePS); 
+    tprintfn(twr,1,"Saving data to: %s, rec # %li ",writer->tafnamePS,writer->sample_counter); 
 
     if (writer->average_recs<=1) {
       writerWritePS(writer,ps, ljack_diode, set);
@@ -212,7 +211,6 @@ void writerWritePS (WRITER *writer, float* ps, int lj_diode, SETTINGS *set) {
   fwrite (&writer->lj_voltage0, sizeof(float), 1, writer->fPS);
   fwrite (&lj_diode, sizeof(int), 1, writer->fPS);
   fflush(writer->fPS);
-  writer->counter++;
 }
 
 void writerWriteRFI (WRITER *writer, float* ps, int* numbad, int totbad) {
