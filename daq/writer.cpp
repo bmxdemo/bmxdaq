@@ -90,8 +90,9 @@ void writerInit(WRITER *writer, SETTINGS *s) {
 
   }
   writer->tone_freq = 0;
-  writer->lj_voltage0 = 0;
   writer->lj_diode = 0;
+  zeroaux(&writer->auxtick);
+  zeroaux(&writer->auxtock);
   printf ("Record size: %i\n", writer->lenPS);
   printf ("Version: %i\n", writer->headerPS.version);
 
@@ -99,7 +100,6 @@ void writerInit(WRITER *writer, SETTINGS *s) {
   writer->average_recs=s->average_recs;
   writer->psbuftick = (float*)malloc(sizeof(float)*writer->lenPS * writer->average_recs);
   writer->psbuftock = (float*)malloc(sizeof(float)*writer->lenPS * writer->average_recs);
-  writer->ljdtick=writer->ljdtock=0;
   writer->cleanps = (float*)malloc(sizeof(float)*writer->lenPS);
   writer->badps = (float*) malloc(sizeof(float)*writer->lenPS);
   writer->numbad = (int*) malloc(sizeof(int)*writer->lenPS);
@@ -152,8 +152,8 @@ void processThread (WRITER& wrr, SETTINGS& setr) {
     rfimean(&(ptr[i*M]),M,wrr.rfi_sigma, &(wrr.cleanps[i]), &(wrr.badps[i]), &(wrr.numbad[i]));
   }
   // note we process THE OTHER ONE
-  int lj_diode = wrr.totick ? wrr.ljdtock : wrr.ljdtick;
-  writerWritePS(&wrr,wrr.cleanps, lj_diode, &setr);
+  auxinfo* aux = wrr.totick ? &wrr.auxtock : &wrr.auxtick;
+  writerWritePS(&wrr,wrr.cleanps, aux, &setr);
   int totbad=0;
   for (size_t i=0;i<N;i++) if (wrr.numbad[i]>0) totbad++;
   writerWriteRFI(&wrr,wrr.badps,wrr.numbad,totbad);
@@ -162,14 +162,17 @@ void processThread (WRITER& wrr, SETTINGS& setr) {
 }
 
 
-void writerAccumulatePS (WRITER *writer, float* ps, int ljack_diode, TWRITER *twr, SETTINGS *set) {
+void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr, SETTINGS *set) {
   tprintfn (twr,1,"MJD : %10.7f ",getMJDNow());
   writer->sample_counter++;
   if (writer->enabled) {
     tprintfn(twr,1,"Saving data to: %s, rec # %li ",writer->tafnamePS,writer->sample_counter); 
 
     if (writer->average_recs<=1) {
-      writerWritePS(writer,ps, ljack_diode, set);
+      auxinfo taux;
+      zeroaux(&taux);
+      auxadd(&taux, writer);
+      writerWritePS(writer,ps, &taux, set);
       return;
     }
     size_t N=writer->lenPS;
@@ -179,14 +182,14 @@ void writerAccumulatePS (WRITER *writer, float* ps, int ljack_diode, TWRITER *tw
     for (size_t i=0;i<N;i++,j+=M) {
       ptr[j]=ps[i];
     }
-    if (writer->totick) writer->ljdtick+=ljack_diode; else writer->ljdtock+=ljack_diode;
+    if (writer->totick) auxadd (&writer->auxtick, writer); else auxadd(&writer->auxtock,writer);
 
     writer->crec++;
     if (writer->crec==M) {
       if (writer->savethread.joinable()) writer->savethread.join();
       writer->crec=0;
       writer->totick = not writer->totick;
-      if (writer->totick) writer->ljdtick=0; else writer->ljdtock=0;
+      if (writer->totick) zeroaux(&writer->auxtick); else zeroaux(&writer->auxtock);
       writer->savethread = std::thread(processThread,std::ref(*writer), std::ref(*set));
     }
   
@@ -197,9 +200,40 @@ void writerAccumulatePS (WRITER *writer, float* ps, int ljack_diode, TWRITER *tw
   }
 }
 
+void zeroaux (auxinfo *aux) {
+  aux->lj_diode = 0;
+  for (int i=0; i<2; i++){
+    aux->temp_fgpa[i] = 0.0;
+    aux->temp_adc[i] = 0.0 ;
+    aux->temp_frontend[i] = 0.0;
+  }
+  for (int i=0; i<4; i++) aux->lj_voltage[i] = 0.0;
+}
+
+void auxadd (auxinfo *aux, WRITER *writer) {
+  aux->lj_diode += writer->lj_diode;
+  for (int i=0; i<2; i++){
+    aux->temp_fgpa[i] += 1.0*writer->ctemp_fgpa[i];
+    aux->temp_adc[i] += 1.0*writer->ctemp_adc[i] ;
+    aux->temp_frontend[i] += 1.0*writer->ctemp_frontend[i];
+  }
+  for (int i=0; i<4; i++) aux->lj_voltage[i] += writer->lj_voltage[i];
+}
 
 
-void writerWritePS (WRITER *writer, float* ps, int lj_diode, SETTINGS *set) {
+void auxmean (auxinfo *aux, int nrec) {
+  // diode stays like it is
+  // the reset we take mean
+  for (int i=0; i<2; i++){
+    aux->temp_fgpa[i] /= nrec;
+    aux->temp_adc[i] /= nrec;
+    aux->temp_frontend[i] /= nrec;
+  }
+  for (int i=0; i<4; i++) aux->lj_voltage[i] /= nrec;
+}
+
+
+void writerWritePS (WRITER *writer, float* ps, auxinfo* aux, SETTINGS *set) {
   maybeReOpenFile(writer, set);
   double mjd=getMJDNow();
   fwrite (&mjd, sizeof(double), 1, writer->fPS);
@@ -208,8 +242,13 @@ void writerWritePS (WRITER *writer, float* ps, int lj_diode, SETTINGS *set) {
   fwrite (&numOutliersNulled, sizeof(int), writer->headerPS.nChannels, writer->fPS);
   fwrite (ps, sizeof(float), writer->lenPS, writer->fPS);
   fwrite (&writer->tone_freq, sizeof(float), 1, writer->fPS);
-  fwrite (&writer->lj_voltage0, sizeof(float), 1, writer->fPS);
-  fwrite (&lj_diode, sizeof(int), 1, writer->fPS);
+
+  auxmean (aux,writer->average_recs);
+  fwrite (&aux->lj_diode, sizeof(int), 1, writer->fPS);
+  fwrite(aux->temp_fgpa, sizeof(float), 2, writer->fPS);
+  fwrite(aux->temp_adc, sizeof(float), 2, writer->fPS);
+  fwrite(aux->temp_frontend, sizeof(float), 2, writer->fPS);
+  fwrite(aux->lj_voltage, sizeof(float), 4, writer->fPS);
   fflush(writer->fPS);
 }
 

@@ -15,7 +15,7 @@ struct LJACK {
   int num_on,num_off,num_tot;
   int counter;
   int handle;
-  double voltage0;
+  double voltage[4];
   int diode;
 };
 

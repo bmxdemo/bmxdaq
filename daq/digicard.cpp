@@ -366,6 +366,11 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
         spcm_dwGetParam_i32 (dc->hCard[i], SPC_DATA_AVAIL_USER_LEN,  &lAvailUser[i]);
         spcm_dwGetParam_i32 (dc->hCard[i], SPC_DATA_AVAIL_USER_POS,  &lPCPos[i]);
         spcm_dwGetParam_i32 (dc->hCard[i], SPC_FILLSIZEPROMILLE,  &fill[i]);
+	// get temperatures
+	spcm_dwGetParam_i32 (dc->hCard[i], SPC_MON_T_BASE_CTRL, &w->ctemp_fgpa[i]);
+	spcm_dwGetParam_i32 (dc->hCard[i], SPC_MON_T_MODULE_0, &w->ctemp_adc[i]);
+	spcm_dwGetParam_i32 (dc->hCard[i], SPC_MON_T_MODULE_1, &w->ctemp_frontend[i]);
+
         bufstart[i]=((int8_t*)dc->pnData[i]+lPCPos[i]);
         assert(lAvailUser[i] >= dc->lNotifySize);
         clock_gettime(CLOCK_REALTIME, &tSim);
@@ -375,6 +380,7 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
       }
       if (dc->num_cards>1) tprintfn(t,1,"Delta T between cards: %f ms",deltaT(tc[0],tc[1]));
     }
+    
     if (dumpSignal & (set->ringbuffer_size>0)) {
       dumpRingBuffer(rb);
       dumpSignal=0;
@@ -387,6 +393,7 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
 
     if (enableWriterSignal) {
       enableWriterSignal=0;
+      if (set->lj_Non) lj->counter=0;
       enableWriter(w,set);
     }
     if (disableWriterSignal) {
@@ -401,6 +408,15 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
         tprintfn(t,1,"Card %d Status:%i; Pos:%08x; Len:%08x; digitizer buffer fill %i/1000   ", dc->serialNumber[i],
             lStatus[i], lPCPos[i], lAvailUser[i], fill[i]);
     }
+    if (dc->num_cards==2) {
+      tprintfn (t,1,"Temperatures Card 1: %i / %i / %i  Card 2: %i / %i/ %i ",w->ctemp_fgpa[0]-273,
+		w->ctemp_adc[0]-273, w->ctemp_frontend[0]-273,w->ctemp_fgpa[1]-273,
+		w->ctemp_adc[1]-273,w->ctemp_frontend[1]-273);
+    } else {
+      tprintfn (t,1,"Temperatures Card 1: %i / %i / %i  ",w->ctemp_fgpa[0]-273,w->ctemp_adc[0]-273,
+		w->ctemp_frontend[0]-273);
+
+    }
     if (set->ringbuffer_size>0) printInfoRingBuffer(rb,t);
     if (set->dont_process) 
       tprintfn (t,1," ** no GPU processing");
@@ -411,8 +427,7 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
       }
       buf_one[0]=bufstart[0];
       buf_two[0]=bufstart[1];
-      int diode= set->lj_Non ? lj->diode : 0; 
-      processed = gpuProcessBuffer(gc,buf_one, buf_two, diode, w, t, set);
+      processed = gpuProcessBuffer(gc,buf_one, buf_two, w, t, set);
       if (!processed) gpuFails++;
     }
 

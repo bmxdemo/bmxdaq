@@ -19,8 +19,8 @@
 //     v7 -- delays in header
 //     v8 -- ??
 //     v9 -- added record num in header -- a basic counter since recording started.
-
-#define HEADERVERSION 9
+//     v10 -- saving 4 voltages + temperatures
+#define HEADERVERSION 10
 #define RFIHEADERVERSION 2
 
 struct BMXHEADER {
@@ -48,6 +48,14 @@ struct RFIHEADER {
   float nSigma;    //number of sigma away from mean
 };
 
+struct auxinfo {
+  int lj_diode;
+  float temp_fgpa[2];
+  float temp_adc[2];
+  float temp_frontend[2];
+  float lj_voltage[4];
+};
+
 struct WRITER {
   bool enabled;
   uint32_t sample_counter; 
@@ -64,7 +72,9 @@ struct WRITER {
   bool totick, writing;
   std::thread savethread;
   float *psbuftick, *psbuftock, *cleanps, *badps;
-  int ljdtick, ljdtock;
+  int ctemp_fgpa[2], ctemp_adc[2], ctemp_frontend[2];
+  int lj_diode;
+  auxinfo auxtick, auxtock;
   int *numbad;
   float fbad; //fraction bad last time
   
@@ -74,8 +84,7 @@ struct WRITER {
   BMXHEADER headerPS;  //header for power spectra files
   RFIHEADER headerRFI; //header for rfi files
   float tone_freq;
-  float lj_voltage0;
-  int lj_diode;
+  float lj_voltage[4];
 };
 
 
@@ -84,10 +93,14 @@ void writerInit(WRITER *writer, SETTINGS *set);
 
 float rfimean (float arr[], int n, int nsigma, float *cleanmean, float *outliermean, int *numbad);
 
-void writerWritePS (WRITER *writer, float* ps, int lj_diode, SETTINGS *set);
+void zeroaux (auxinfo *aux);
+void auxadd (auxinfo *aux, WRITER *writer);
+void auxmean (auxinfo *aux, int nrec);
+
+void writerWritePS (WRITER *writer, float* ps, auxinfo *aux, SETTINGS *set);
 void writerWriteRFI (WRITER *writer, float* ps, int* numbad, int totbad);
 
-void writerAccumulatePS (WRITER *writer, float* ps, int lj_diode, TWRITER *twr, SETTINGS *set);
+void writerAccumulatePS (WRITER *writer, float* ps, TWRITER *twr, SETTINGS *set);
 
 void enableWriter(WRITER *wr, SETTINGS *set);
 void disableWriter(WRITER *wr);

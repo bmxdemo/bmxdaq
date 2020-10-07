@@ -38,17 +38,20 @@ void LJLoop (LJACK *lj, WRITER* wr, TWRITER* twr) {
     ErrorCheck(err, "LJM_eWriteAddress");
     lj->diode=1;
   }
-  // read voltage3
-  err = LJM_eReadAddress(lj->handle, 0, LJM_FLOAT32, &lj->voltage0);  // yes 0 is AIN0  
+  // read voltage
+  for (int i=0; i<4; i++)
+     LJM_eReadAddress(lj->handle, i, LJM_FLOAT32, &lj->voltage[i]);  // yes 0 is AIN0  
 
   if (wr) {
-    wr->lj_voltage0=lj->voltage0;
-    //wr->lj_diode=lj->diode;
+    wr->lj_diode = lj->diode;
+    for (int i=0; i<4; i++)
+      wr->lj_voltage[i]=lj->voltage[i];
+  
   }
-  if (twr)
-    tprintfn (twr, 1, "LabJack: count %i/%i Diode:%i  V0:%g ",lj->counter, 
-	   lj->num_tot, lj->diode, lj->voltage0);
 
+  if (twr)
+    tprintfn (twr, 1, "LabJack: count %i/%i Diode:%i  Voltages: %3.2f / %3.2f / %3.2f / %3.2f  ",lj->counter, 
+	      lj->num_tot, lj->diode, lj->voltage[0],lj->voltage[1], lj->voltage[2],lj->voltage[3]);
   lj->counter = (++lj->counter)%(lj->num_tot);
 
 }
