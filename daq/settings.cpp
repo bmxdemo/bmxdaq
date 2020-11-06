@@ -50,7 +50,6 @@ void init_settings(SETTINGS *s, const char* fname) {
     sprintf(captain_hostname,"palantir2"); 
     sprintf(sailor_hostname,"palantir3"); 
     sprintf(s->sailor_bind, "172.16.1.102");
-    sprintf(s->ringbuffer_output_pattern, "%%02d%%02d%%02d_%%02d%%02d%%02d.ring");
     sprintf(s->card1, "/dev/spcm0");
     sprintf(s->card2, "/dev/spcm1");
     memset(s->captain_wires,'.',8);
@@ -146,8 +145,6 @@ void init_settings(SETTINGS *s, const char* fname) {
 	     strcpy(sailor_hostname,s2);
 	   else if(!strcmp(s1,"sailor_bind="))
 	     strcpy(s->sailor_bind,s2);
-           else if(!strcmp(s1,"ringbuffer_output_pattern="))
-             strcpy(s->ringbuffer_output_pattern,s2);
            else if(!strcmp(s1,"ringbuffer_size="))
              s->ringbuffer_size=atoi(s2);
            else if(!strcmp(s1,"ringbuffer_force="))
@@ -257,6 +254,7 @@ void init_settings(SETTINGS *s, const char* fname) {
     if (s->daqNum==1) s->lj_Non=0; // disable labjack for captain
     sprintf(s->ps_output_pattern,"%s_D%i.data",root_output_pattern,daqNum);
     sprintf(s->rfi_output_pattern,"%s_D%i.rfi",root_output_pattern,daqNum);
+    sprintf(s->ringbuffer_output_pattern,"%s%%02d_D%i.ring",root_output_pattern,daqNum);
 }
 
 void print_settings(SETTINGS *s) {
