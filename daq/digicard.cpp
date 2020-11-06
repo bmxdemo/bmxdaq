@@ -33,14 +33,32 @@ volatile sig_atomic_t enableWriterSignal = 0;
 volatile sig_atomic_t disableWriterSignal = 0; 
 
 volatile bool _trigger = false;
+int passkeys = 0;
+bool captain;
+UDPCOMM* _UDP;
+
 
 void loop_signal_handler(int sig){ // can be called asynchronously
-  if (sig==SIGINT)  stopSignal=1;
-  if (sig==SIGUSR1) dumpSignal=1;
-  if (sig==SIGUSR2) calibrateDelaySignal=1;
-  if (sig==SIGRTMIN) enableWriterSignal=1;
-  if (sig==SIGRTMIN+1) disableWriterSignal=1;
-
+  if (sig==SIGINT)  {
+    stopSignal=1;
+    if (captain && passkeys) UDPPassKeyPress (_UDP,'!');
+  }
+  if (sig==SIGUSR1)  {
+    dumpSignal=1;
+    if (captain && passkeys) UDPPassKeyPress (_UDP,'D');
+  }
+  if (sig==SIGUSR2)  {
+    calibrateDelaySignal=1;
+    if (captain && passkeys) UDPPassKeyPress (_UDP,'C');
+  }
+  if (sig==SIGRTMIN)  {
+    enableWriterSignal=1;
+    if (captain && passkeys) UDPPassKeyPress (_UDP,'W');
+  }
+  if (sig==SIGRTMIN+1)  {
+    disableWriterSignal=1;
+    if (captain && passkeys) UDPPassKeyPress (_UDP,'X');
+  }
 }
 
 
@@ -319,7 +337,8 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
   signal(SIGRTMIN, loop_signal_handler);
   signal(SIGRTMIN+1, loop_signal_handler);
 
-  bool captain = set->daqNum==1;
+  _UDP = UDP;
+  captain = set->daqNum==1;
   bool sailor = !captain;
   
   printf("Help:\n");
@@ -332,7 +351,6 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
   printf(" ! -- exit \n");
 
   int processed = 1; //was the data processed properly on the gpu
-  int passkeys = 0;
   // terminal writer init
   terminalWriterInit(t, set);
   while (!stopSignal) {
