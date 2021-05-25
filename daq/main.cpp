@@ -59,7 +59,7 @@ int main(int argc,char **argv)
 
   // first ephemeral things
   if (settings.fg_nfreq) freqGenInit(&fgen, &writer, &settings);
-  if (settings.lj_Non) LJInit(&ljack, &writer, &settings);
+  if (settings.lj_Noff) LJInit(&ljack, &writer, &settings);
   // GPU
   if (!settings.dont_process) gpuCardInit(&gcard,&settings);
   // UDP
@@ -79,7 +79,7 @@ int main(int argc,char **argv)
   ringbufferCleanUp(&rbuffer);
   writerCleanUp(&writer);
   if (settings.fg_nfreq) freqGenCleanUp(&fgen);
-  if (settings.lj_Non) LJCleanUp(&ljack);
+  if (settings.lj_Noff) LJCleanUp(&ljack);
   
   printf ("Done.\n");
   return 0;

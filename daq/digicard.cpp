@@ -411,7 +411,7 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
 
     if (enableWriterSignal) {
       enableWriterSignal=0;
-      if (set->lj_Non) lj->counter=0;
+      if (set->lj_Noff) lj->counter=0;
       enableWriter(w,set);
     }
     if (disableWriterSignal) {
@@ -457,7 +457,7 @@ void  digiWorkLoop(DIGICARD *dc, RINGBUFFER *rb, GPUCARD *gc, SETTINGS *set,
     // drive frequency generator if needed
     if (set->fg_nfreq) freqGenLoop(fgen, w, t);
     // drive labjack
-    if (set->lj_Non) LJLoop(lj,w, t);
+    if (set->lj_Noff) LJLoop(lj,w, t);
     // write waveform if requested
     if (set->wave_nbytes>0) {
       tprintfn (t,1,"Waveform file: %s",set->wave_fname);
