@@ -251,7 +251,7 @@ void init_settings(SETTINGS *s, const char* fname) {
     }
     
     s->daqNum=daqNum;
-    if (s->daqNum==1) s->lj_Non=0; // disable labjack for captain
+    if (s->daqNum==1) {s->lj_Non=0; s->lj_Noff=0;} // disable labjack for captain
     sprintf(s->ps_output_pattern,"%s_D%i.data",root_output_pattern,daqNum);
     sprintf(s->rfi_output_pattern,"%s_D%i.rfi",root_output_pattern,daqNum);
     sprintf(s->ringbuffer_output_pattern,"%s%%02d_D%i.ring",root_output_pattern,daqNum);
