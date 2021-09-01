@@ -509,7 +509,7 @@ class BMXFile(object):
         return 0
 
 
-class BMXRingbuffer (object):
+class BMXRingBuffer (object):
     def __init__(self, fname, force_version=None):
         prehead_desc = [('magic', 'S8'), ('version', 'i4')]
         f = open(fname)
@@ -581,3 +581,39 @@ class BMXRingbuffer (object):
         chi2 = mfun(res)
         res -= res[1]
         print(res, chi2.sum())
+
+    def getPS(self, combs=[(0,0)], data = None, chunk_size=2**25, Navg=2**13, 
+              fmin=-1, fmax=-1, Nchunks = None, debug = False, verbose = True):
+        if data is None:
+            data=[self.datad0c1, self.datad0c2, self.datad1c1, self.datad1c2]
+        T=chunk_size/1.1e9
+        dF = 1/T/1e6 # from MHz to MHz
+        imin = int((fmin-1100)//dF) if fmin>0 else 0
+        nfbins = (int((fmax-fmin)/dF)//Navg+1) if fmax>0 else chunk_size//2//Navg
+        freqs = 1100+(imin+Navg/2)*dF + np.arange(nfbins)*dF*Navg
+        if verbose:
+            print ("%i frequency bins between %3.2f and %3.2f"%(nfbins, freqs[0], freqs[-1]))
+        pslist = [[] for u,v in combs]
+        amp = [0.1,-0.2,0.15,0.3]
+        if Nchunks is None:
+            Nchunks = len(data[0])//chunk_size
+        for i in range(Nchunks):
+            fdata = {}
+            if verbose:
+                print("%i/%i"%(i,Nchunks))
+
+            for k,(u,v) in enumerate(combs):
+                _getfft = lambda D :  rfft(D[i*chunk_size:(i+1)*chunk_size])[imin:imin+nfbins*Navg]
+                if u not in fdata:
+                    fdata[u] = _getfft(data[u])
+                if v not in fdata:
+                    fdata[v] = _getfft(data[v])
+                elif u==v:
+                    ps = np.abs(fdata[u]*fdata[v])
+                else:
+                    ps = fdata[u]*np.conj(fdata[v])    
+                ps = ps.reshape((-1,Navg)).mean(axis=1)
+                pslist[k].append(ps)
+        pslist = [np.array(ps).mean(axis=0) for ps in pslist]
+        return freqs,pslist
+
